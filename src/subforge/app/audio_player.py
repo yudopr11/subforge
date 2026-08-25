@@ -81,8 +81,8 @@ class SegmentPlayer:
         """Start playback; returns a user-facing status message."""
         if not self.available:
             return (
-                "[ERROR] No audio player found — install ffmpeg (ffplay), mpv or vlc "
-                "to preview segments."
+                "[ERROR] No audio player found — preview requires ffmpeg.\n"
+                "Install it once, then retry:  sudo apt install ffmpeg"
             )
         self.stop()
         duration = max(0.0, end - start)

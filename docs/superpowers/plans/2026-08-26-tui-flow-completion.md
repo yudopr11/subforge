@@ -70,6 +70,16 @@ Specs: `docs/PRD.md`, `docs/ARCHITECTURE.md` (v0.2.0).
 
 - [x] GitHub Actions: ruff + mypy strict + pytest on 3.11–3.13
 
+## Task 11: Audio-preview backend decision — DONE
+
+- [x] Attempted bundled in-process engine (miniaudio): scrapped after 3 failed
+      integration attempts (callback protocol crashes, unverifiable on machines
+      without sound hardware) — systematic-debugging Phase 4.5 verdict.
+- [x] Final architecture: **ffmpeg (ffplay) is the required preview backend**;
+      mpv / vlc / sox auto-detected as alternates; error message names the exact
+      install command (`sudo apt install ffmpeg`).
+- Commits: `refactor: require ffmpeg for caption audio preview; drop bundled engine`
+
 ## Task 10: Release hygiene — PENDING
 
 - [ ] Full gate re-run + amend any stragglers
