@@ -48,9 +48,11 @@ class FirstRunSetupScreen(Screen[None]):
         loader_factory: Callable[[str], Loader] | None = None,
         model_manager_factory: Callable[[], LocalModelManager] | None = None,
         capability_client: object | None = None,
+        initial_config: AppConfig | None = None,
     ) -> None:
         super().__init__()
-        self.cfg = AppConfig()
+        # Re-runs prefill with current values; first-run starts from defaults.
+        self.cfg = initial_config.model_copy(deep=True) if initial_config else AppConfig()
         self.on_done = on_done
         self._loader_factory = loader_factory
         self._mm_factory = model_manager_factory or LocalModelManager

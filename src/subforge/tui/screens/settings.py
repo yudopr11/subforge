@@ -175,6 +175,7 @@ class SettingsScreen(Screen[None]):
     def compose(self) -> ComposeResult:
         with Vertical():
             yield Label("[b]SubForge Settings[/b] — changes apply immediately, no restart needed")
+            yield Button("Re-run setup wizard…", id="btn-wizard")
             with Vertical(id="tc-section"):
                 yield Label("Transcription")
                 with Horizontal():
@@ -322,6 +323,23 @@ class SettingsScreen(Screen[None]):
 
     # ---- persistence -------------------------------------------------------
 
+    def open_wizard(self) -> None:
+        """Re-run the setup wizard, prefilled with the current configuration."""
+        from subforge.tui.screens.setup_wizard import FirstRunSetupScreen
+
+        self._host.push_screen(
+            FirstRunSetupScreen(initial_config=self.cfg.model_copy(deep=True), on_done=self._wizard_finished)
+        )
+
+    def _wizard_finished(self) -> None:
+        from subforge.config.app_config import load_app_config
+
+        self.cfg = load_app_config()
+        self._last_spec = None
+        self._refresh_labels()
+        if self.on_saved:
+            self.on_saved()
+
     def save_config(self) -> None:
         save_app_config(self.cfg)
         if self.on_saved:
@@ -338,6 +356,9 @@ class SettingsScreen(Screen[None]):
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         button_id = event.button.id or ""
+        if button_id == "btn-wizard":
+            self.open_wizard()
+            return
         if button_id == "btn-save":
             self.save_config()
             self.dismiss(None)

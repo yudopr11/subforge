@@ -281,3 +281,33 @@ async def test_status_shows_next_step_through_flow(tmp_path, monkeypatch):
         menu.do_export()
         menu._set_flow_status()
         assert "done" in str(menu.query_one("#status").render()).lower()
+
+
+async def test_menu_lists_settings_action():
+    app = SubForgeApp()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        menu = app.screen
+        assert isinstance(menu, MainMenuScreen)
+        labels = [str(item.children[0].render()) for item in menu.query_one(".action-list").children]
+        assert "Settings" in labels
+
+
+async def test_settings_slug_pushes_settings_screen(tmp_path, monkeypatch):
+    monkeypatch.setenv("SUBFORGE_PROJECTS_DIR", str(tmp_path / "projects"))
+    app = SubForgeApp()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        menu = app.screen
+        assert isinstance(menu, MainMenuScreen)
+
+        evt = type("Evt", (), {
+            "item": type("I", (), {"name": "settings"})(),
+            "stop": lambda self: None,
+        })()
+        menu.on_list_view_selected(evt)  # type: ignore[arg-type]
+        await pilot.pause()
+
+        from subforge.tui.screens.settings import SettingsScreen
+
+        assert isinstance(app.screen, SettingsScreen)

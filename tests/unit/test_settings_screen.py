@@ -153,3 +153,74 @@ async def test_settings_screen_renders_section_labels():
         assert "Transcription" in labels and "Translation" in labels
         buttons = " ".join(str(b.label) for b in app.screen.query("Button"))
         assert "Reasoning:" in buttons and "Batch size:" in buttons
+
+
+# ---- wizard re-run from Settings -------------------------------------------
+
+
+async def test_open_wizard_prefills_and_completion_saves(tmp_path, monkeypatch):
+    from subforge.config.app_config import load_app_config
+    from subforge.tui.app import SubForgeApp
+    from subforge.tui.screens.settings import SettingsScreen
+    from subforge.tui.screens.setup_wizard import FirstRunSetupScreen
+
+    monkeypatch.setenv("SUBFORGE_CONFIG", str(tmp_path / "config.json"))
+
+    cfg = AppConfig(transcription={"provider": "local", "model": "medium"})
+    saved: list[bool] = []
+    app = SubForgeApp(app_config=cfg.model_copy(deep=True))
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        screen = SettingsScreen(cfg, on_saved=lambda: saved.append(True))
+        await app.push_screen(screen)
+        await pilot.pause()
+
+        # button exists and seam pushes the wizard prefilled with current values
+        assert app.screen.query_one("#btn-wizard")
+        screen.open_wizard()
+        await pilot.pause()
+
+        def find_wizard() -> FirstRunSetupScreen:
+            for s in reversed(list(app.screen_stack)):
+                if isinstance(s, FirstRunSetupScreen):
+                    return s
+            raise AssertionError("wizard not pushed")
+
+        wizard = find_wizard()
+        assert wizard.cfg.transcription.model == "medium"  # prefilled, not blank
+
+        # user changes translation side inside the wizard and finishes
+        wizard.cfg.translation.source = "local"
+        wizard.cfg.translation.local_base_url = "http://localhost:1234/v1"
+        wizard.cfg.translation.source = "local"
+        wizard.cfg.translation.local_base_url = "http://localhost:1234/v1"
+        wizard.cfg.translation.model = "qwen3-14b"
+
+        # close the wizard's own first-step modal (as a user would), then finish
+        app.screen.action_cancel()  # type: ignore[union-attr]
+        await pilot.pause()
+        wizard.finish()
+        await pilot.pause()
+
+        loaded = load_app_config()
+        assert loaded.transcription.model == "medium"
+        assert loaded.translation.source == "local"
+        assert loaded.translation.model == "qwen3-14b"
+
+        # settings reloaded its view of config and notified the app
+        assert screen.cfg.translation.model == "qwen3-14b"
+        assert saved == [True]
+        # back on settings after finish (step modals dismissed with the wizard)
+        assert isinstance(app.screen, SettingsScreen)
+
+
+async def test_wizard_button_present_in_dom():
+    from subforge.tui.app import SubForgeApp
+    from subforge.tui.screens.settings import SettingsScreen
+
+    app = SubForgeApp()
+    async with app.run_test() as pilot:
+        await app.push_screen(SettingsScreen(AppConfig()))
+        await pilot.pause()
+        buttons = [str(b.label) for b in app.screen.query("Button")]
+        assert any("wizard" in b.lower() for b in buttons)

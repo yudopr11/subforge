@@ -47,6 +47,7 @@ ACTIONS: list[tuple[str, str]] = [
     ("translate", "Translate"),
     ("review-translation", "Review Translation"),
     ("export", "Export SRT / ASS"),
+    ("settings", "Settings"),
 ]
 
 
@@ -89,6 +90,7 @@ class MainMenuScreen(Screen[None]):
             "translate": self._begin_translate,
             "review-translation": self._show_translation_review,
             "export": self._begin_export,
+            "settings": self.action_settings,
         }
         handler = handlers.get(event.item.name or "")
         if handler is not None:
