@@ -12,7 +12,7 @@ class FakeProvider:
         self.fail = fail_batch_indices or set()
         self.calls: list[list[TranslationInput]] = []
 
-    def translate(self, segments, source_language, target_language):
+    def translate(self, segments, source_language, target_language, reasoning_effort=None):
         self.calls.append(list(segments))
         if len(self.calls) - 1 in self.fail:
             return [TranslationOutput(id=s.id, text="") for s in segments[:1]]  # incomplete + empty
@@ -67,7 +67,7 @@ def test_bad_batch_fails_without_corrupting_project():
 def test_later_batches_still_run_after_failure_is_reported_at_end():
     # Batch 2 fails; batch 1 results are still merged, error raised after processing.
     class PartialFail(FakeProvider):
-        def translate(self, segments, source_language, target_language):
+        def translate(self, segments, source_language, target_language, reasoning_effort=None):
             if segments[0].id == 6:
                 return [TranslationOutput(id=99, text="unknown id")]  # unknown ID -> invalid
             return super().translate(segments, source_language, target_language)
@@ -77,3 +77,26 @@ def test_later_batches_still_run_after_failure_is_reported_at_end():
         TranslationService(PartialFail()).translate_project(project, "en")
     assert project.segments[0].translations["en"] == "T:kalimat 1"
     assert 99 in excinfo.value.batch_ids
+
+
+def test_reasoning_effort_passed_through_to_provider():
+    """Configured reasoning effort travels verbatim (PRD §15); default is None."""
+
+    class Capturing(FakeProvider):
+        def __init__(self):
+            super().__init__()
+            self.efforts: list[str | None] = []
+
+        def translate(self, segments, source_language, target_language, reasoning_effort=None):
+            self.efforts.append(reasoning_effort)
+            return super().translate(segments, source_language, target_language, reasoning_effort)
+
+    project = make_project(3)
+
+    capturing = Capturing()
+    TranslationService(capturing).translate_project(project, "en")
+    assert capturing.efforts == [None]
+
+    capturing = Capturing()
+    TranslationService(capturing, reasoning_effort="max").translate_project(project, "en")
+    assert capturing.efforts == ["max"]

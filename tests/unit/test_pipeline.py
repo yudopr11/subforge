@@ -30,7 +30,7 @@ class FakeDiarizer:
 
 
 class FakeTranslator:
-    def translate(self, segments, source_language, target_language):
+    def translate(self, segments, source_language, target_language, reasoning_effort=None):
         return [TranslationOutput(id=s.id, text=f"EN:{s.text}") for s in segments]
 
 

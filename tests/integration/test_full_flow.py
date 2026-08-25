@@ -33,7 +33,13 @@ class ScriptedLLM:
         2: "Welcome back.",
     }
 
-    def translate(self, segments: list[TranslationInput], source_language: str, target_language: str):
+    def translate(
+        self,
+        segments: list[TranslationInput],
+        source_language: str,
+        target_language: str,
+        reasoning_effort: str | None = None,
+    ):
         assert target_language == "en"
         return [TranslationOutput(id=s.id, text=self.MAP[s.id]) for s in segments]
 
@@ -81,7 +87,7 @@ def test_retry_after_translation_failure_only_reruns_translation(tmp_path: Path)
         def __init__(self):
             self.failed_once = False
 
-        def translate(self, segments, source_language, target_language):
+        def translate(self, segments, source_language, target_language, reasoning_effort=None):
             if not self.failed_once:
                 self.failed_once = True
                 return [Out(id=999, text="garbage")]  # invalid: unknown id -> batch rejected

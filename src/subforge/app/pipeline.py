@@ -100,6 +100,10 @@ class Pipeline:
         (self.dir / "transcripts").mkdir(exist_ok=True)
         (self.dir / "transcripts" / "source.json").write_text(transcript.model_dump_json(indent=2))
 
+        # PRD §7: "auto" language (empty meta) is filled from ASR-detected language.
+        if not project.project.source_language and transcript.language:
+            project.project.source_language = transcript.language
+
         project.segments = [
             Segment(id=int(seg.id), start=seg.start, end=seg.end, source=seg.text, speaker=seg.speaker)
             for seg in transcript.segments

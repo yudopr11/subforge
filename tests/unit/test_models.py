@@ -46,3 +46,8 @@ def test_transcript_normalization():
 
     t = Transcript(segments=[{"id": 1, "start": 1.2, "end": 3.4, "text": "Halo!"}])
     assert t.segments[0].text == "Halo!"
+
+
+def test_stage_states_are_exact_set():
+    # ARCH §22: exactly five states
+    assert {s.value for s in StageState} == {"PENDING", "RUNNING", "COMPLETED", "FAILED", "SKIPPED"}

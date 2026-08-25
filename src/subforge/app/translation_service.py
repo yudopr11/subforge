@@ -13,11 +13,17 @@ class TranslationValidationError(Exception):
 
 
 class TranslationService:
-    def __init__(self, provider: TranslationProvider, batch_size: int = DEFAULT_BATCH_SIZE):
+    def __init__(
+        self,
+        provider: TranslationProvider,
+        batch_size: int = DEFAULT_BATCH_SIZE,
+        reasoning_effort: str | None = None,
+    ):
         if batch_size < 1:
             raise ValueError("batch_size must be >= 1")
         self.provider = provider
         self.batch_size = batch_size
+        self.reasoning_effort = reasoning_effort or None
 
     def translate_project(self, project: Project, target_language: str) -> None:
         project.set_stage(f"translation_{target_language}", StageState.RUNNING)
@@ -48,7 +54,10 @@ class TranslationService:
     ) -> dict[int, str]:
         inputs = [TranslationInput(id=s.id, text=s.source) for s in batch]
         outputs: list[TranslationOutput] = self.provider.translate(
-            inputs, source_language, target_language
+            inputs,
+            source_language,
+            target_language,
+            reasoning_effort=self.reasoning_effort,
         )
         return _validate_batch(inputs, outputs)
 

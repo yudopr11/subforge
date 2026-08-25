@@ -6,7 +6,13 @@ from subforge.providers.base import TranslationInput, TranslationOutput
 
 
 class EchoTranslator:
-    def translate(self, segments: list[TranslationInput], source_language: str, target_language: str):
+    def translate(
+        self,
+        segments: list[TranslationInput],
+        source_language: str,
+        target_language: str,
+        reasoning_effort: str | None = None,
+    ):
         return [TranslationOutput(id=s.id, text=f"<{target_language}> {s.text}") for s in segments]
 
 

@@ -47,4 +47,5 @@ class TranslationProvider(Protocol):
         segments: list[TranslationInput],
         source_language: str,
         target_language: str,
+        reasoning_effort: str | None = None,
     ) -> list[TranslationOutput]: ...
