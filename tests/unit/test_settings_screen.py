@@ -49,6 +49,8 @@ def test_settings_screen_persists_on_save(tmp_path, monkeypatch):
     screen.save_config()  # public hook used by the (follow-up) widget wiring
 
     assert load_app_config().transcription.provider == "local"
+    assert calls == []  # on_saved deferred to session close
+    screen.on_unmount()  # settings session ends
     assert calls == [True]
 
 
@@ -86,6 +88,8 @@ def test_transcription_mutations_roundtrip_to_disk(tmp_path, monkeypatch):
     assert loaded.transcription.provider == "openai"
     assert loaded.transcription.api_key == "sk-xyz"
     assert loaded.transcription.model == "whisper-1"
+    assert saved == []  # deferred to close
+    screen.on_unmount()
     assert saved == [True]
 
 
@@ -255,8 +259,11 @@ async def test_settings_menu_drives_each_stage_then_saves(tmp_path, monkeypatch)
         assert loaded.translation.model == "qwen3-14b"
         assert loaded.transcription.language == "id"
         assert loaded.translation.default_target == "en"
-        # persisted once per configured stage (transcribe, then translation)
-        assert saved == [True, True]
+        # persisted at every stage save, but the host is notified ONCE at close
+        assert saved == []
+        await pilot.press("escape")  # menu -> close settings (session ends)
+        await pilot.pause()
+        assert saved == [True]
 
 
 async def test_settings_guided_flow_cloud_offers_reasoning(tmp_path, monkeypatch):

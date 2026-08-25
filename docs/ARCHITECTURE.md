@@ -142,6 +142,10 @@ Every stage carries one of the five states of §22.
 One provider class serves LM Studio, Ollama, OpenAI, OpenCode Zen/Go — differing only
 in base URL/key/model (PRD §14 table). Auth: `Authorization: Bearer <key>`.
 `list_models()` fetches `GET {base_url}/models` sorted for stable UI ordering.
+HTTP failures (translate and model discovery) surface the server's own reason —
+status code plus the response body's `error.message` (or raw text) — so a 400 such as
+unknown model / unsupported `response_format` / bad `reasoning_effort` is actionable
+(PRD §21).
 
 ## 15–16. Batch flow & output validation
 

@@ -70,7 +70,15 @@ class OpenAICompatibleProvider:
             json=payload,
             headers={"Authorization": f"Bearer {self.api_key}"},
         )
-        response.raise_for_status()
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            # PRD §21: fail loudly with the server's own reason (e.g. unknown
+            # model, model doesn't support json_object, bad reasoning_effort).
+            raise ValueError(
+                f"translation request failed (HTTP {exc.response.status_code}): "
+                f"{_error_detail(exc.response)}"
+            ) from exc
 
         choice = response.json()["choices"][0]["message"]
         content = choice.get("content")
@@ -89,7 +97,13 @@ class OpenAICompatibleProvider:
             f"{self.base_url}/models",
             headers={"Authorization": f"Bearer {self.api_key}"},
         )
-        response.raise_for_status()
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            raise ValueError(
+                f"model discovery failed (HTTP {exc.response.status_code}): "
+                f"{_error_detail(exc.response)}"
+            ) from exc
         return sorted(str(item["id"]) for item in response.json().get("data", []) if item.get("id"))
 
     @staticmethod
@@ -100,6 +114,21 @@ class OpenAICompatibleProvider:
         except json.JSONDecodeError as exc:
             raise ValueError(f"translation provider did not return valid JSON: {exc}") from exc
         return [TranslationOutput(id=item["id"], text=str(item["text"])) for item in data["translations"]]
+
+
+def _error_detail(response: httpx.Response) -> str:
+    """Best human-readable reason from an HTTP error response body."""
+    try:
+        payload = response.json()
+    except ValueError:
+        payload = None
+    message = None
+    if isinstance(payload, dict):
+        error = payload.get("error")
+        if isinstance(error, dict):
+            message = error.get("message")
+    detail = message or response.text or "(empty response body)"
+    return str(detail).strip()[:400]
 
 
 REGISTRY.register_translation("openai-compatible", OpenAICompatibleProvider)

@@ -82,9 +82,10 @@ footer status line. There is no list menu — commands do the work.
 
 | Command | Effect |
 |---|---|
-| `/new <audio>` | create project around an exported audio file; bare `/new` enters
-  **locate mode** — type a path, or submit `@` (or `@query`) to browse audio files
-  under the working directory, newest first |
+| `/new <audio>` | create project around an exported audio file; bare `/new` opens a
+  **searchable audio picker** of files found under the working directory (newest first)
+  — type to filter by name/folder, `↑`/`↓` to move, `Enter` creates; the pinned
+  *type a file path* row (or typing a full path directly) switches to manual path entry |
 | `/open [name|n]` | bare `/open` opens a **searchable picker** of recent projects — type
   to filter, `↑`/`↓` to move, `Enter` to open (plus a *create new* row); `/open <name|n>`
   still opens directly by name or list number |
@@ -133,6 +134,10 @@ may require the mouse.**
 - **Slash autocomplete:** typing `/` in the prompt opens a filtered command picker;
   `↑`/`↓` highlight, `Tab` or `Enter` fills the prompt with the chosen command (then
   `Enter` runs it), `Esc` dismisses. `q` and `quit` both exit.
+- **Command history:** `↑`/`↓` on the prompt recalls previously submitted commands
+  (newest first, drafted text preserved and restored when you pass the newest entry;
+  consecutive repeats are deduped, max 100 entries). While the slash picker is open,
+  arrows steer the picker instead; `Enter` on a recalled command re-submits it.
 - Review/edit/model screens are full-keyboard overlays launched by commands;
   each renders its own key legend on-screen (`p` play, `x` stop, `i` install, …).
 - `/settings` and `/wizard` are **modal overlays** over the live REPL — the transcript
@@ -203,9 +208,12 @@ re-runs only the failed stage.
 ## 12. Audio ingestion
 
 `/new <audio>` imports an exported final-audio file into the project (`<project>/audio/`),
-accepting `wav flac mp3 m4a aac ogg opus`. Bare `/new` enters locate mode — type a path,
-or submit `@` (or `@query`) to browse discoverable audio files under the working
-directory, newest first. Each project owns exactly one audio file; the transcript and
+accepting `wav flac mp3 m4a aac ogg opus`. Bare `/new` opens a **searchable picker** of
+discoverable audio files under the working directory (newest first): type to filter by
+name or folder, `↑`/`↓` to move, `Enter` creates the project immediately. A pinned
+*type a file path* row (or typing a full path that exists directly into the search box)
+falls back to manual path entry in locate mode, where `@` (or `@query`) re-opens the
+picker pre-filtered. Each project owns exactly one audio file; the transcript and
 exports live alongside it (§21 guarantees in ARCH).
 
 ## 13. Translation review

@@ -55,6 +55,9 @@ class ReplScreen(Screen[None]):
         self._running_stages: set[str] = set()
         self._recent_listing: list[Path] = []
         self.locate_mode: str | None = None  # None | "new" — /new interactive locate
+        self._history: list[str] = []  # submitted prompt values, oldest → newest
+        self._history_index: int | None = None  # position while arrow-navigating
+        self._history_draft: str = ""  # original prompt draft while navigating
 
     @property
     def _host(self) -> "SubForgeApp":
@@ -232,9 +235,20 @@ class ReplScreen(Screen[None]):
             return
         self.run_command(value if value.startswith("/") else "/" + value)
 
-    def _locate_picked(self, path: object) -> None:
-        if isinstance(path, str):
-            self.query_one("#prompt", Input).value = path
+    def _locate_picked(self, picked: object) -> None:
+        """Audio picker result: path to create, PATH_ENTRY for manual typing, None cancel."""
+        if picked is None:
+            self.log_line("[dim]cancelled[/dim]")
+            return
+        from subforge.tui.screens.audio_picker import AudioFilePickerScreen
+
+        if picked == AudioFilePickerScreen.PATH_ENTRY:
+            self.enter_locate_mode()
+            return
+        if isinstance(picked, str):
+            self._cmd_new(picked)
+            if self._host.project_dir is not None:
+                self.exit_locate_mode()
 
     # ---- input -------------------------------------------------------------
 
@@ -244,8 +258,8 @@ class ReplScreen(Screen[None]):
         """Show/hide the slash-command picker as the prompt content changes."""
         if event.input.id != "prompt":
             return
-        if self.locate_mode is not None:
-            self._hide_autocomplete()
+        if self.locate_mode is not None or self._history_index is not None:
+            self._hide_autocomplete()  # path entry / history recall: no picker
             return
         value = event.value
         if value.startswith("/"):
@@ -306,21 +320,54 @@ class ReplScreen(Screen[None]):
         prompt.focus()
 
     def on_key(self, event: events.Key) -> None:
-        """Route arrow/Tab/Escape to the autocomplete picker when visible."""
-        if not self._autocomplete_visible():
+        """Route arrows/Tab/Escape: autocomplete picker, else prompt history."""
+        if self._autocomplete_visible():
+            if event.key in ("up", "down"):
+                event.stop()
+                if event.key == "up":
+                    self._autocomplete_up()
+                else:
+                    self._autocomplete_down()
+            elif event.key == "tab":
+                event.stop()
+                self._autocomplete_fill()
+            elif event.key == "escape":
+                event.stop()
+                self._hide_autocomplete()
             return
-        if event.key in ("up", "down"):
+        if event.key in ("up", "down") and self._recall_history(up=event.key == "up"):
             event.stop()
-            if event.key == "up":
-                self._autocomplete_up()
-            else:
-                self._autocomplete_down()
-        elif event.key == "tab":
-            event.stop()
-            self._autocomplete_fill()
-        elif event.key == "escape":
-            event.stop()
-            self._hide_autocomplete()
+
+    def _remember(self, raw: str) -> None:
+        """Record a submitted prompt value; dedupe consecutive repeats, cap 100."""
+        self._history_index = None
+        self._history_draft = ""
+        if raw and (not self._history or self._history[-1] != raw):
+            self._history.append(raw)
+            del self._history[:-100]
+
+    def _recall_history(self, up: bool) -> bool:
+        """Arrow-up/down: cycle the prompt through submitted history (Pi-style).
+
+        Returns True when the event was consumed (history existed).
+        """
+        if not self._history:
+            return False
+        prompt = self.query_one("#prompt", Input)
+        if self._history_index is None:
+            self._history_draft = prompt.value  # save what was being typed
+            index = len(self._history) - 1 if up else 0
+        else:
+            index = self._history_index + (-1 if up else 1)
+            if index < 0 or index >= len(self._history):
+                self._history_index = None  # past the edge: restore the draft
+                prompt.value = self._history_draft
+                prompt.cursor_position = len(prompt.value)
+                return True
+        self._history_index = index
+        prompt.value = self._history[index]
+        prompt.cursor_position = len(prompt.value)
+        return True
 
     # ---- input -------------------------------------------------------------
 
@@ -332,6 +379,7 @@ class ReplScreen(Screen[None]):
             # Enter selects the highlighted command instead of submitting.
             self._autocomplete_fill()
             return
+        self._remember(raw)
         self.log_line(f"[dim]>[/dim] {raw}")
         event.input.clear()
         if self.locate_mode == "new":
@@ -412,7 +460,14 @@ class ReplScreen(Screen[None]):
 
     def _cmd_new(self, arg: str) -> None:
         if not arg:
-            self.enter_locate_mode()
+            # Searchable picker of discoverable audio (type to filter, ↑/↓, Enter).
+            # The pinned "type a file path" row (or Esc) falls back to path typing.
+            from subforge.app.projects import discover_audio_files
+            from subforge.tui.screens.audio_picker import AudioFilePickerScreen
+
+            self._host.push_screen(
+                AudioFilePickerScreen(discover_audio_files()[:100]), self._locate_picked
+            )
             return
         try:
             directory = create_project_from_audio(Path(arg).expanduser())
@@ -613,7 +668,7 @@ class ReplScreen(Screen[None]):
         self.log_line("[b]commands[/b]")
         for cmd, desc in rows:
             self.log_line(f"  [b]{cmd:<20}[/b] {desc}")
-        self.log_line("[dim]leading '/' optional · esc backs out of overlays[/dim]")
+        self.log_line("[dim]leading '/' optional · ↑↓ recalls commands · esc backs out of overlays[/dim]")
         self.log_line("[dim]copy: drag mouse over transcript to select · right-click or Ctrl+C copies · Ctrl+C again quits[/dim]")
 
     def _cmd_quit(self, arg: str) -> None:

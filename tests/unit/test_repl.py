@@ -7,6 +7,7 @@ persisted files, and project.json stage states.
 
 from pathlib import Path
 
+from textual.pilot import Pilot
 from textual.widgets import Input, OptionList
 
 from subforge.app.pipeline import Pipeline
@@ -256,10 +257,15 @@ async def test_translate_busy_guard(tmp_path):
         assert "already running" in transcript_text(app)
 
 
-# ---- /new interactive locate (@ browse) --------------------------------------
+# ---- /new interactive locate (searchable audio picker) ---------------------
 
 
-async def test_bare_new_enters_locate_mode_and_esc_cancels(tmp_path):
+async def test_bare_new_opens_searchable_audio_picker(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "take_a.wav").write_bytes(b"x")
+    (tmp_path / "take_b.flac").write_bytes(b"x")
+    (tmp_path / "notes.txt").write_text("skip me")
+
     app = SubForgeApp()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -267,13 +273,44 @@ async def test_bare_new_enters_locate_mode_and_esc_cancels(tmp_path):
 
         repl.run_command("/new")
         await pilot.pause()
+
+        from subforge.tui.screens.audio_picker import AudioFilePickerScreen
+
+        picker = app.screen
+        assert isinstance(picker, AudioFilePickerScreen)
+        names = [str(o.prompt) for o in picker.query_one("#audio-files").options]
+        assert names[0].startswith("⌨")  # pinned "type a path" row
+        assert len(names) == 3 and all("take" in n for n in names[1:])
+        assert not any("notes" in n for n in names)
+
+        # type to search -> filtered -> Enter creates the project directly
+        search = picker.query_one("#audio-search")
+        search.value = "take_b"
+        await pilot.pause()
+        filtered = [str(o.prompt) for o in picker.query_one("#audio-files").options]
+        assert len(filtered) == 2  # pinned row + the one match
+        picker.on_input_submitted(type("Evt", (), {"input": search})())
+        await pilot.pause()
+
+        assert app.project_dir is not None and app.project_dir.name == "take_b"
+        assert repl.locate_mode is None
+
+
+async def test_picker_path_row_enters_manual_path_mode(tmp_path):
+    app = SubForgeApp()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        repl = app.repl
+        repl.run_command("/new")
+        await pilot.pause()
+
+        from subforge.tui.screens.audio_picker import AudioFilePickerScreen
+
+        repl._locate_picked(AudioFilePickerScreen.PATH_ENTRY)
+        await pilot.pause()
         assert repl.locate_mode == "new"
         prompt = repl.query_one("#prompt")
         assert "audio" in prompt.placeholder.lower()
-
-        await pilot.press("escape")
-        await pilot.pause()
-        assert repl.locate_mode is None
 
 
 async def test_locate_mode_path_submit_creates_project(tmp_path, monkeypatch):
@@ -285,7 +322,7 @@ async def test_locate_mode_path_submit_creates_project(tmp_path, monkeypatch):
         audio = tmp_path / "song.wav"
         audio.write_bytes(b"x")
 
-        repl.run_command("/new")
+        repl.enter_locate_mode()
         prompt = repl.query_one("#prompt")
         prompt.value = str(audio)
         repl._submit_prompt_value(str(audio))
@@ -295,7 +332,7 @@ async def test_locate_mode_path_submit_creates_project(tmp_path, monkeypatch):
         assert app.project_dir is not None and app.project_dir.name == "song"
 
 
-async def test_at_opens_filtered_picker_and_picks_into_prompt(tmp_path, monkeypatch):
+async def test_at_opens_filtered_picker_and_pick_creates_project(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     (tmp_path / "media").mkdir()
     (tmp_path / "media" / "take01.wav").write_bytes(b"x")
@@ -306,31 +343,26 @@ async def test_at_opens_filtered_picker_and_picks_into_prompt(tmp_path, monkeypa
     async with app.run_test() as pilot:
         await pilot.pause()
         repl = app.repl
-        repl.run_command("/new")
+        repl.enter_locate_mode()
 
-        repl._submit_prompt_value("@take0")   # @query -> picker filtered to matches
+        repl._submit_prompt_value("@take0")   # @query -> picker prefilled with matches
         await pilot.pause()
 
         from subforge.tui.screens.audio_picker import AudioFilePickerScreen
 
         picker = app.screen
         assert isinstance(picker, AudioFilePickerScreen)
-        names = [str(o.prompt) for o in picker.query_one("OptionList").options]
-        assert len(names) == 2 and all("take0" in n for n in names)
+        names = [str(o.prompt) for o in picker.query_one("#audio-files").options]
+        assert len(names) == 3 and all("take0" in n for n in names[1:])
         assert not any("notes" in n for n in names)
 
-        # selecting take02 fills the prompt (confirmation still required)
+        # selecting take02 creates the project immediately (newest first)
         picker.on_option_list_option_selected(
-            type("Evt", (), {"option": type("O", (), {"prompt": names[0]})()})()
+            type("Evt", (), {"option": type("O", (), {"prompt": names[1]})()})()
         )
         await pilot.pause()
-        prompt = repl.query_one("#prompt")
-        assert prompt.value.endswith("take02.flac")  # newest first
-        assert repl.locate_mode == "new"  # still confirming
-
-        repl._submit_prompt_value(prompt.value)
-        await pilot.pause()
-        assert app.project_dir.name == "take02"
+        assert app.project_dir is not None and app.project_dir.name == "take02"
+        assert repl.locate_mode is None
 
 
 # ---- Pi-style slash-command autocomplete -----------------------------------
@@ -432,12 +464,74 @@ async def test_escape_hides_autocomplete_keeps_input(tmp_path):
         assert prompt.value == "/tr"  # input untouched
 
 
+async def test_settings_session_reloads_config_once(tmp_path, monkeypatch):
+    """Two stages saved in one /settings session -> exactly ONE reload line."""
+    from subforge.tui.screens.language_picker import LanguagePickerScreen
+    from subforge.tui.screens.model_picker import ModelPickerScreen
+    from subforge.tui.screens.project import ChoiceScreen
+    from subforge.tui.screens.settings import (
+        ApiKeyInputScreen,
+        ReasoningPickerScreen,
+        UrlInputScreen,
+    )
+
+    def _pick(screen: object, prompt: str) -> None:
+        if isinstance(screen, ChoiceScreen):
+            screen.choose(prompt)
+        elif isinstance(screen, (ReasoningPickerScreen, ModelPickerScreen)):
+            screen.on_option_list_option_selected(
+                type("Evt", (), {"option": type("O", (), {"prompt": prompt})()})()
+            )
+        elif isinstance(screen, (ApiKeyInputScreen, UrlInputScreen, LanguagePickerScreen)):
+            field = screen.query_one("Input")
+            field.value = prompt
+            screen.on_input_submitted(type("Evt", (), {"input": field})())
+
+    monkeypatch.setenv("SUBFORGE_CONFIG", str(tmp_path / "config.json"))
+    (tmp_path / "config.json").write_text("{}")
+    app = SubForgeApp(app_config=AppConfig())
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        repl = app.repl
+
+        repl.run_command("/settings")
+        await pilot.pause()
+        assert isinstance(app.screen, ChoiceScreen)
+        _pick(app.screen, "Transcribe  —  model + source language")
+        await pilot.pause()
+        _pick(app.screen, "Local (WhisperX)")
+        await pilot.pause()
+        _pick(app.screen, "small · Lightweight")
+        await pilot.pause()
+        _pick(app.screen, "id")
+        await pilot.pause()
+        _pick(app.screen, "Translation  —  model + target language")
+        await pilot.pause()
+        _pick(app.screen, "Local server (LM Studio / Ollama)")
+        await pilot.pause()
+        _pick(app.screen, "http://localhost:1234/v1")
+        await pilot.pause()
+        _pick(app.screen, "qwen3-14b")
+        await pilot.pause()
+        _pick(app.screen, "en")
+        await pilot.pause()
+
+        await pilot.press("escape")  # menu -> close settings
+        await pilot.pause()
+        await pilot.press("escape")  # settings modal pops too
+        await pilot.pause()
+        assert isinstance(app.screen, ReplScreen)
+
+        text = transcript_text(app)
+        assert text.count("configuration reloaded") == 1
+
+
 async def test_locate_mode_disables_autocomplete(tmp_path):
     app = SubForgeApp()
     async with app.run_test() as pilot:
         await pilot.pause()
         repl = app.repl
-        repl.run_command("/new")
+        repl.enter_locate_mode()
         await pilot.pause()
         _prompt(repl).value = "/home/me/audio.wav"  # starts with '/' but it's a path
         await pilot.pause()
@@ -468,3 +562,109 @@ async def test_quit_alias_routes_to_quit(tmp_path):
         prompt.value = "quit"
         _submit(repl, prompt)
         assert quits == [True]
+
+
+# ---- arrow-up/down prompt history -------------------------------------------
+
+
+async def _submit_history(pilot: Pilot, repl: ReplScreen, *values: str) -> None:
+    for value in values:
+        prompt = _prompt(repl)
+        prompt.value = value
+        _submit(repl, prompt)
+        await pilot.pause()
+
+
+async def test_arrow_up_recalls_previous_commands(tmp_path):
+    app = SubForgeApp()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        repl = app.repl
+        await _submit_history(pilot, repl, "/status", "/help")
+
+        await pilot.press("up")
+        await pilot.pause()
+        assert _prompt(repl).value == "/help"  # most recent first
+
+        await pilot.press("up")
+        await pilot.pause()
+        assert _prompt(repl).value == "/status"
+
+        await pilot.press("down")
+        await pilot.pause()
+        assert _prompt(repl).value == "/help"
+
+        await pilot.press("down")
+        await pilot.pause()
+        assert _prompt(repl).value == ""  # past the newest: back to the draft
+
+
+async def test_arrow_up_saves_and_restores_typed_draft(tmp_path):
+    app = SubForgeApp()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        repl = app.repl
+        await _submit_history(pilot, repl, "/status")
+
+        prompt = _prompt(repl)
+        prompt.value = "tr"  # a draft the user was typing (no '/' -> no picker)
+        await pilot.press("up")
+        await pilot.pause()
+        assert prompt.value == "/status"  # draft replaced
+
+        await pilot.press("down")
+        await pilot.pause()
+        assert prompt.value == "tr"  # draft restored
+
+
+async def test_history_submit_resets_navigation(tmp_path):
+    app = SubForgeApp()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        repl = app.repl
+        await _submit_history(pilot, repl, "/status")
+
+        await pilot.press("up")
+        await pilot.pause()
+        assert _prompt(repl).value == "/status"
+
+        # Enter submits the recalled command and resets navigation
+        _submit(repl, _prompt(repl))
+        await pilot.pause()
+        assert repl._history_index is None
+        await pilot.press("down")  # ≥ newest already: returns False but harmless
+        await pilot.pause()
+
+
+async def test_history_dedupes_and_caps(tmp_path):
+    app = SubForgeApp()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        repl = app.repl
+        await _submit_history(pilot, repl, "/transcribe", "/transcribe", "/status")
+        assert repl._history == ["/transcribe", "/status"]  # consecutive dupes dropped
+
+
+async def test_recalled_command_does_not_open_autocomplete(tmp_path):
+    app = SubForgeApp()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        repl = app.repl
+        await _submit_history(pilot, repl, "/transcribe")
+
+        await pilot.press("up")
+        await pilot.pause()
+        assert _prompt(repl).value == "/transcribe"
+        assert not _picker_visible(repl)  # no slash picker while recalling
+
+
+async def test_arrow_up_with_empty_history_is_harmless(tmp_path):
+    app = SubForgeApp()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        repl = app.repl
+        prompt = _prompt(repl)
+        prompt.value = "draft"
+        await pilot.press("up")
+        await pilot.pause()
+        assert prompt.value == "draft"  # untouched, no crash

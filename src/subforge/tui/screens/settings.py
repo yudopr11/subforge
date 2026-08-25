@@ -154,6 +154,7 @@ class SettingsScreen(ModalScreen[None]):
         self._cap_client = capability_client if capability_client is not None else CapabilityClient()
         self._loader_factory = loader_factory
         self._last_spec: ReasoningSpec | None = None
+        self._dirty = False  # any stage saved? notify on_saved once at close
 
     def _loader(self, kind: str) -> Callable[[], list[str]]:
         """Offline-injectable model-list loader (test seam, mirrors the wizard)."""
@@ -492,8 +493,16 @@ class SettingsScreen(ModalScreen[None]):
     # ---- persistence -----------------------------------------------------------------
 
     def save_config(self) -> None:
+        """Persist the current config immediately — per-stage save (PRD §7).
+
+        ``on_saved`` is deferred: it fires once when the settings session closes,
+        so the host refreshes/labels once, not per stage.
+        """
         save_app_config(self.cfg)
-        if self.on_saved:
+        self._dirty = True
+
+    def on_unmount(self) -> None:
+        if self._dirty and self.on_saved:
             self.on_saved()
 
     def action_cancel(self) -> None:

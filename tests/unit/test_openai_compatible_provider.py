@@ -67,8 +67,49 @@ def test_http_error_propagates():
         return httpx.Response(401, json={"error": "bad key"})
 
     provider = OpenAICompatibleProvider("http://t.local/v1", "k", "m", client=transport_handler(handler))
-    with pytest.raises(httpx.HTTPStatusError):
+    with pytest.raises(ValueError, match="HTTP 401"):
         provider.translate([TranslationInput(1, "x")], "id", "en")
+
+
+def test_http_400_surfaces_server_reason():
+    """PRD §21: the server's own message (unknown model, unsupported
+    response_format, bad reasoning_effort, ...) reaches the user."""
+    def handler(request):
+        return httpx.Response(
+            400,
+            json={
+                "error": {
+                    "message": "The model 'gpt-5.6-luna' does not exist or you do not have access",
+                    "type": "invalid_request_error",
+                }
+            },
+        )
+
+    provider = OpenAICompatibleProvider("http://t.local/v1", "k", "m", client=transport_handler(handler))
+    with pytest.raises(ValueError) as exc:
+        provider.translate([TranslationInput(1, "x")], "id", "en")
+    error = str(exc.value)
+    assert "HTTP 400" in error
+    assert "does not exist" in error  # the actionable part is in the message
+
+
+def test_http_400_surfaces_plain_body_when_not_json():
+    def handler(request):
+        return httpx.Response(400, text="model does not support response_format json_object")
+
+    provider = OpenAICompatibleProvider("http://t.local/v1", "k", "m", client=transport_handler(handler))
+    with pytest.raises(ValueError) as exc:
+        provider.translate([TranslationInput(1, "x")], "id", "en")
+    assert "json_object" in str(exc.value)
+
+
+def test_list_models_http_error_surfaces_reason():
+    def handler(request):
+        return httpx.Response(500, json={"error": {"message": "rate limited"}})
+
+    provider = OpenAICompatibleProvider("http://t.local/v1", "k", "m", client=transport_handler(handler))
+    with pytest.raises(ValueError, match="HTTP 500.*rate limited"):
+        provider.list_models()
 
 
 def test_registered_in_registry():

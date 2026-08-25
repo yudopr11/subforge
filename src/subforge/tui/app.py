@@ -155,24 +155,29 @@ class SubForgeApp(App[None]):
         background: $pi-success 25%;
     }
 
-    /* ---- searchable project picker ---- */
-    #project-search {
+    /* ---- searchable project / audio pickers ---- */
+    #project-search,
+    #audio-search {
         border: round $pi-border;
         background: $pi-bg-elevated;
         color: $text;
     }
-    #project-search:focus {
+    #project-search:focus,
+    #audio-search:focus {
         border: round $pi-accent;
     }
-    #projects {
+    #projects,
+    #audio-files {
         max-height: 12;
         background: $pi-bg-elevated;
         border: none;
     }
-    #projects > .option-list--option {
+    #projects > .option-list--option,
+    #audio-files > .option-list--option {
         color: $text;
     }
-    #projects > .option-list--option-highlighted {
+    #projects > .option-list--option-highlighted,
+    #audio-files > .option-list--option-highlighted {
         background: $pi-selected-bg;
         color: $pi-accent;
         text-style: bold;
