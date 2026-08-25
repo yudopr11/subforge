@@ -1,0 +1,86 @@
+"""Layered configuration: defaults < .env file < environment variables (ARCH §24).
+
+Env-var names follow ``<GROUP>_<FIELD>`` (e.g. ``TRANSLATION_BASE_URL``). We
+apply them explicitly instead of using pydantic-settings' nested-delimiter
+magic, which breaks on field names that themselves contain underscores.
+"""
+
+import os
+from pathlib import Path
+
+from pydantic import BaseModel
+
+
+class TranscriptionSettings(BaseModel):
+    provider: str = "local"
+    model: str = "large-v3"
+    device: str = "auto"
+    compute_type: str = "auto"
+
+
+class DiarizationSettings(BaseModel):
+    enabled: bool = False
+    provider: str = "local"
+
+
+class TranslationSettings(BaseModel):
+    provider: str = "openai-compatible"
+    base_url: str = "http://localhost:1234/v1"
+    api_key: str = ""
+    model: str = ""
+    batch_size: int = 5  # PRD §11 contextual batch of five segments
+
+
+class Settings(BaseModel):
+    transcription: TranscriptionSettings = TranscriptionSettings()
+    diarization: DiarizationSettings = DiarizationSettings()
+    translation: TranslationSettings = TranslationSettings()
+
+
+def _parse_bool(raw: str) -> bool:
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _parse_dotenv(path: Path) -> dict[str, str]:
+    """Minimal KEY=VALUE parser (no interpolation), matching .env semantics."""
+    values: dict[str, str] = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        key = key.strip()
+        value = value.strip().strip("'\"")
+        if key:
+            values[key] = value
+    return values
+
+
+def _coerce(model: type[BaseModel], key: str, raw: str) -> object:
+    annotation = model.model_fields[key].annotation
+    if annotation is bool:
+        return _parse_bool(raw)
+    if annotation is int:
+        return int(raw)
+    return raw
+
+
+def load_settings(env_file: Path | str | None = ".env") -> Settings:
+    file_values = _parse_dotenv(Path(env_file)) if env_file is not None and Path(env_file).exists() else {}
+    settings = Settings()
+    for group_name, group_model in (
+        ("transcription", TranscriptionSettings),
+        ("diarization", DiarizationSettings),
+        ("translation", TranslationSettings),
+    ):
+        group = getattr(settings, group_name)
+        updates: dict[str, object] = {}
+        for field_name in group_model.model_fields:
+            env_key = f"{group_name}_{field_name}".upper()
+            if env_key in os.environ:
+                updates[field_name] = _coerce(group_model, field_name, os.environ[env_key])
+            elif env_key in file_values:
+                updates[field_name] = _coerce(group_model, field_name, file_values[env_key])
+        if updates:
+            setattr(settings, group_name, group_model(**updates))
+    return settings
