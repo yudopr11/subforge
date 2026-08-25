@@ -139,6 +139,8 @@ class Pipeline:
 
     def run_translation(self, target_language: str) -> None:
         project = self.project
+        if not project.segments:
+            raise StageError("[ERROR] No captions to translate — transcribe first.")
         if target_language not in project.project.target_languages:
             project.project.target_languages.append(target_language)
             self._save(project)

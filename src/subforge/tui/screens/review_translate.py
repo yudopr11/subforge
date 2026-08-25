@@ -15,7 +15,7 @@ from subforge.app.translation_service import TranslationService
 
 
 class ReviewTranslateScreen(Screen[None]):
-    def __init__(self, project_dir: Path, translation_service: TranslationService) -> None:
+    def __init__(self, project_dir: Path, translation_service: TranslationService | None = None) -> None:
         super().__init__()
         self.project_dir = project_dir
         self.service = translation_service

@@ -15,7 +15,7 @@ AUDIO_SUFFIXES = {".wav", ".flac", ".mp3", ".m4a", ".aac", ".ogg", ".opus"}
 
 def projects_root() -> Path:
     """Directory under which new projects are created (override for tests)."""
-    import os  # noqa: PLC0415 — tiny stdlib import kept local for clarity
+    import os
 
     return Path(os.environ.get("SUBFORGE_PROJECTS_DIR", "projects"))
 
