@@ -11,9 +11,9 @@ from textual.pilot import Pilot
 from textual.widgets import Input, OptionList
 
 from subforge.app.pipeline import Pipeline
-from subforge.app.project_store import create_project, load_project
+from subforge.app.project_store import create_project, load_project, save_project
 from subforge.config.app_config import AppConfig
-from subforge.models.project import ProjectMeta, StageState
+from subforge.models.project import ProjectMeta, Segment, StageState
 from subforge.models.transcript import Transcript, TranscriptSegment
 from subforge.providers.base import TranslationInput, TranslationOutput
 from subforge.tui.app import SubForgeApp
@@ -706,3 +706,28 @@ async def test_settings_loads_fresh_config_from_disk(tmp_path, monkeypatch):
         settings = app.screen_stack[-2]
         assert isinstance(settings, SettingsScreen)
         assert settings.cfg.translation.model == "qwen3-14b"  # fresh, not boot snapshot
+
+
+async def test_review_with_lang_opens_translation_review(tmp_path):
+    """/review <lang> -> translation review for that language (PRD §13)."""
+    from subforge.tui.screens.caption_review import CaptionReviewScreen
+    from subforge.tui.screens.review_translate import ReviewTranslateScreen
+
+    d = create_project(tmp_path / "p", ProjectMeta(name="p", source_language="id", target_languages=["jv"]))
+    project = load_project(d)
+    project.segments = [Segment(id=1, start=1.0, end=2.0, source="halo", translations={"jv": "halo!"})]
+    save_project(d, project)
+
+    app = SubForgeApp(project_dir=d)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        app.repl.run_command("/review jv")
+        await pilot.pause()
+        assert isinstance(app.screen, ReviewTranslateScreen)
+        assert app.screen.language == "jv"
+
+        app.screen.action_cancel()
+        await pilot.pause()
+        app.repl.run_command("/review")
+        await pilot.pause()
+        assert isinstance(app.screen, CaptionReviewScreen)

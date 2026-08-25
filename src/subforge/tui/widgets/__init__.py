@@ -65,3 +65,59 @@ class SelectableRichLog(RichLog):
     def get_selection(self, selection: Selection) -> tuple[str, str] | None:
         text = "\n".join("".join(seg.text for seg in strip) for strip in self.lines)
         return selection.extract(text), "\n"
+
+
+class EditRecord:
+    """One captured edit: what changed (id, old text -> new text)."""
+
+    __slots__ = ("new_text", "old_text", "segment_id")
+
+    def __init__(self, segment_id: int, old_text: str, new_text: str) -> None:
+        self.segment_id = segment_id
+        self.old_text = old_text
+        self.new_text = new_text
+
+
+class EditHistory:
+    """In-memory undo/redo stack for review screens (PRD §9).
+
+    Edits are recorded on apply; undo/redo move a pointer over the records and
+    return the record whose ``old_text`` (undo) or ``new_text`` (redo) restores
+    the state. A fresh edit truncates the redo tail.
+    """
+
+    __slots__ = ("_pos", "_records")
+
+    def __init__(self) -> None:
+        self._records: list[EditRecord] = []
+        self._pos = 0
+
+    @property
+    def count(self) -> int:
+        return self._pos
+
+    def can_undo(self) -> bool:
+        return self._pos > 0
+
+    def can_redo(self) -> bool:
+        return self._pos < len(self._records)
+
+    def record(self, segment_id: int, old_text: str, new_text: str) -> None:
+        if old_text == new_text:
+            return
+        del self._records[self._pos :]
+        self._records.append(EditRecord(segment_id, old_text, new_text))
+        self._pos += 1
+
+    def undo(self) -> EditRecord | None:
+        if not self.can_undo():
+            return None
+        self._pos -= 1
+        return self._records[self._pos]
+
+    def redo(self) -> EditRecord | None:
+        if not self.can_redo():
+            return None
+        record = self._records[self._pos]
+        self._pos += 1
+        return record

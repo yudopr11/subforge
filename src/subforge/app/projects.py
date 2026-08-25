@@ -44,7 +44,9 @@ def create_project_from_audio(audio_path: Path, root: Path | None = None) -> Pat
 
     target_root = root if root is not None else projects_root()
     directory = unique_project_dir(target_root, audio_path.stem)
-    meta = ProjectMeta(name=directory.name, source_language="", target_languages=["en"])
+    # No pre-seeded targets: the list records only languages actually translated
+    # into (first /translate run appends its language; PRD §16).
+    meta = ProjectMeta(name=directory.name, source_language="", target_languages=[])
     create_project(directory, meta)
     shutil.copy2(audio_path, directory / "audio" / audio_path.name)
     return directory

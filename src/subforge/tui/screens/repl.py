@@ -72,7 +72,7 @@ class ReplScreen(Screen[None]):
         ("/new", "create project + import audio"),
         ("/open", "list/open recent projects"),
         ("/transcribe", "run transcription"),
-        ("/review", "caption review overlay"),
+        ("/review", "review captions, or /review <lang> for translations"),
         ("/translate", "translate (default target remembered)"),
         ("/export", "export SRT/ASS"),
         ("/settings", "manual provider/model settings"),
@@ -564,6 +564,12 @@ class ReplScreen(Screen[None]):
         project_dir = self._require_project()
         if project_dir is None:
             return
+        if arg:
+            # /review <lang> -> translation review for that language (PRD §13)
+            from subforge.tui.screens.review_translate import ReviewTranslateScreen
+
+            self._host.push_screen(ReviewTranslateScreen(project_dir, language=arg.strip().lower()))
+            return
         from subforge.tui.screens.caption_review import CaptionReviewScreen, player_for
 
         audio = find_audio_file(project_dir)
@@ -662,7 +668,7 @@ class ReplScreen(Screen[None]):
             ("/new <audio>", "create project + import audio"),
             ("/open [name|n]", "list/open recent projects"),
             ("/transcribe", "run transcription"),
-            ("/review", "caption review overlay"),
+            ("/review [lang]", "caption review; with a lang: translation review"),
             ("/translate [lang]", "translate (default target remembered)"),
             ("/export [formats]", "export SRT/ASS"),
             ("/settings", "manual provider/model settings"),

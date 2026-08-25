@@ -90,7 +90,8 @@ footer status line. There is no list menu — commands do the work.
   to filter, `↑`/`↓` to move, `Enter` to open (plus a *create new* row); `/open <name|n>`
   still opens directly by name or list number |
 | `/transcribe` | run the transcription stage (busy-guarded, retryable) |
-| `/review` | caption review overlay (edit text, play segment audio) |
+| `/review [lang]` | caption review (edit text, play segment audio); with a `<lang>`
+  argument: translation review for that language — both explicit-save with undo/redo |
 | `/translate [lang]` | translate into a language code; defaults to remembered target |
 | `/export [formats]` | export SRT/ASS for source + completed translations |
 | `/settings` | two-stage menu — **Transcribe** or **Translation**; after picking
@@ -188,8 +189,11 @@ local inference requires the optional extra (`pip install "subforge[local]"`).
 ## 9. Caption review
 
 After transcription the user reviews every caption: text is editable per segment,
-navigation by row, edits persist immediately to the project file. Timing is displayed
-but owned by the application (§10). The editing surface is text correction.
+navigation by row. Editing is **explicit-save**: `Enter` applies an edit to the
+review table in memory (with a live `● unsaved changes` status), and `Ctrl+S`
+persists it to the project file — `Esc` with unsaved changes warns once before
+discarding. `Ctrl+Z`/`Ctrl+Y` undo/redo edits, including across saves. Timing is
+displayed but owned by the application (§10). The editing surface is text correction.
 
 ## 10. Metadata ownership guarantee
 
@@ -225,8 +229,10 @@ exports live alongside it (§21 guarantees in ARCH).
 
 ## 13. Translation review
 
-Side-by-side source/translation table with inline fixes, identical persistence rules
-as §9. Reviewing is part of the core workflow, not an afterthought.
+Side-by-side source/translation table with inline fixes, identical explicit-save
+rules as §9 (`Enter` applies in memory, `Ctrl+S` persists, `Ctrl+Z`/`Ctrl+Y` undo/redo)
+— reachable via `/review <lang>` for any translated language. Reviewing is part of
+the core workflow, not an afterthought.
 
 ## 14. Live model discovery
 
@@ -263,10 +269,11 @@ values reset.
 ## 16. Languages
 
 Any source language the ASR layer detects or the user selects; a project can carry
-**multiple target languages** — each `/translate <lang>` run adds its language to the
-project (`target_languages`), records its own stage (`translation_<lang>`), and
-`/export` writes every completed target, skipping incomplete ones. Language codes are
-stored in canonical form (e.g. `id`, `en`, `ja`) and drive output filenames.
+**multiple target languages** — the list starts empty and each `/translate <lang>` run
+adds its language to the project (`target_languages`), records its own stage
+(`translation_<lang>`), and `/export` writes every completed target, skipping
+incomplete ones. Language codes are stored in canonical form (e.g. `id`, `en`, `ja`)
+and drive output filenames.
 
 Language selection in the TUI uses a **searchable ISO 639-1 picker**: type to filter
 the catalog by code or English name, `↑`/`↓` to move the highlight, `Enter`/`Tab` to
