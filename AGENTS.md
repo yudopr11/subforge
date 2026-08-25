@@ -28,13 +28,36 @@ These come from ARCHITECTURE.md §37. Violating any of them is a bug even if tes
 
 ```bash
 uv sync                          # install deps (or pip install -e .)
-uv run pytest                    # all tests
+uv run pytest                    # all tests (unit + integration/e2e)
 uv run pytest tests/unit -v      # unit only
+uv run pytest tests/integration -v  # e2e only
 uv run ruff check src tests      # lint
 uv run mypy src                  # type check (strict)
 ```
 
 All tests must pass without network access, GPU, downloaded models, or running LLM servers. Use fakes/mocks (`httpx.MockTransport`, scripted providers) — see `tests/integration/test_full_flow.py` for the pattern.
+
+## Testing Requirements (every feature)
+
+Unit coverage alone is NOT done. A feature is complete only when **all three** gates pass:
+
+1. **Unit tests** cover the new logic (edge cases, failure paths), mirroring `src/` layout.
+2. **E2E / integration test** exercises the feature through its *user-visible flow*:
+   - pipeline/service features → drive them through `Pipeline` / `export_subtitles` end-to-end with scripted providers (see `tests/integration/test_full_flow.py`);
+   - TUI features → boot `SubForgeApp` with `run_test()`, push the real screen, and drive its public handlers/seams (see `tests/unit/test_tui_flow.py`, `test_setup_wizard.py`) asserting persisted state and status output;
+   - provider features → full request→normalize→merge path over `httpx.MockTransport`.
+   An e2e test must assert observable outcomes (files written, `project.json` state, on-screen status), not internal calls.
+3. **Quality gates**: `uv run pytest tests/ && uv run ruff check src tests && uv run mypy src`.
+
+If a feature can only be tested at unit level, that is a design smell — add a seam so the flow is testable end-to-end.
+
+## Documentation Sync
+
+`docs/PRD.md` and `docs/ARCHITECTURE.md` are load-bearing: code cites their section numbers (`PRD §11`, `ARCH §16`). Therefore:
+
+- New behavior, UX flow, guarantee, or design decision that is **not already in the specs** requires updating the relevant PRD/ARCHITECTURE sections **in the same change set** (same commit or a `docs:` commit immediately after the feature commit).
+- When adding sections, keep numbering aligned with existing citations; grep first: `grep -rn "PRD §\|ARCH §" src tests`.
+- Plans in `docs/superpowers/plans/` use checkbox tracking (`- [ ]`/`- [x]`) and must be kept current as tasks finish.
 
 ## Conventions
 
@@ -42,6 +65,8 @@ All tests must pass without network access, GPU, downloaded models, or running L
 - Formatting/linting via ruff (`line-length = 100`).
 - Pydantic models for anything serialized to `project.json`; frozen dataclasses for provider value objects.
 - Tests live in `tests/unit/`, `tests/integration/`, fixtures in `tests/fixtures/`. One test file per module, mirroring `src/` layout.
+- Every feature ships unit + e2e coverage per "Testing Requirements" above.
+- Specs stay in sync per "Documentation Sync" above.
 - Commit style: conventional commits (`feat:`, `fix:`, `test:`, `docs:`, `chore:`).
 - Work task-by-task from a plan in `docs/superpowers/plans/`; each plan task ends with a commit.
 - TDD: write the failing test first, watch it fail, implement minimally, watch it pass, commit.
