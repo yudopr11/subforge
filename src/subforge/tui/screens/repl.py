@@ -42,7 +42,7 @@ def _glyph(state: StageState) -> str:
 class ReplScreen(Screen[None]):
     BINDINGS: ClassVar[list[Binding | tuple[str, str] | tuple[str, str, str]]] = [
         Binding("ctrl+c", "quit", "Quit", priority=True),
-        Binding("escape", "focus_prompt", "Prompt"),
+        Binding("escape", "cancel_or_prompt", "Back"),
     ]
 
     AUTO_FOCUS = "#prompt"
@@ -52,6 +52,7 @@ class ReplScreen(Screen[None]):
         self.pipeline_factory = pipeline_factory  # test seam
         self._running_stages: set[str] = set()
         self._recent_listing: list[Path] = []
+        self.locate_mode: str | None = None  # None | "new" — /new interactive locate
 
     @property
     def _host(self) -> "SubForgeApp":
@@ -124,6 +125,52 @@ class ReplScreen(Screen[None]):
         self.refresh_status()
         self.log_line("▸ configuration reloaded")
 
+    # ---- locate mode (/new) ----------------------------------------------
+
+    _NORMAL_PLACEHOLDER = "Type a command… (? for help)"
+    _LOCATE_PLACEHOLDER = "audio file path — @ to browse, Enter confirm, Esc cancel"
+
+    def enter_locate_mode(self) -> None:
+        self.locate_mode = "new"
+        prompt = self.query_one("#prompt", Input)
+        prompt.placeholder = self._LOCATE_PLACEHOLDER
+        self.log_line("Locate audio: type a path, or [b]@[/b] to browse files here.")
+        self._set_status("[b]/new[/b] · locating audio · esc cancel")
+
+    def exit_locate_mode(self) -> None:
+        self.locate_mode = None
+        self.query_one("#prompt", Input).placeholder = self._NORMAL_PLACEHOLDER
+        self.refresh_status()
+
+    def _submit_prompt_value(self, value: str) -> None:
+        """Test seam + locate-mode submit: handle raw prompt content directly."""
+        if self.locate_mode == "new":
+            if not value.strip():
+                return
+            if value.startswith("@"):
+                query = value[1:].strip().lower()
+                from subforge.app.projects import discover_audio_files
+                from subforge.tui.screens.audio_picker import AudioFilePickerScreen
+
+                matches = [
+                    f for f in discover_audio_files()
+                    if not query or query in str(f).lower() or query in f.name.lower()
+                ]
+                self._host.push_screen(
+                    AudioFilePickerScreen(matches[:100]), self._locate_picked
+                )
+                return
+            # a concrete path: create, then leave locate mode
+            self._cmd_new(value)
+            if self._host.project_dir is not None:
+                self.exit_locate_mode()
+            return
+        self.run_command(value if value.startswith("/") else "/" + value)
+
+    def _locate_picked(self, path: object) -> None:
+        if isinstance(path, str):
+            self.query_one("#prompt", Input).value = path
+
     # ---- input -------------------------------------------------------------
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
@@ -132,6 +179,13 @@ class ReplScreen(Screen[None]):
         raw = event.value.strip()
         self.log_line(f"[dim]>[/dim] {raw}")
         event.input.clear()
+        if self.locate_mode == "new":
+            if event.input.id == "prompt" and raw == "" :
+                self.exit_locate_mode()
+                self.log_line("[dim]cancelled[/dim]")
+            else:
+                self._submit_prompt_value(raw)
+            return
         if raw in {"?", "help"}:
             self.run_command("/help")
         elif raw.startswith("/"):
@@ -201,7 +255,7 @@ class ReplScreen(Screen[None]):
 
     def _cmd_new(self, arg: str) -> None:
         if not arg:
-            self.log_line("usage: /new <path-to-audio.(wav|flac|mp3|…)>")
+            self.enter_locate_mode()
             return
         try:
             directory = create_project_from_audio(Path(arg).expanduser())
@@ -409,7 +463,11 @@ class ReplScreen(Screen[None]):
     def _cmd_quit(self, arg: str) -> None:
         self._host.exit()
 
-    def action_focus_prompt(self) -> None:
+    def action_cancel_or_prompt(self) -> None:
+        if self.locate_mode == "new":
+            self.exit_locate_mode()
+            self.log_line("[dim]locate cancelled[/dim]")
+            return
         self.query_one("#prompt", Input).focus()
 
     def action_quit(self) -> None:

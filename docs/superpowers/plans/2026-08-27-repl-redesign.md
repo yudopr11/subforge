@@ -58,3 +58,16 @@ scrolling session log, one bottom `>` prompt, thin footer status line, slash com
 - Slash commands with optional leading-slash aliases; bare `q` dropped (input eats it) —
   exit is `/quit` or Ctrl+C.
 - Review/edit remain overlay screens (owner-approved), launched by commands.
+
+## Task 6: /new interactive audio locate (`@` browse)
+
+- [x] Bare `/new` enters **locate mode**: prompt repurposed for the audio path
+      (placeholder + footer reflect it), Esc cancels, Enter submits a path.
+- [x] Typing `@` (optionally `@query`) and submitting opens an `AudioFilePickerScreen`
+      overlay: audio files under the working directory (junk dirs pruned, newest
+      first), arrow-select, Enter returns the path into the prompt for confirmation.
+- [x] `app/projects.py::discover_audio_files(root, limit)` powers the index.
+- [x] Docs: PRD §7 `/new` row notes interactive locate; PRD §7 keyboard block gains
+      the `@` pattern.
+- [x] Tests: mode enter/cancel; path submit creates project; `@` opens picker with
+      filtered matches; picking fills the prompt (project created on second Enter).

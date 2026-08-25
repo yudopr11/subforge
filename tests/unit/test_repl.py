@@ -235,3 +235,80 @@ async def test_translate_busy_guard(tmp_path):
         app.repl._running_stages.add("translation")
         app.repl.run_command("/translate en")
         assert "already running" in transcript_text(app)
+
+
+# ---- /new interactive locate (@ browse) --------------------------------------
+
+
+async def test_bare_new_enters_locate_mode_and_esc_cancels(tmp_path):
+    app = SubForgeApp()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        repl = app.repl
+
+        repl.run_command("/new")
+        await pilot.pause()
+        assert repl.locate_mode == "new"
+        prompt = repl.query_one("#prompt")
+        assert "audio" in prompt.placeholder.lower()
+
+        await pilot.press("escape")
+        await pilot.pause()
+        assert repl.locate_mode is None
+
+
+async def test_locate_mode_path_submit_creates_project(tmp_path, monkeypatch):
+    monkeypatch.setenv("SUBFORGE_PROJECTS_DIR", str(tmp_path / "projects"))
+    app = SubForgeApp(app_config=AppConfig(transcription={"provider": "local", "model": "small"}))
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        repl = app.repl
+        audio = tmp_path / "song.wav"
+        audio.write_bytes(b"x")
+
+        repl.run_command("/new")
+        prompt = repl.query_one("#prompt")
+        prompt.value = str(audio)
+        repl._submit_prompt_value(str(audio))
+        await pilot.pause()
+
+        assert repl.locate_mode is None
+        assert app.project_dir is not None and app.project_dir.name == "song"
+
+
+async def test_at_opens_filtered_picker_and_picks_into_prompt(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "media").mkdir()
+    (tmp_path / "media" / "take01.wav").write_bytes(b"x")
+    (tmp_path / "media" / "take02.flac").write_bytes(b"x")
+    (tmp_path / "notes.txt").write_text("skip me")
+
+    app = SubForgeApp()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        repl = app.repl
+        repl.run_command("/new")
+
+        repl._submit_prompt_value("@take0")   # @query -> picker filtered to matches
+        await pilot.pause()
+
+        from subforge.tui.screens.audio_picker import AudioFilePickerScreen
+
+        picker = app.screen
+        assert isinstance(picker, AudioFilePickerScreen)
+        names = [str(o.prompt) for o in picker.query_one("OptionList").options]
+        assert len(names) == 2 and all("take0" in n for n in names)
+        assert not any("notes" in n for n in names)
+
+        # selecting take02 fills the prompt (confirmation still required)
+        picker.on_option_list_option_selected(
+            type("Evt", (), {"option": type("O", (), {"prompt": names[0]})()})()
+        )
+        await pilot.pause()
+        prompt = repl.query_one("#prompt")
+        assert prompt.value.endswith("take02.flac")  # newest first
+        assert repl.locate_mode == "new"  # still confirming
+
+        repl._submit_prompt_value(prompt.value)
+        await pilot.pause()
+        assert app.project_dir.name == "take02"

@@ -82,7 +82,9 @@ footer status line. There is no list menu — commands do the work.
 
 | Command | Effect |
 |---|---|
-| `/new <audio>` | create project around an exported audio file and import it |
+| `/new <audio>` | create project around an exported audio file; bare `/new` enters
+  **locate mode** — type a path, or submit `@` (or `@query`) to browse audio files
+  under the working directory, newest first |
 | `/open [name|n]` | list recent projects; open by name or list number |
 | `/transcribe` | run the transcription stage (busy-guarded, retryable) |
 | `/review` | caption review overlay (edit text, play segment audio) |

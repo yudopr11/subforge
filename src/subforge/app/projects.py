@@ -5,6 +5,7 @@ File-management glue lives here (not in screens) so the TUI stays logic-free
 """
 
 import shutil
+from collections.abc import Callable
 from pathlib import Path
 
 from subforge.app.project_store import create_project
@@ -71,3 +72,43 @@ def discover_projects(root: Path | None = None) -> list[Path]:
         return []
     projects = [d for d in base.iterdir() if d.is_dir() and (d / "project.json").is_file()]
     return sorted(projects, key=lambda d: d.stat().st_mtime, reverse=True)
+
+
+_JUNK_DIRS = {".git", ".venv", "venv", "node_modules", "__pycache__", ".mypy_cache", ".ruff_cache"}
+
+
+def discover_audio_files(
+    root: Path | None = None,
+    limit: int = 500,
+    is_dir: Callable[[Path], bool] = lambda p: p.is_dir(),
+) -> list[Path]:
+    """Audio files under ``root`` (default: cwd), junk dirs pruned, newest first.
+
+    Powers the ``@`` browse in the REPL's /new locate mode.
+    """
+    from collections import deque
+
+    base = root if root is not None else Path.cwd()
+    found: list[tuple[float, Path]] = []
+    queue: deque[Path] = deque([base])
+    while queue and len(found) < limit * 4:
+        current = queue.popleft()
+        try:
+            children = sorted(current.iterdir())
+        except OSError:
+            continue
+        for child in children:
+            if child.is_symlink():
+                continue
+            if child.is_dir():
+                if child.name not in _JUNK_DIRS:
+                    queue.append(child)
+            elif is_audio_file(child):
+                try:
+                    found.append((child.stat().st_mtime, child))
+                except OSError:
+                    continue
+                if len(found) >= limit * 4:
+                    break
+    found.sort(key=lambda pair: pair[0], reverse=True)
+    return [path for _, path in found[:limit]]
