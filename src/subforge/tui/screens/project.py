@@ -154,3 +154,34 @@ class ProjectPickerScreen(ModalScreen[object]):
 
     def action_cancel(self) -> None:
         self.dismiss(None)
+
+
+class ChoiceScreen(ModalScreen[str | None]):
+    """Generic single-choice prompt; dismisses with the chosen label (or None)."""
+
+    BINDINGS: ClassVar[list[Binding | tuple[str, str] | tuple[str, str, str]]] = [
+        ("escape", "cancel", "Cancel")
+    ]
+
+    def __init__(self, title: str, options: list[str]) -> None:
+        super().__init__()
+        self.picker_title = title
+        self.options = options
+        self.result: str | None = None
+
+    def compose(self) -> ComposeResult:
+        yield Label(f"[b]{self.picker_title}[/b]")
+        yield OptionList(*self.options, id="choices")
+        yield Label("Enter select · Esc cancel", id="choice-hints")
+
+    def choose(self, prompt: str) -> None:
+        """Public seam: act on a selection (also used by the event handler)."""
+        if prompt in self.options:
+            self.result = prompt
+            self.dismiss(prompt)
+
+    def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
+        self.choose(str(event.option.prompt))
+
+    def action_cancel(self) -> None:
+        self.dismiss(None)

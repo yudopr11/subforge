@@ -62,3 +62,9 @@ def load_app_config(path: Path | None = None) -> AppConfig:
     except ValueError as exc:
         print(f"[WARN] Ignoring corrupt config file {target}: {exc}", file=sys.stderr)
         return AppConfig()
+
+
+def is_first_run(path: Path | None = None) -> bool:
+    """True when no config has been saved yet — drives the setup wizard."""
+    target = path or default_config_path()
+    return not target.exists()

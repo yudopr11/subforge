@@ -55,3 +55,18 @@ def test_saved_file_is_user_only_on_posix(tmp_path):
 def test_env_var_overrides_path(monkeypatch, tmp_path):
     monkeypatch.setenv("SUBFORGE_CONFIG", str(tmp_path / "custom.json"))
     assert default_config_path() == tmp_path / "custom.json"
+
+
+def test_is_first_run(tmp_path):
+    from subforge.config.app_config import is_first_run
+
+    assert is_first_run(tmp_path / "missing.json") is True
+    save_app_config(AppConfig(), tmp_path / "exists.json")
+    assert is_first_run(tmp_path / "exists.json") is False
+
+
+def test_is_first_run_default_path(monkeypatch, tmp_path):
+    from subforge.config.app_config import is_first_run
+
+    monkeypatch.setenv("SUBFORGE_CONFIG", str(tmp_path / "custom.json"))
+    assert is_first_run() is True

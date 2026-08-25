@@ -1,16 +1,22 @@
 """Local Whisper model management UI (PRD §8): cache status + on-demand install."""
 
 from collections.abc import Callable
+from typing import ClassVar
 
 from textual.app import ComposeResult
+from textual.binding import Binding
 from textual.containers import Vertical
-from textual.screen import Screen
+from textual.screen import ModalScreen
 from textual.widgets import Button, DataTable, Label
 
 from subforge.app.model_manager import LocalModelInfo, LocalModelManager
 
 
-class ModelManagerScreen(Screen[None]):
+class ModelManagerScreen(ModalScreen[None]):
+    BINDINGS: ClassVar[list[Binding | tuple[str, str] | tuple[str, str, str]]] = [
+        ("escape", "cancel", "Cancel")
+    ]
+
     def __init__(
         self,
         manager: LocalModelManager | None = None,
@@ -84,3 +90,6 @@ class ModelManagerScreen(Screen[None]):
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "btn-install":
             self.run_worker(self.install_selected, thread=True, exclusive=True, group="install")
+
+    def action_cancel(self) -> None:
+        self.dismiss(None)
