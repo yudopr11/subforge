@@ -31,8 +31,8 @@ config.local.json
 *.gguf
 *.safetensors
 whisper*/
-models/
-cache/
+/models/
+/cache/
 
 # --- Python ---
 __pycache__/
@@ -81,5 +81,5 @@ Thumbs.db
 
 # --- Project runtime data ---
 # Local projects created by SubForge during development
-projects/
+/projects/
 *.subforge/
