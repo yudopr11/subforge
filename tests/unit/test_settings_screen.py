@@ -288,23 +288,23 @@ async def test_wizard_and_save_keys(tmp_path, monkeypatch):
         assert (tmp_path / "config.json").exists()
 
 
-async def test_escape_returns_to_menu_from_settings():
+async def test_escape_returns_to_repl_from_settings():
     from subforge.tui.app import SubForgeApp
-    from subforge.tui.screens.main_menu import MainMenuScreen
+    from subforge.tui.screens.repl import ReplScreen
     from subforge.tui.screens.settings import SettingsScreen
 
     app = SubForgeApp()
     async with app.run_test() as pilot:
         await pilot.pause()
-        menu = app.screen
+        repl = app.screen
+        assert isinstance(repl, ReplScreen)
         await app.push_screen(SettingsScreen(AppConfig()))
         await pilot.pause()
 
         await pilot.press("escape")
         await pilot.pause()
 
-        assert isinstance(app.screen, MainMenuScreen)
-        assert menu is not None
+        assert isinstance(app.screen, ReplScreen)
 
 
 def test_keymap_legend_rendered():

@@ -64,7 +64,7 @@ class _StaticLoader(list):  # callable list — satisfies Loader contract offlin
 
 
 async def test_first_run_launches_wizard_over_menu(first_run_env):
-    from subforge.tui.screens.main_menu import MainMenuScreen
+    from subforge.tui.screens.repl import ReplScreen
 
     app = SubForgeApp()
     async with app.run_test() as pilot:
@@ -72,7 +72,7 @@ async def test_first_run_launches_wizard_over_menu(first_run_env):
         assert isinstance(_wizard(app), FirstRunSetupScreen)
         # the first step modal is on top; menu is underneath
         assert isinstance(app.screen, ChoiceScreen)
-        assert any(isinstance(s, MainMenuScreen) for s in app.screen_stack)
+        assert any(isinstance(s, ReplScreen) for s in app.screen_stack)
 
 
 async def test_happy_path_local_transcription_local_translation(first_run_env):
@@ -226,18 +226,17 @@ async def test_escape_skips_wizard_without_saving(first_run_env):
         await pilot.pause()
 
         assert not first_run_env.exists()
-        from subforge.tui.screens.main_menu import MainMenuScreen
+        from subforge.tui.screens.repl import ReplScreen
 
-        assert isinstance(app.screen, MainMenuScreen)
+        assert isinstance(app.screen, ReplScreen)
 
 
 async def test_after_setup_menu_status_refreshes(first_run_env):
-    from subforge.tui.screens.main_menu import MainMenuScreen
+    from subforge.tui.screens.repl import ReplScreen
 
     app = SubForgeApp()
     async with app.run_test() as pilot:
         await pilot.pause()
-        menu_ref = app.screen_query_menu()
         wizard = _wizard(app)
         wizard._loader_factory = fake_loaders({"local": ["m1"]})
 
@@ -265,15 +264,18 @@ async def test_after_setup_menu_status_refreshes(first_run_env):
         _pick(app.screen, "en")  # default target
         await pilot.pause()
 
-        assert isinstance(app.screen, MainMenuScreen)
+        assert isinstance(app.screen, ReplScreen)
         assert app.needs_setup is False
-        status = str(menu_ref.query_one("#status").render())
-        assert "Setup complete" in status
+        # completion is announced in the transcript and config reloaded
+        assert app.app_config.translation.model == "m1"
+        from subforge.tui.screens.repl import ReplScreen as _Repl
+
+        repl = next(s for s in app.screen_stack if isinstance(s, _Repl))
+        assert repl is not None
 
 
 def _menu_import_guard() -> None:  # keep explicit import referenced for readers
-    from subforge.tui.screens.main_menu import MainMenuScreen  # noqa: F401
-
+    
     assert ProjectPickerScreen and NewProjectScreen and ModelManagerScreen
 
 

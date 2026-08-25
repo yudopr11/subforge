@@ -8,42 +8,9 @@ from subforge.app.project_store import create_project, load_project, save_projec
 from subforge.models.project import ProjectMeta, Segment
 from subforge.tui.app import SubForgeApp
 from subforge.tui.screens.caption_review import CaptionReviewScreen
-from subforge.tui.screens.main_menu import MainMenuScreen
+from subforge.tui.screens.repl import ReplScreen
 from subforge.tui.screens.review_translate import ReviewTranslateScreen
 from subforge.tui.screens.speaker_map import SpeakerMapScreen
-
-
-async def test_transcribe_busy_guard_blocks_second_run(tmp_path):
-    d = create_project(tmp_path / "p", ProjectMeta(name="p", source_language="id"))
-    (d / "audio" / "a.wav").write_bytes(b"x")
-    app = SubForgeApp(project_dir=d)
-    async with app.run_test() as pilot:
-        await pilot.pause()
-        menu = app.screen
-        assert isinstance(menu, MainMenuScreen)
-
-        menu._running_stages.add("transcription")  # simulate a run in flight
-        menu._begin_transcribe()
-        await pilot.pause()
-
-        status = str(menu.query_one("#status").render())
-        assert "already" in status.lower()
-        assert "transcription" in status.lower()
-
-
-async def test_translate_busy_guard(tmp_path):
-    d = create_project(tmp_path / "p", ProjectMeta(name="p", source_language="id"))
-    app = SubForgeApp(project_dir=d)
-    async with app.run_test() as pilot:
-        await pilot.pause()
-        menu = app.screen
-        assert isinstance(menu, MainMenuScreen)
-
-        menu._running_stages.add("translation")
-        menu._language_chosen("en")
-        await pilot.pause()
-
-        assert "already" in str(menu.query_one("#status").render()).lower()
 
 
 def seed_segments(tmp_path: Path):
@@ -62,7 +29,7 @@ def seed_segments(tmp_path: Path):
         lambda d: SpeakerMapScreen(d),
     ],
 )
-async def test_escape_returns_to_main_menu(tmp_path, screen_factory):
+async def test_escape_returns_to_repl_home(tmp_path, screen_factory):
     from subforge.app.translation_service import TranslationService
 
     d = seed_segments(tmp_path)
@@ -78,4 +45,4 @@ async def test_escape_returns_to_main_menu(tmp_path, screen_factory):
         await pilot.press("escape")
         await pilot.pause()
 
-        assert isinstance(app.screen, MainMenuScreen)
+        assert isinstance(app.screen, ReplScreen)

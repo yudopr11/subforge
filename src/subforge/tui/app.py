@@ -7,7 +7,7 @@ from textual.app import App
 from textual.binding import Binding
 
 from subforge.config.app_config import AppConfig, is_first_run, load_app_config
-from subforge.tui.screens.main_menu import MainMenuScreen
+from subforge.tui.screens.repl import ReplScreen
 from subforge.tui.screens.setup_wizard import FirstRunSetupScreen
 
 
@@ -87,24 +87,28 @@ class SubForgeApp(App[None]):
         self.needs_setup = force_setup if force_setup is not None else is_first_run()
 
     def on_mount(self) -> None:
-        self.push_screen(MainMenuScreen())
+        self.push_screen(ReplScreen())
         if self.needs_setup:
             self.push_screen(FirstRunSetupScreen(on_done=self._setup_finished))
 
-    def screen_query_menu(self) -> MainMenuScreen:
-        """The (single) main menu instance, wherever it sits in the stack."""
+    def screen_query_menu(self) -> ReplScreen:
+        """Back-compat: the REPL home, wherever it sits in the stack."""
+        return self.repl
+
+    @property
+    def repl(self) -> ReplScreen:
         for screen in reversed(list(self.screen_stack)):
-            if isinstance(screen, MainMenuScreen):
+            if isinstance(screen, ReplScreen):
                 return screen
-        raise LookupError("main menu not mounted")
+        raise LookupError("repl not mounted")
 
     def _setup_finished(self) -> None:
         """Wizard saved config: reload providers and refresh the menu status."""
+        repl = self.screen_query_menu()
         self.app_config = load_app_config()
         self.needs_setup = False
-        menu = self.screen_query_menu()
-        menu._config_reloaded()
-        menu._set_flow_status("Setup complete")
+        repl.reload_config()
+        repl.log_line("[green]Setup complete[/green] — you are ready. Type ? for commands.")
 
 
 def run(project_dir: str | None = None) -> None:
