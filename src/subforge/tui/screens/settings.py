@@ -154,6 +154,7 @@ class SettingsScreen(Screen[None]):
                     yield RadioButton(label="Local (WhisperX)", value=self.cfg.transcription.provider == "local", id="tc-local")
                     yield RadioButton(label="OpenAI", value=self.cfg.transcription.provider == "openai", id="tc-openai")
                 yield Button(f"Model: {self._model_label()}", id="btn-tc-model")
+                yield Button("Manage local models…", id="btn-tc-manage")
                 yield Button("API key…", id="btn-tc-key")
             with Vertical(id="tl-section"):
                 yield Label("Translation")
@@ -313,6 +314,8 @@ class SettingsScreen(Screen[None]):
             self._cycle_preset()
         elif button_id == "btn-tc-model":
             self._pick_transcription_model()
+        elif button_id == "btn-tc-manage":
+            self._open_model_manager()
         elif button_id == "btn-tl-model":
             self._pick_translation_model()
         elif button_id == "btn-tl-reasoning":
@@ -328,6 +331,16 @@ class SettingsScreen(Screen[None]):
         ids = list(TRANSLATION_PRESETS)
         current = ids.index(self.cfg.translation.provider) if self.cfg.translation.provider in ids else -1
         self.apply_tl_preset(ids[(current + 1) % len(ids)])
+
+    def _open_model_manager(self) -> None:
+        from subforge.app.model_manager import LocalModelManager
+        from subforge.tui.screens.model_manager import ModelManagerScreen
+
+        def rebuild_labels() -> None:
+            self._last_spec = None
+            self._refresh_labels()
+
+        self._host.push_screen(ModelManagerScreen(manager=LocalModelManager(), on_done=rebuild_labels))
 
     def _pick_transcription_model(self) -> None:
         from subforge.tui.screens.model_picker import ModelPickerScreen

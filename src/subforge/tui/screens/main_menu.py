@@ -23,6 +23,7 @@ from subforge.tui.screens.caption_review import CaptionReviewScreen
 from subforge.tui.screens.project import NewProjectScreen, OpenProjectScreen, TargetLanguageScreen
 from subforge.tui.screens.review_translate import ReviewTranslateScreen
 from subforge.tui.screens.settings import SettingsScreen
+from subforge.tui.screens.speaker_map import SpeakerMapScreen
 
 if TYPE_CHECKING:
     from subforge.tui.app import SubForgeApp
@@ -42,6 +43,7 @@ class MainMenuScreen(Screen[None]):
         ("n", "new_project", "New"),
         ("o", "open_project", "Open"),
         ("s", "settings", "Settings"),
+        ("m", "speakers", "Speakers"),
     ]
 
     @property
@@ -64,7 +66,10 @@ class MainMenuScreen(Screen[None]):
                 classes="action-list",
                 id="actions",
             )
-            yield Label("Status: Ready — open a project to begin (n=new · o=open · s=settings)", id="status")
+            yield Label(
+                "Status: Ready — open a project to begin (n=new · o=open · s=settings · m=speakers)",
+                id="status",
+            )
 
     def on_list_view_selected(self, event: ListView.Selected) -> None:
         handlers = {
@@ -110,6 +115,11 @@ class MainMenuScreen(Screen[None]):
         self._set_status(f"Project opened: {name}")
 
     # ---- settings ---------------------------------------------------------
+
+    def action_speakers(self) -> None:
+        project_dir = self._require_project()
+        if project_dir is not None:
+            self.app.push_screen(SpeakerMapScreen(project_dir))
 
     def action_settings(self) -> None:
         self._host.push_screen(
