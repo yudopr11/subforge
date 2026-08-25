@@ -1,7 +1,6 @@
 """CLI entrypoint: `subforge` launches the TUI (PRD §7)."""
 
 import argparse
-import sys
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -26,4 +25,4 @@ def main(argv: list[str] | None = None) -> None:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    main()

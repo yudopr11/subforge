@@ -23,7 +23,7 @@ async def test_picker_lists_models_and_returns_selection():
 async def test_empty_model_list_shows_hint():
     app = SubForgeApp()
     async with app.run_test() as pilot:
-        screen = ModelPickerScreen("Choose model", lambda: [])
+        screen = ModelPickerScreen("Choose model", list)
         await app.push_screen(screen)
         await pilot.pause()
         assert "No models found" in str(screen.query_one("#picker-status").render())

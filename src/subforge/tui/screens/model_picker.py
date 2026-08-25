@@ -1,14 +1,16 @@
 """Reusable model-selection modal backed by live GET /models discovery."""
 
 from collections.abc import Callable
+from typing import ClassVar
 
 from textual.app import ComposeResult
+from textual.binding import Binding
 from textual.screen import ModalScreen
 from textual.widgets import Label, OptionList
 
 
 class ModelPickerScreen(ModalScreen[str]):
-    BINDINGS = [("escape", "cancel", "Cancel")]
+    BINDINGS: ClassVar[list[Binding | tuple[str, str] | tuple[str, str, str]]] = [("escape", "cancel", "Cancel")]
 
     def __init__(self, title: str, loader: Callable[[], list[str]]) -> None:
         super().__init__()

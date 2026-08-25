@@ -100,7 +100,7 @@ def test_retry_reruns_failed_stage(tmp_path):
 
 
 def test_diarization_skipped_when_disabled(tmp_path):
-    d, audio = setup_project(tmp_path)
+    d, _audio = setup_project(tmp_path)
     pipe = Pipeline(
         d,
         Settings(),
@@ -112,7 +112,7 @@ def test_diarization_skipped_when_disabled(tmp_path):
 
 
 def test_diarization_merges_speakers_when_enabled(tmp_path):
-    d, audio = setup_project(tmp_path)
+    d, _audio = setup_project(tmp_path)
     settings = Settings()
     settings.diarization.enabled = True
     pipe = Pipeline(

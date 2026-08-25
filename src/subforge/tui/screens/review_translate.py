@@ -7,19 +7,21 @@ from textual.app import ComposeResult
 from textual.containers import Vertical
 from textual.screen import Screen
 from textual.widgets import DataTable, Input, Label
+from textual.widgets.data_table import ColumnKey
 
 from subforge.app.export import export_subtitles
 from subforge.app.project_store import load_project, save_project
 from subforge.app.translation_service import TranslationService
 
 
-class ReviewTranslateScreen(Screen):
+class ReviewTranslateScreen(Screen[None]):
     def __init__(self, project_dir: Path, translation_service: TranslationService) -> None:
         super().__init__()
         self.project_dir = project_dir
         self.service = translation_service
         self.on_done: Callable[[list[Path]], None] | None = None
         self.project = load_project(project_dir)
+        self._column_keys: list[ColumnKey] = []
 
     def compose(self) -> ComposeResult:
         with Vertical():
@@ -30,7 +32,7 @@ class ReviewTranslateScreen(Screen):
 
     def on_mount(self) -> None:
         table = self.query_one(DataTable)
-        self._columns = table.add_columns("ID", "Source", "Translation")
+        self._column_keys = table.add_columns("ID", "Source", "Translation")
         for seg in sorted(self.project.segments, key=lambda s: s.start):
             table.add_row(str(seg.id), seg.source, seg.translations.get("en", "—"), key=str(seg.id))
 
@@ -41,9 +43,8 @@ class ReviewTranslateScreen(Screen):
                 break
         save_project(self.project_dir, self.project)
         if language == "en":
-            self.query_one("#review", DataTable).update_cell(
-                str(segment_id), self._columns[2], text
-            )
+            table = self.query_one("#review", DataTable)
+            table.update_cell(str(segment_id), self._column_keys[2], text)
 
     def do_export(self, formats: list[str], languages: list[str]) -> list[Path]:
         paths = export_subtitles(self.project_dir, formats=formats, languages=languages)

@@ -1,7 +1,7 @@
 import json
 
 from subforge.app.project_store import create_project, load_project, save_project
-from subforge.models.project import Project, ProjectMeta, Segment, StageState
+from subforge.models.project import ProjectMeta, Segment, StageState
 
 
 def test_create_makes_layout(tmp_path):

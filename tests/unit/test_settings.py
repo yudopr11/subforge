@@ -1,6 +1,6 @@
 from textwrap import dedent
 
-from subforge.config.settings import Settings, load_settings
+from subforge.config.settings import load_settings
 
 
 def test_local_first_defaults():

@@ -8,7 +8,6 @@ import pytest
 from subforge.providers.registry import REGISTRY
 from subforge.providers.transcription.remote import RemoteTranscriptionProvider
 
-
 API_RESPONSE = {
     "language": "id",
     "segments": [
@@ -29,7 +28,7 @@ def test_remote_transcription_normalizes_segments(tmp_path):
         assert request.url.path.endswith("/transcriptions")
         assert "multipart/form-data" in request.headers["Content-Type"]
         body = request.read()
-        assert b"language" in body or True  # language travels as form field
+        assert b"language" in body  # language travels as form field
         return httpx.Response(200, json=API_RESPONSE)
 
     provider = RemoteTranscriptionProvider(

@@ -1,6 +1,7 @@
 """Remote STT provider using an OpenAI-style /transcriptions endpoint (ARCH §10)."""
 
 from pathlib import Path
+from typing import Any
 
 import httpx
 
@@ -30,7 +31,7 @@ class RemoteTranscriptionProvider:
         return _normalize(response.json())
 
 
-def _normalize(payload: dict) -> Transcript:
+def _normalize(payload: dict[str, Any]) -> Transcript:
     segments = [
         TranscriptSegment(
             id=int(seg["id"]),

@@ -4,7 +4,6 @@ import httpx
 
 from subforge.providers.capabilities import CapabilityClient, ReasoningSpec
 
-
 CATALOG = {
     "openai": {
         "models": {

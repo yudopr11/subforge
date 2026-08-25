@@ -5,8 +5,10 @@ only orchestrates screens and writes AppConfig. Keys are masked, never logged.
 """
 
 from collections.abc import Callable
+from typing import ClassVar
 
 from textual.app import ComposeResult
+from textual.binding import Binding
 from textual.screen import ModalScreen, Screen
 from textual.widgets import Input, Label
 
@@ -21,7 +23,7 @@ def refresh_reasoning(current: str, spec: ReasoningSpec) -> str:
 
 
 class ApiKeyInputScreen(ModalScreen[str | None]):
-    BINDINGS = [("escape", "cancel", "Cancel")]
+    BINDINGS: ClassVar[list[Binding | tuple[str, str] | tuple[str, str, str]]] = [("escape", "cancel", "Cancel")]
 
     def __init__(self, title: str) -> None:
         super().__init__()
@@ -44,7 +46,7 @@ class ApiKeyInputScreen(ModalScreen[str | None]):
 class ReasoningPickerScreen(ModalScreen[str | None]):
     """Offers EXACTLY the effort values discovered for the selected model."""
 
-    BINDINGS = [("escape", "cancel", "Cancel")]
+    BINDINGS: ClassVar[list[Binding | tuple[str, str] | tuple[str, str, str]]] = [("escape", "cancel", "Cancel")]
 
     def __init__(self, spec: ReasoningSpec) -> None:
         super().__init__()
@@ -52,7 +54,7 @@ class ReasoningPickerScreen(ModalScreen[str | None]):
         self.result: str | None = None
 
     def compose(self) -> ComposeResult:
-        from textual.widgets import OptionList  # noqa: PLC0415 — keeps module import light
+        from textual.widgets import OptionList
 
         yield Label("[b]Reasoning effort[/b] — values provided by the model")
         yield OptionList(*self.spec.values, id="reasoning")
@@ -68,7 +70,7 @@ class ReasoningPickerScreen(ModalScreen[str | None]):
         self.dismiss(None)
 
 
-class SettingsScreen(Screen):
+class SettingsScreen(Screen[None]):
     """Interactive configuration; state transitions per revision 2026-08-25:
 
       Transcribe:  [Local|Provider]

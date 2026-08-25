@@ -7,6 +7,7 @@ magic, which breaks on field names that themselves contain underscores.
 
 import os
 from pathlib import Path
+from typing import Any
 
 from pydantic import BaseModel
 
@@ -56,7 +57,7 @@ def _parse_dotenv(path: Path) -> dict[str, str]:
     return values
 
 
-def _coerce(model: type[BaseModel], key: str, raw: str) -> object:
+def _coerce(model: type[BaseModel], key: str, raw: str) -> Any:
     annotation = model.model_fields[key].annotation
     if annotation is bool:
         return _parse_bool(raw)
@@ -73,8 +74,7 @@ def load_settings(env_file: Path | str | None = ".env") -> Settings:
         ("diarization", DiarizationSettings),
         ("translation", TranslationSettings),
     ):
-        group = getattr(settings, group_name)
-        updates: dict[str, object] = {}
+        updates: dict[str, Any] = {}
         for field_name in group_model.model_fields:
             env_key = f"{group_name}_{field_name}".upper()
             if env_key in os.environ:

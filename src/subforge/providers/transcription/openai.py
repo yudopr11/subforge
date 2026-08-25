@@ -1,6 +1,7 @@
 """OpenAI Audio API transcription — the only remote ASR provider in the MVP."""
 
 from pathlib import Path
+from typing import Any
 
 import httpx
 
@@ -39,7 +40,7 @@ class OpenAITranscriptionProvider:
         return self._normalize(response.json())
 
     @staticmethod
-    def _normalize(payload: dict) -> Transcript:
+    def _normalize(payload: dict[str, Any]) -> Transcript:
         segments = [
             TranscriptSegment(
                 id=int(seg.get("id", i)),

@@ -15,7 +15,7 @@ class WhisperXProvider:
 
     def transcribe(self, audio_path: Path, language: str | None = None) -> Transcript:
         try:
-            import whisperx  # noqa: PLC0415 — heavy optional import, deferred on purpose
+            import whisperx  # type: ignore[import-not-found]
         except ImportError as exc:
             raise RuntimeError(
                 "WhisperX is not installed. Install local transcription support with: "

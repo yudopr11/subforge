@@ -5,7 +5,6 @@ import httpx
 from subforge.providers.registry import REGISTRY
 from subforge.providers.transcription.openai import OpenAITranscriptionProvider
 
-
 VERBOSE_JSON = {
     "task": "transcribe",
     "language": "id",

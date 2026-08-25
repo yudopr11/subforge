@@ -1,8 +1,8 @@
 import pytest
 
 from subforge.app.provider_factory import (
-    build_translation_provider,
     build_transcription_provider,
+    build_translation_provider,
     validate_reasoning_choice,
 )
 from subforge.config.app_config import AppConfig

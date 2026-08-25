@@ -15,7 +15,7 @@ ACTIONS = [
 ]
 
 
-class MainMenuScreen(Screen):
+class MainMenuScreen(Screen[None]):
     def compose(self) -> ComposeResult:
         with Vertical():
             yield Label("[b]SUBFORGE[/b] — local-first subtitles")

@@ -31,7 +31,7 @@ class LocalModelInfo:
 
 def _default_cache_checker(repo_id: str) -> bool:
     try:
-        from huggingface_hub import snapshot_download  # noqa: PLC0415 — optional dep
+        from huggingface_hub import snapshot_download  # type: ignore[import-not-found]
     except ImportError as exc:
         raise RuntimeError(LOCAL_EXTRAS_HINT) from exc
     try:
@@ -43,7 +43,7 @@ def _default_cache_checker(repo_id: str) -> bool:
 
 def _default_downloader(model_id: str) -> Any:
     try:
-        from faster_whisper.utils import download_model  # noqa: PLC0415 — optional dep
+        from faster_whisper.utils import download_model  # type: ignore[import-not-found]
     except ImportError as exc:
         raise RuntimeError(LOCAL_EXTRAS_HINT) from exc
     return download_model(model_id)

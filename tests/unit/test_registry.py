@@ -2,9 +2,9 @@ import pytest
 
 from subforge.providers.base import (
     DiarizationTurn,
+    TranscriptionLike,
     TranslationInput,
     TranslationOutput,
-    TranscriptionLike,
 )
 from subforge.providers.registry import ProviderRegistry
 

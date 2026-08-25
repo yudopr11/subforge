@@ -6,7 +6,7 @@ these values (or hides the control entirely).
 """
 
 from dataclasses import dataclass
-from typing import Literal
+from typing import Any, Literal
 
 import httpx
 
@@ -33,9 +33,9 @@ class CapabilityClient:
     def __init__(self, client: httpx.Client | None = None, catalog_url: str = MODELS_DEV_URL) -> None:
         self.client = client or httpx.Client(timeout=15.0)
         self.catalog_url = catalog_url
-        self._cache: dict | None = None
+        self._cache: dict[str, Any] | None = None
 
-    def _catalog(self) -> dict | None:
+    def _catalog(self) -> dict[str, Any] | None:
         if self._cache is None:
             try:
                 response = self.client.get(self.catalog_url)
@@ -47,7 +47,9 @@ class CapabilityClient:
 
     def reasoning_spec(self, provider_preset: str, model_id: str) -> ReasoningSpec:
         catalog_id = PROVIDER_TO_CATALOG.get(provider_preset)
-        catalog = self._catalog() if catalog_id else None
+        if catalog_id is None:
+            return UNSUPPORTED
+        catalog = self._catalog()
         if not catalog:
             return UNSUPPORTED
         entry = catalog.get(catalog_id, {}).get("models", {}).get(model_id)

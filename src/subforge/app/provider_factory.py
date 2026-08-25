@@ -6,12 +6,12 @@ Core pipeline modules never import this — they receive ready provider objects.
 from subforge.config.app_config import AppConfig
 from subforge.config.providers import TRANSLATION_PRESETS
 from subforge.providers.capabilities import ReasoningSpec
-from subforge.providers.translation.openai_compatible import OpenAICompatibleProvider
 from subforge.providers.transcription.openai import OpenAITranscriptionProvider
 from subforge.providers.transcription.whisperx import WhisperXProvider
+from subforge.providers.translation.openai_compatible import OpenAICompatibleProvider
 
 
-def build_transcription_provider(cfg: AppConfig):
+def build_transcription_provider(cfg: AppConfig) -> WhisperXProvider | OpenAITranscriptionProvider:
     tc = cfg.transcription
     if tc.provider == "local":
         if not tc.model:

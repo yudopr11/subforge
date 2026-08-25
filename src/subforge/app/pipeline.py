@@ -57,7 +57,7 @@ class Pipeline:
         self.transcription = transcription
         self.diarization = diarization
         self.translation_service = translation_service or TranslationService(
-            provider=_unconfigured("translation"),  # type: ignore[arg-type]
+            provider=_unconfigured("translation"),
             batch_size=settings.translation.batch_size or DEFAULT_BATCH_SIZE,
         )
 

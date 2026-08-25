@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from typing import ClassVar
 
 import pytest
 
@@ -13,7 +14,7 @@ from subforge.providers.base import TranslationInput, TranslationOutput
 
 
 class ScriptedASR:
-    TRANSCRIPT = Transcript(
+    TRANSCRIPT: ClassVar[Transcript] = Transcript(
         language="id",
         segments=[
             TranscriptSegment(id=1, start=1.2, end=3.4, text="Halo semuanya!"),
@@ -27,7 +28,7 @@ class ScriptedASR:
 
 
 class ScriptedLLM:
-    MAP = {
+    MAP: ClassVar[dict[int, str]] = {
         1: "Hello everyone!",
         2: "Welcome back.",
     }
