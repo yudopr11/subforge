@@ -32,7 +32,15 @@ key legend; source pickers become cycle-buttons (no radio widgets needed).
 - [x] Tests: key-driven toggling (`t`), wizard launch (`w`), save (`ctrl+s` persists),
       esc-back-to-menu; existing seams/dom assertions still pass.
 
-## Task 3: Consistency sweep
+## Task 4: Visual overhaul of Settings (panels, hierarchy, focus cues)
+
+- [x] Global app stylesheet: bordered rounded **panels** with accent section titles,
+      full-width left-aligned buttons, visible focus highlight (`$primary` tint +
+      bold), dimmed key-hints, right-aligned Save/Cancel.
+- [x] Settings composes as two side-by-side panels (Transcription | Translation),
+      wizard action promoted to a distinct primary action, keymap bar under the title.
+- [x] All ids/seams preserved — existing unit/e2e assertions must stay green.
+
 
 - [x] Other screens keep/declare their key legends (menu status, review screens).
 - [x] Gates + plan checkboxes ticked; conventional commits.

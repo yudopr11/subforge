@@ -284,33 +284,43 @@ class SettingsScreen(Screen[None]):
 
     def compose(self) -> ComposeResult:
         with Vertical():
-            yield Label("[b]SubForge Settings[/b] — changes apply immediately, no restart needed")
-            yield Button("Re-run setup wizard…  [w]", id="btn-wizard")
-            yield Label(f"[dim]{self.KEYMAP}[/dim]", id="keymap")
-            with Vertical(id="tc-section"):
-                yield Label("Transcription")
-                yield Button(
-                    f"Source: {self.cfg.transcription.provider}  [t]", id="btn-tc-source"
-                )
-                yield Button(f"Model: {self._model_label()}", id="btn-tc-model")
-                yield Button(f"Audio language: {self._lang_label()}", id="btn-tc-lang")
-                yield Button("Manage local models…", id="btn-tc-manage")
-                yield Button("API key…", id="btn-tc-key")
-            with Vertical(id="tl-section"):
-                yield Label("Translation")
-                yield Button(
-                    f"Source: {self.cfg.translation.source}  [c]", id="btn-tl-source"
-                )
-                yield Button(f"Base URL: {self._url_label()}", id="btn-tl-url")
-                yield Button(f"Preset: {self.cfg.translation.provider}", id="btn-tl-preset")
-                yield Button("API key…", id="btn-tl-key")
-                yield Button(f"Model: {self.cfg.translation.model or '—'}", id="btn-tl-model")
-                yield Button(f"Reasoning: {self._reasoning_label()}", id="btn-tl-reasoning")
-                yield Button(f"Batch size: {self.cfg.translation.batch_size}", id="btn-tl-batch")
-                yield Button(f"Target language: {self.cfg.translation.default_target or '—'}", id="btn-tl-target")
-            with Horizontal():
-                yield Button("Save", variant="primary", id="btn-save")
-                yield Button("Cancel", id="btn-cancel")
+            yield Label(
+                "[b]SubForge Settings[/b] — keyboard-first · changes apply immediately",
+                id="settings-title",
+            )
+            yield Button("Re-run setup wizard…  [w]", classes="primary-action", id="btn-wizard")
+            yield Label(f"[dim]{self.KEYMAP}[/dim]", classes="keymap", id="keymap")
+            with Horizontal(id="settings-columns"):
+                # ---- left panel: transcription ----
+                with Vertical(classes="panel", id="tc-panel"):
+                    yield Label("Transcription", classes="section-title")
+                    yield Button(
+                        f"Source: {self.cfg.transcription.provider}  [t]", id="btn-tc-source"
+                    )
+                    yield Button(f"Model: {self._model_label()}  [y]", id="btn-tc-model")
+                    yield Button(f"Audio language: {self._lang_label()}  [o]", id="btn-tc-lang")
+                    yield Button("Manage local models…", id="btn-tc-manage")
+                    yield Button("API key…  [k]", id="btn-tc-key")
+                # ---- right panel: translation ----
+                with Vertical(classes="panel", id="tl-panel"):
+                    yield Label("Translation", classes="section-title")
+                    yield Button(
+                        f"Source: {self.cfg.translation.source}  [c]", id="btn-tl-source"
+                    )
+                    yield Button(f"Base URL: {self._url_label()}  [n]", id="btn-tl-url")
+                    yield Button(f"Preset: {self.cfg.translation.provider}  [p]", id="btn-tl-preset")
+                    yield Button("API key…  [i]", id="btn-tl-key")
+                    yield Button(f"Model: {self.cfg.translation.model or '—'}  [d]", id="btn-tl-model")
+                    yield Button(f"Reasoning: {self._reasoning_label()}  [r]", id="btn-tl-reasoning")
+                    yield Button(f"Batch size: {self.cfg.translation.batch_size}  [b]", id="btn-tl-batch")
+                    yield Button(
+                        f"Target language: {self.cfg.translation.default_target or '—'}  [g]",
+                        id="btn-tl-target",
+                    )
+
+            with Horizontal(id="settings-actions"):
+                yield Button("Save  [ctrl+s]", variant="primary", id="btn-save")
+                yield Button("Cancel  [esc]", id="btn-cancel")
 
     def _model_label(self) -> str:
         tc = self.cfg.transcription

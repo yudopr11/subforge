@@ -13,6 +13,63 @@ from subforge.tui.screens.setup_wizard import FirstRunSetupScreen
 
 class SubForgeApp(App[None]):
     TITLE = "SUBFORGE"
+
+    CSS = """
+    /* ---- shared keyboard-first primitives ---- */
+    .panel {
+        border: round $primary;
+        padding: 1 2;
+        margin: 0 1 1 0;
+        height: auto;
+        width: 1fr;
+    }
+    .section-title {
+        color: $accent;
+        text-style: bold;
+        margin-bottom: 1;
+    }
+    .panel Button {
+        width: 100%;
+        height: auto;
+        content-align: left middle;
+        background: transparent;
+        border: none;
+        padding: 0 1;
+        text-style: none;
+    }
+    .panel Button:hover {
+        background: $surface-lighten-2;
+    }
+    .panel Button:focus {
+        background: $primary 25%;
+        text-style: bold;
+    }
+    .keymap {
+        width: 100%;
+        color: $text-muted;
+        margin-bottom: 1;
+    }
+    .primary-action {
+        width: 100%;
+        border: round $success;
+        text-style: bold;
+        margin-bottom: 1;
+    }
+    .primary-action:focus {
+        background: $success 25%;
+    }
+    #settings-title {
+        width: 100%;
+    }
+    #settings-actions {
+        height: auto;
+        align-horizontal: right;
+    }
+    #settings-actions Button {
+        width: auto;
+        margin-left: 1;
+    }
+    """
     BINDINGS: ClassVar[list[Binding | tuple[str, str] | tuple[str, str, str]]] = [
         ("q", "quit", "Quit")
     ]
