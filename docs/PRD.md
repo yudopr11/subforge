@@ -73,7 +73,7 @@ stop at transcription; existing translation tools don't understand subtitles.
 │    Export SRT / ASS                                      │
 │    Settings                                              │
 │                                                          │
-│ ↑↓ Enter · n new · o open · s settings · m spk    q: Quit │
+│ ↑↓ Enter · n new · o open · s settings · m spk    q: Quit│
 └──────────────────────────────────────────────────────────┘
 ```
 
