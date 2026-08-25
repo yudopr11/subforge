@@ -58,3 +58,16 @@ def find_audio_file(project_dir: Path) -> Path | None:
         if candidate.is_file() and is_audio_file(candidate):
             return candidate
     return None
+
+
+def discover_projects(root: Path | None = None) -> list[Path]:
+    """Existing projects under ``root`` (default: :func:`projects_root`).
+
+    Only directories containing ``project.json`` count; most recently modified
+    first so the picker feels 'recently used'.
+    """
+    base = root if root is not None else projects_root()
+    if not base.is_dir():
+        return []
+    projects = [d for d in base.iterdir() if d.is_dir() and (d / "project.json").is_file()]
+    return sorted(projects, key=lambda d: d.stat().st_mtime, reverse=True)

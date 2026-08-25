@@ -11,16 +11,28 @@ from typing import TYPE_CHECKING, ClassVar, cast
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Vertical
+from textual.css.query import NoMatches
 from textual.screen import Screen
 from textual.widgets import Label, ListItem, ListView
 
 from subforge.app.export import export_subtitles
 from subforge.app.pipeline import Pipeline, StageError
 from subforge.app.project_store import load_project
-from subforge.app.projects import create_project_from_audio, find_audio_file
-from subforge.app.provider_factory import build_pipeline, build_translation_service
+from subforge.app.projects import create_project_from_audio, discover_projects, find_audio_file
+from subforge.app.provider_factory import (
+    build_pipeline,
+    build_translation_service,
+    transcription_configured,
+    translation_configured,
+)
+from subforge.models.project import StageState
 from subforge.tui.screens.caption_review import CaptionReviewScreen
-from subforge.tui.screens.project import NewProjectScreen, OpenProjectScreen, TargetLanguageScreen
+from subforge.tui.screens.project import (
+    NewProjectScreen,
+    OpenProjectScreen,
+    ProjectPickerScreen,
+    TargetLanguageScreen,
+)
 from subforge.tui.screens.review_translate import ReviewTranslateScreen
 from subforge.tui.screens.settings import SettingsScreen
 from subforge.tui.screens.speaker_map import SpeakerMapScreen
@@ -66,10 +78,7 @@ class MainMenuScreen(Screen[None]):
                 classes="action-list",
                 id="actions",
             )
-            yield Label(
-                "Status: Ready — open a project to begin (n=new · o=open · s=settings · m=speakers)",
-                id="status",
-            )
+            yield Label("Status: Ready", id="status")
 
     def on_list_view_selected(self, event: ListView.Selected) -> None:
         handlers = {
@@ -85,16 +94,29 @@ class MainMenuScreen(Screen[None]):
             event.stop()
             handler()
 
+    def on_mount(self) -> None:
+        if self._host.project_dir is not None:
+            self._set_flow_status()
+
     # ---- project selection ----------------------------------------------
 
     def action_new_project(self) -> None:
-        if self._host.project_dir is None:
-            self._host.push_screen(NewProjectScreen(), self._project_chosen)
+        projects = discover_projects()
+        if projects:
+            self._host.push_screen(ProjectPickerScreen(projects), self._project_picked)
         else:
-            self._host.push_screen(OpenProjectScreen(), self._project_opened)
+            self._host.push_screen(NewProjectScreen(), self._project_chosen)
 
     def action_open_project(self) -> None:
         self._host.push_screen(OpenProjectScreen(), self._project_opened)
+
+    def _project_picked(self, choice: object) -> None:
+        if choice is None:
+            return
+        if choice == ProjectPickerScreen.NEW:
+            self._host.push_screen(NewProjectScreen(), self._project_chosen)
+        elif isinstance(choice, Path):
+            self._project_opened(choice)
 
     def _project_chosen(self, audio_path: Path | None) -> None:
         if audio_path is None:
@@ -105,21 +127,21 @@ class MainMenuScreen(Screen[None]):
             self._set_status(str(exc))
             return
         self._host.project_dir = directory
-        self._set_status(f"Project ready: {directory.name}")
+        self._set_flow_status("Project created")
 
     def _project_opened(self, directory: Path | None) -> None:
         if directory is None:
             return
         self._host.project_dir = directory
         name = load_project(directory).project.name
-        self._set_status(f"Project opened: {name}")
+        self._set_flow_status(f"Opened: {name}")
 
     # ---- settings ---------------------------------------------------------
 
     def action_speakers(self) -> None:
         project_dir = self._require_project()
         if project_dir is not None:
-            self.app.push_screen(SpeakerMapScreen(project_dir))
+            self._host.push_screen(SpeakerMapScreen(project_dir))
 
     def action_settings(self) -> None:
         self._host.push_screen(
@@ -203,8 +225,15 @@ class MainMenuScreen(Screen[None]):
         self.run_worker(runner, thread=True, exclusive=True, group="stage")
 
     def _begin_transcribe(self) -> None:
-        if self._require_project() is not None:
-            self._launch_stage(self.do_transcribe)
+        if self._require_project() is None:
+            return
+        if not transcription_configured(self._host.app_config):
+            self.action_settings()
+            self._set_status(
+                "[SETUP] No transcription provider yet — pick one here, Save, then run Transcribe again."
+            )
+            return
+        self._launch_stage(self.do_transcribe)
 
     def _begin_translate(self) -> None:
         if self._require_project() is None:
@@ -212,8 +241,15 @@ class MainMenuScreen(Screen[None]):
         self._host.push_screen(TargetLanguageScreen(), self._language_chosen)
 
     def _language_chosen(self, language: str | None) -> None:
-        if language is not None:
-            self._launch_stage(lambda: self.do_translate(language))
+        if language is None:
+            return
+        if not translation_configured(self._host.app_config):
+            self.action_settings()
+            self._set_status(
+                "[SETUP] No translation provider yet — pick one here, Save, then run Translate again."
+            )
+            return
+        self._launch_stage(lambda: self.do_translate(language))
 
     def _begin_export(self) -> None:
         if self._require_project() is not None:
@@ -240,4 +276,29 @@ class MainMenuScreen(Screen[None]):
 
     def _set_status(self, message: str) -> None:
         self.query_one("#status", Label).update(message)
+
+    def _flow_hint(self) -> str:
+        """PRD §7 flow guidance: what the user should do next."""
+        if self._host.project_dir is None:
+            return "start: n new · o open"
+        project = load_project(self._host.project_dir)
+        stage = project.get_stage("transcription")
+        if stage in (StageState.PENDING, StageState.RUNNING):
+            return "next: Transcribe"
+        if stage is StageState.FAILED:
+            return "transcription failed — run Transcribe again"
+        translated = any(s.translations for s in project.segments)
+        if not translated:
+            return "captions ready — next: Translate"
+        if project.get_stage("export") is StageState.COMPLETED:
+            return "done — files in exports/"
+        return "translation ready — next: Export SRT / ASS"
+
+    def _set_flow_status(self, message: str | None = None) -> None:
+        name = self._host.project_dir.name if self._host.project_dir else None
+        parts = [p for p in (message, f"Project: {name}" if name else None, self._flow_hint()) if p]
+        try:
+            self.query_one("#status", Label).update(" · ".join(parts))
+        except NoMatches:
+            pass  # status label not composed yet (unit seam)
 

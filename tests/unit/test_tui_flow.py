@@ -146,8 +146,138 @@ async def test_open_existing_project(tmp_path):
         await pilot.pause()
 
         assert app.project_dir == d
-        assert "Project opened: opened" in str(menu.query_one("#status").render())
+        assert "Opened: opened" in str(menu.query_one("#status").render())
 
 
 def _keep_export_import_referenced() -> None:
     assert export_subtitles is not None
+
+
+async def test_picker_lists_projects_and_opens_selected(tmp_path, monkeypatch):
+    from subforge.app.projects import create_project_from_audio
+    from subforge.tui.screens.project import ProjectPickerScreen
+
+    monkeypatch.setenv("SUBFORGE_PROJECTS_DIR", str(tmp_path / "projects"))
+    d1 = create_project_from_audio(seed_audio(tmp_path), tmp_path / "projects")
+    create_project_from_audio(seed_audio(tmp_path), tmp_path / "projects")
+
+    app = SubForgeApp()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        menu = app.screen
+        assert isinstance(menu, MainMenuScreen)
+
+        menu.action_new_project()
+        await pilot.pause()
+        assert isinstance(app.screen, ProjectPickerScreen)
+        assert "[+]" in str(app.screen.query_one("OptionList").get_option_at_index(0).prompt)
+
+        # user picks the second project
+        menu._project_picked(d1)
+        await pilot.pause()
+        assert app.project_dir == d1
+
+
+async def test_picker_create_entry_routes_to_audio_screen(tmp_path, monkeypatch):
+    from subforge.app.projects import create_project_from_audio
+    from subforge.tui.screens.project import NewProjectScreen, ProjectPickerScreen
+
+    monkeypatch.setenv("SUBFORGE_PROJECTS_DIR", str(tmp_path / "projects"))
+    create_project_from_audio(seed_audio(tmp_path), tmp_path / "projects")
+
+    app = SubForgeApp()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        menu = app.screen
+        assert isinstance(menu, MainMenuScreen)
+
+        menu.action_new_project()
+        await pilot.pause()
+        assert isinstance(app.screen, ProjectPickerScreen)
+
+        menu._project_picked(ProjectPickerScreen.NEW)
+        await pilot.pause()
+        assert isinstance(app.screen, NewProjectScreen)
+
+
+async def test_no_existing_projects_goes_straight_to_new_project(tmp_path, monkeypatch):
+    monkeypatch.setenv("SUBFORGE_PROJECTS_DIR", str(tmp_path / "empty-projects"))
+
+    app = SubForgeApp()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        menu = app.screen
+        assert isinstance(menu, MainMenuScreen)
+
+        menu.action_new_project()
+        await pilot.pause()
+        from subforge.tui.screens.project import NewProjectScreen
+
+        assert isinstance(app.screen, NewProjectScreen)
+
+
+async def test_unconfigured_transcribe_guides_into_settings(tmp_path):
+    from subforge.config.settings import Settings as _S  # noqa: F401 — typing clarity only
+    from subforge.tui.screens.settings import SettingsScreen
+
+    d = create_project(tmp_path / "p", ProjectMeta(name="p", source_language="id"))
+    (d / "audio" / "a.wav").write_bytes(b"x")
+    app = SubForgeApp(project_dir=d, app_config=AppConfig())  # nothing configured
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        menu = app.screen
+        assert isinstance(menu, MainMenuScreen)
+
+        menu._begin_transcribe()
+        await pilot.pause()
+
+        assert isinstance(app.screen, SettingsScreen)  # guided into setup
+        status = str(menu.query_one("#status").render())
+        assert "Transcribe again" in status
+
+        # direct seam still reports the error deterministically
+        assert menu.do_transcribe().startswith("[ERROR] No transcription provider")
+
+
+async def test_unconfigured_translate_guides_into_settings(tmp_path):
+    from subforge.tui.screens.settings import SettingsScreen
+
+    d = create_project(tmp_path / "p", ProjectMeta(name="p", source_language="id"))
+    app = SubForgeApp(project_dir=d, app_config=AppConfig())
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        menu = app.screen
+        assert isinstance(menu, MainMenuScreen)
+
+        menu._language_chosen("en")
+        await pilot.pause()
+
+        assert isinstance(app.screen, SettingsScreen)
+        assert "Translate again" in str(menu.query_one("#status").render())
+
+
+async def test_status_shows_next_step_through_flow(tmp_path, monkeypatch):
+    monkeypatch.setenv("SUBFORGE_PROJECTS_DIR", str(tmp_path / "projects"))
+    app = SubForgeApp(app_config=AppConfig())
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        menu = app.screen
+        assert isinstance(menu, MainMenuScreen)
+        menu.pipeline_factory = fake_pipeline_factory(tmp_path)
+
+        menu._project_chosen(seed_audio(tmp_path))
+        await pilot.pause()
+        assert "next: Transcribe" in str(menu.query_one("#status").render())
+
+        status = menu.do_transcribe()
+        menu._set_flow_status(status)
+        await pilot.pause()
+        assert "next: Translate" in str(menu.query_one("#status").render())
+
+        menu.do_translate("en")
+        menu._set_flow_status()
+        assert "Export" in str(menu.query_one("#status").render())
+
+        menu.do_export()
+        menu._set_flow_status()
+        assert "done" in str(menu.query_one("#status").render()).lower()

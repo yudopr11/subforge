@@ -184,3 +184,21 @@ def test_build_pipeline_diarization_passthrough(tmp_path):
 
     pipe = build_pipeline(tmp_path / "p", AppConfig(), diarization=D())
     assert pipe.diarization is not None
+
+
+def test_readiness_checks():
+    from subforge.app.provider_factory import transcription_configured, translation_configured
+
+    empty = AppConfig()
+    assert transcription_configured(empty) is False
+    assert translation_configured(empty) is False
+
+    ready = AppConfig(
+        transcription={"provider": "local", "model": "small"},
+        translation={"source": "local", "local_base_url": "http://x/v1", "model": "m"},
+    )
+    assert transcription_configured(ready) is True
+    assert translation_configured(ready) is True
+
+    half = AppConfig(transcription={"provider": "openai"})  # no key/model yet
+    assert transcription_configured(half) is False

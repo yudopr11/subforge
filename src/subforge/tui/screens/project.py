@@ -11,7 +11,7 @@ from typing import ClassVar
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.screen import ModalScreen
-from textual.widgets import Input, Label
+from textual.widgets import Input, Label, OptionList
 
 from subforge.app.projects import is_audio_file
 
@@ -105,6 +105,52 @@ class TargetLanguageScreen(ModalScreen[str | None]):
             return
         self.result = lang
         self.dismiss(lang)
+
+    def action_cancel(self) -> None:
+        self.dismiss(None)
+
+
+class ProjectPickerScreen(ModalScreen[object]):
+    """Lists existing projects (recent first) plus a create-new entry.
+
+    Dismisses with:
+      - ``Path``  — an existing project directory to open
+      - ``NEW``   — user wants to create a new project from audio
+      - ``None``  — cancelled
+    """
+
+    BINDINGS: ClassVar[list[Binding | tuple[str, str] | tuple[str, str, str]]] = [
+        ("escape", "cancel", "Cancel")
+    ]
+
+    NEW = "__create-new__"
+
+    def __init__(self, projects: list[Path]) -> None:
+        super().__init__()
+        self.projects = projects
+        self.result: Path | str | None = None
+
+    def compose(self) -> ComposeResult:
+        yield Label("[b]Open project[/b] — recent projects, or create new")
+        yield OptionList(
+            "[+] Create new project from audio…",
+            *[f"{p.name}   ·   {p}" for p in self.projects],
+            id="projects",
+        )
+        yield Label("Enter select · Esc cancel", id="picker-hints")
+
+    def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
+        prompt = str(getattr(event.option, "prompt", ""))
+        if prompt.startswith("[+]"):
+            self.result = self.NEW
+            self.dismiss(self.NEW)
+            return
+        for path in self.projects:
+            if prompt.startswith(path.name + " "):
+                self.result = path
+                self.dismiss(path)
+                return
+        self.dismiss(None)
 
     def action_cancel(self) -> None:
         self.dismiss(None)

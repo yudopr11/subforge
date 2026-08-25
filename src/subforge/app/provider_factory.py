@@ -125,3 +125,21 @@ def _settings_for(cfg: AppConfig) -> Settings:
     settings.translation.batch_size = cfg.translation.batch_size or settings.translation.batch_size
     settings.diarization.enabled = False  # MVP: diarization opt-in via future UI toggle
     return settings
+
+
+def transcription_configured(cfg: AppConfig) -> bool:
+    """True when a Transcribe run would have a provider (PRD §21 loud guidance)."""
+    try:
+        build_transcription_provider(cfg)
+        return True
+    except ValueError:
+        return False
+
+
+def translation_configured(cfg: AppConfig) -> bool:
+    """True when a Translate run would have a provider."""
+    try:
+        build_translation_provider(cfg)
+        return True
+    except ValueError:
+        return False
