@@ -62,13 +62,16 @@ Whisper models download automatically on first use and are cached locally.
 subforge            # launches the TUI
 ```
 
-1. Select your exported audio file (WAV/FLAC/MP3).
-2. Pick your setup — everything is configurable in-app, no `.env` needed:
+1. **Select Audio** (`n`) — paste the path to your exported audio; SubForge creates the project and imports it.
+2. Pick your setup (**Settings**, `s`) — everything is configurable in-app, no `.env` needed:
    - **Transcribe**: *Local* → choose/install a Whisper model sized for your machine, or *Provider* → paste your OpenAI API key → pick a model from the live list.
    - **Translate**: *Local* → point at your LM Studio/Ollama URL → pick a model, or *Provider* → choose OpenAI / OpenCode Zen / OpenCode Go → paste your API key → pick a model (+ reasoning level if the model offers one).
-3. Transcribe → review captions.
-4. Translate → review.
-5. Export `.srt` / `.ass`.
+3. **Transcribe** — pick it from the menu; failures show a retryable `[ERROR]` status.
+4. **Review Captions** — fix text inline (`Ctrl+S` saves).
+5. **Translate** — choose the language code, then review side-by-side.
+6. **Export SRT / ASS** — writes `exports/source.*` plus every completed translation.
+
+Name speakers detected by diarization with the speakers screen (`m`).
 
 Changed your mind later? Everything above can be switched in the Settings menu at any time — no project restart.
 
