@@ -132,9 +132,9 @@ clear error instead of crashing batch processing.
 
 ## 13. Pipeline stage inventory
 
-Stages recorded in `project.json` (v0.2.0): `transcription`, `alignment`
-(informational only — WhisperX aligns inside transcription, never run as its own
-stage), one `translation_<lang>` per target language, `caption_review`, `export`.
+Stages recorded in `project.json` (v0.2.0): `transcription` (WhisperX aligns
+inside it — no separate alignment stage), one `translation_<lang>` per target
+language, `caption_review`, `export`.
 Every stage carries one of the five states of §22.
 
 ## 14. OpenAI-compatible translation provider

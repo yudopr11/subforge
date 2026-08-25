@@ -90,8 +90,10 @@ footer status line. There is no list menu — commands do the work.
   to filter, `↑`/`↓` to move, `Enter` to open (plus a *create new* row); `/open <name|n>`
   still opens directly by name or list number |
 | `/transcribe` | run the transcription stage (busy-guarded, retryable) |
-| `/review [lang]` | caption review (edit text, play segment audio); with a `<lang>`
-  argument: translation review for that language — both explicit-save with undo/redo |
+| `/review [lang]` | bare `/review` opens a **searchable picker** of what's available to
+  review — captions, plus one entry per translated language (type to filter,
+  `↑`/`↓`, `Enter`); `/review <lang>` goes straight to translation review for that
+  language. Both reviews are explicit-save with undo/redo (§9, §13) |
 | `/translate [lang]` | translate into a language code; defaults to remembered target |
 | `/export [formats]` | export SRT/ASS for source + completed translations |
 | `/settings` | two-stage menu — **Transcribe** or **Translation**; after picking
@@ -323,9 +325,9 @@ or auto-"fixed". A failed stage never corrupts completed work.
 
 Every expensive stage records explicit state — `PENDING`, `RUNNING`, `COMPLETED`,
 `FAILED`, `SKIPPED` — in the project file. Retrying a stage must never rerun completed
-upstream stages. Stages recorded: `transcription` → `alignment` (informational only —
-WhisperX aligns inside transcription, so v0.2.0 never runs it as its own stage) →
-one `translation_<lang>` per target language → `caption_review` →
+upstream stages. Stages recorded: `transcription` (WhisperX aligns inside it —
+no separate alignment stage) → one `translation_<lang>` per target language →
+`caption_review` →
 `export`. The project file (`project.json`) is the single source of truth and survives
 restarts mid-pipeline. Every completed stage also leaves a durable artifact next to it:
 `transcripts/source.json` after transcription and `translations/<lang>.json` (id + text

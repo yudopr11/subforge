@@ -72,7 +72,7 @@ class ReplScreen(Screen[None]):
         ("/new", "create project + import audio"),
         ("/open", "list/open recent projects"),
         ("/transcribe", "run transcription"),
-        ("/review", "review captions, or /review <lang> for translations"),
+        ("/review", "searchable picker: captions or translated languages"),
         ("/translate", "translate (default target remembered)"),
         ("/export", "export SRT/ASS"),
         ("/settings", "manual provider/model settings"),
@@ -564,17 +564,36 @@ class ReplScreen(Screen[None]):
         project_dir = self._require_project()
         if project_dir is None:
             return
+        from subforge.tui.screens.review_picker import ReviewPickerScreen
+
         if arg:
             # /review <lang> -> translation review for that language (PRD §13)
             from subforge.tui.screens.review_translate import ReviewTranslateScreen
 
             self._host.push_screen(ReviewTranslateScreen(project_dir, language=arg.strip().lower()))
             return
-        from subforge.tui.screens.caption_review import CaptionReviewScreen, player_for
+        # bare /review -> searchable picker of what's available (captions, translations)
+        self._host.push_screen(ReviewPickerScreen(project_dir), self._review_picked)
 
-        audio = find_audio_file(project_dir)
-        player = player_for(audio) if audio else None
-        self._host.push_screen(CaptionReviewScreen(project_dir, player=player))
+    def _review_picked(self, picked: object) -> None:
+        """Review picker result: CAPTIONS, a language code, or None (cancelled)."""
+        if picked is None:
+            return
+        project_dir = self._require_project()
+        if project_dir is None:
+            return
+        from subforge.tui.screens.review_picker import ReviewPickerScreen
+
+        if picked == ReviewPickerScreen.CAPTIONS:
+            from subforge.tui.screens.caption_review import CaptionReviewScreen, player_for
+
+            audio = find_audio_file(project_dir)
+            player = player_for(audio) if audio else None
+            self._host.push_screen(CaptionReviewScreen(project_dir, player=player))
+            return
+        from subforge.tui.screens.review_translate import ReviewTranslateScreen
+
+        self._host.push_screen(ReviewTranslateScreen(project_dir, language=str(picked)))
 
     def _cmd_translate(self, arg: str) -> None:
         if "translation" in self._running_stages:
@@ -668,7 +687,7 @@ class ReplScreen(Screen[None]):
             ("/new <audio>", "create project + import audio"),
             ("/open [name|n]", "list/open recent projects"),
             ("/transcribe", "run transcription"),
-            ("/review [lang]", "caption review; with a lang: translation review"),
+            ("/review [lang]", "searchable picker (captions · translations); <lang> direct"),
             ("/translate [lang]", "translate (default target remembered)"),
             ("/export [formats]", "export SRT/ASS"),
             ("/settings", "manual provider/model settings"),

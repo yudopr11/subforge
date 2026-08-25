@@ -6,6 +6,8 @@ SubForge is a local-first subtitle generation and translation tool for content c
 
 Built for accessibility first: captions that let Deaf and hard-of-hearing viewers follow your content, and translated subtitles that let the rest of the world enjoy it too.
 
+![SubForge — subtitle REPL](public/SS.png)
+
 ## Why SubForge?
 
 - **Accessibility** — videos without captions exclude Deaf and hard-of-hearing viewers (and everyone watching on mute).
@@ -44,13 +46,18 @@ final_audio.wav
 
 ## Installation
 
-Requires Python 3.11+.
+> **Status: not yet on PyPI — install by cloning the repo.** Tested on Linux;
+macOS/Windows are not tested. Local (WhisperX) transcription is implemented but
+not yet verified end-to-end on real hardware — see [Testing status](#testing-status).
+
+Requires Python 3.11+ and [uv](https://docs.astral.sh/uv/) (or pip):
 
 ```bash
-pip install subforge          # core (works with remote providers)
+git clone <repo-url> && cd subforge
+uv sync                     # core (works with remote providers)
 
 # Optional: local transcription (installs whisperx + torch)
-pip install "subforge[local]"
+uv sync --extra local       # or: pip install -e ".[local]"
 ```
 
 **Required for caption audio preview:** [ffmpeg](https://ffmpeg.org) — used to play a
@@ -58,15 +65,32 @@ caption's audio range while you review (`p` in the Review Captions screen):
 
 ```bash
 sudo apt install ffmpeg       # Debian/Ubuntu
-brew install ffmpeg           # macOS
+brew install ffmpeg           # macOS (untested)
 ```
 
 Whisper models download automatically on first use and are cached locally.
 
+## Testing status
+
+Honest coverage so far:
+
+- **Platform:** developed and tested on **Linux** only — macOS/Windows not tested.
+- **Install:** clone-from-repo only (`uv sync`); no PyPI release yet.
+- **Local transcription (WhisperX):** implemented, unit-tested with fakes, but **not
+  yet verified end-to-end on real hardware/GPU**.
+- **OpenAI transcription:** verified with `whisper-1`; `gpt-4o-transcribe` and other
+  models are discovered live but **not individually tested**.
+- **Translation models:** verified against a subset of real models (OpenAI chat
+  models, OpenCode Go/Zen presets). **Not all models** offered by OpenAI / OpenCode
+  Zen / OpenCode Go (or by LM Studio/Ollama servers) have been tested — model lists
+  are discovered live, and behavior is validated per response with strict checks.
+  The automatic `max_tokens` → `max_completion_tokens` fallback handles newer
+  reasoning models, but treat new models as best-effort until verified.
+
 ## Quick Start
 
 ```bash
-subforge            # launches the subtitle REPL
+uv run subforge              # launches the subtitle REPL (from the cloned repo)
 ```
 
 First launch opens guided setup: pick where Transcription runs (*Local* WhisperX with

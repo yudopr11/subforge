@@ -709,8 +709,9 @@ async def test_settings_loads_fresh_config_from_disk(tmp_path, monkeypatch):
 
 
 async def test_review_with_lang_opens_translation_review(tmp_path):
-    """/review <lang> -> translation review for that language (PRD §13)."""
+    """/review opens a searchable picker; /review <lang> goes straight (PRD §13)."""
     from subforge.tui.screens.caption_review import CaptionReviewScreen
+    from subforge.tui.screens.review_picker import ReviewPickerScreen
     from subforge.tui.screens.review_translate import ReviewTranslateScreen
 
     d = create_project(tmp_path / "p", ProjectMeta(name="p", source_language="id", target_languages=["jv"]))
@@ -721,13 +722,27 @@ async def test_review_with_lang_opens_translation_review(tmp_path):
     app = SubForgeApp(project_dir=d)
     async with app.run_test() as pilot:
         await pilot.pause()
+
+        # bare /review -> searchable picker
+        app.repl.run_command("/review")
+        await pilot.pause()
+        picker = app.screen
+        assert isinstance(picker, ReviewPickerScreen)
+        options = [str(o.prompt) for o in picker.query_one("#review-options").options]
+        assert any("Captions" in o for o in options)
+        assert any("jv" in o for o in options)
+
+        # picking captions opens caption review
+        picker.on_option_list_option_selected(
+            type("Evt", (), {"option": type("O", (), {"prompt": next(o for o in options if "Captions" in o)})()})()
+        )
+        await pilot.pause()
+        assert isinstance(app.screen, CaptionReviewScreen)
+        app.screen.action_cancel()
+        await pilot.pause()
+
+        # /review <lang> still goes straight to translation review
         app.repl.run_command("/review jv")
         await pilot.pause()
         assert isinstance(app.screen, ReviewTranslateScreen)
         assert app.screen.language == "jv"
-
-        app.screen.action_cancel()
-        await pilot.pause()
-        app.repl.run_command("/review")
-        await pilot.pause()
-        assert isinstance(app.screen, CaptionReviewScreen)

@@ -23,7 +23,7 @@ class _Transcribes(Protocol):
     def transcribe(self, audio_path: Path, language: str | None = None) -> Transcript: ...
 
 
-ALL_STAGES = ("transcription", "alignment", "caption_review", "export")
+ALL_STAGES = ("transcription", "caption_review", "export")
 
 
 class _Unconfigured:
