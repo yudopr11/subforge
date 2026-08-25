@@ -67,6 +67,7 @@ class MainMenuScreen(Screen[None]):
         super().__init__()
         # Test seam: override how Pipelines are constructed. Default builds from AppConfig.
         self.pipeline_factory = pipeline_factory
+        self._running_stages: set[str] = set()
 
     # ---- rendering -------------------------------------------------------
 
@@ -210,8 +211,13 @@ class MainMenuScreen(Screen[None]):
 
     # ---- worker wrappers ----------------------------------------------------
 
-    def _launch_stage(self, work: Callable[[], str]) -> None:
-        """Run a blocking stage off the UI thread; surface its status message."""
+    def _launch_stage(self, stage: str, work: Callable[[], str], busy_label: str) -> None:
+        """Run a blocking stage off the UI thread; one run per stage at a time."""
+        if stage in self._running_stages:
+            self._set_status(f"[BUSY] {busy_label.capitalize()} is already running — please wait.")
+            return
+        self._running_stages.add(stage)
+        self._set_status(f"⏳ {busy_label}… (please wait)")
 
         def runner() -> None:
             try:
@@ -220,11 +226,16 @@ class MainMenuScreen(Screen[None]):
                 message = str(exc)
             except Exception as exc:  # noqa: BLE001 — last-resort guard for the UI thread
                 message = f"[ERROR] {exc}"
-            self._host.call_from_thread(self._set_status, message)
+            finally:
+                self._host.call_from_thread(self._running_stages.discard, stage)
+            self._host.call_from_thread(self._set_flow_status, message)
 
-        self.run_worker(runner, thread=True, exclusive=True, group="stage")
+        self.run_worker(runner, thread=True, exclusive=False, group=f"stage-{stage}")
 
     def _begin_transcribe(self) -> None:
+        if "transcription" in self._running_stages:
+            self._set_status("[BUSY] Transcription is already running — please wait.")
+            return
         if self._require_project() is None:
             return
         if not transcription_configured(self._host.app_config):
@@ -233,7 +244,7 @@ class MainMenuScreen(Screen[None]):
                 "[SETUP] No transcription provider yet — pick one here, Save, then run Transcribe again."
             )
             return
-        self._launch_stage(self.do_transcribe)
+        self._launch_stage("transcription", self.do_transcribe, "Transcribing")
 
     def _begin_translate(self) -> None:
         if self._require_project() is None:
@@ -243,17 +254,22 @@ class MainMenuScreen(Screen[None]):
     def _language_chosen(self, language: str | None) -> None:
         if language is None:
             return
+        if "translation" in self._running_stages:
+            self._set_status("[BUSY] Translation is already running — please wait.")
+            return
         if not translation_configured(self._host.app_config):
             self.action_settings()
             self._set_status(
                 "[SETUP] No translation provider yet — pick one here, Save, then run Translate again."
             )
             return
-        self._launch_stage(lambda: self.do_translate(language))
+        self._launch_stage(
+            "translation", lambda: self.do_translate(language), f"Translating to '{language}'"
+        )
 
     def _begin_export(self) -> None:
         if self._require_project() is not None:
-            self._launch_stage(self.do_export)
+            self._launch_stage("export", self.do_export, "Exporting")
 
     # ---- review screens ------------------------------------------------------
 

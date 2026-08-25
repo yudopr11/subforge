@@ -5,13 +5,13 @@ from typing import ClassVar
 
 from textual.app import ComposeResult
 from textual.binding import Binding
-from textual.screen import Screen
+from textual.screen import ModalScreen
 from textual.widgets import DataTable, Input, Label
 
 from subforge.app.project_store import load_project, save_project
 
 
-class SpeakerMapScreen(Screen[None]):
+class SpeakerMapScreen(ModalScreen[None]):
     BINDINGS: ClassVar[list[Binding | tuple[str, str] | tuple[str, str, str]]] = [
         ("escape", "cancel", "Cancel"),
     ]

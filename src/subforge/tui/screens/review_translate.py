@@ -2,10 +2,12 @@
 
 from collections.abc import Callable
 from pathlib import Path
+from typing import ClassVar
 
 from textual.app import ComposeResult
+from textual.binding import Binding
 from textual.containers import Vertical
-from textual.screen import Screen
+from textual.screen import ModalScreen
 from textual.widgets import DataTable, Input, Label
 from textual.widgets.data_table import ColumnKey
 
@@ -14,7 +16,9 @@ from subforge.app.project_store import load_project, save_project
 from subforge.app.translation_service import TranslationService
 
 
-class ReviewTranslateScreen(Screen[None]):
+class ReviewTranslateScreen(ModalScreen[None]):
+    BINDINGS: ClassVar[list[Binding | tuple[str, str] | tuple[str, str, str]]] = [("escape", "cancel", "Back")]
+
     def __init__(self, project_dir: Path, translation_service: TranslationService | None = None) -> None:
         super().__init__()
         self.project_dir = project_dir
@@ -52,3 +56,6 @@ class ReviewTranslateScreen(Screen[None]):
         if self.on_done:
             self.on_done(paths)
         return paths
+
+    def action_cancel(self) -> None:
+        self.dismiss(None)

@@ -6,15 +6,18 @@ from typing import ClassVar
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Vertical
-from textual.screen import Screen
+from textual.screen import ModalScreen
 from textual.widgets import DataTable, Input, Label
 
 from subforge.app.project_store import load_project, save_project
 from subforge.subtitles.timeutils import format_srt
 
 
-class CaptionReviewScreen(Screen[None]):
-    BINDINGS: ClassVar[list[Binding | tuple[str, str] | tuple[str, str, str]]] = [Binding("ctrl+s", "save", "Save")]
+class CaptionReviewScreen(ModalScreen[None]):
+    BINDINGS: ClassVar[list[Binding | tuple[str, str] | tuple[str, str, str]]] = [
+        Binding("ctrl+s", "save", "Save"),
+        ("escape", "cancel", "Back"),
+    ]
 
     def __init__(self, project_dir: Path) -> None:
         super().__init__()
@@ -56,3 +59,6 @@ class CaptionReviewScreen(Screen[None]):
     def action_save(self) -> None:
         save_project(self.project_dir, self.project)
         self.query_one("#hints", Label).update("Saved ✓")
+
+    def action_cancel(self) -> None:
+        self.dismiss(None)
