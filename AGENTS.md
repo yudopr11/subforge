@@ -67,6 +67,8 @@ If a feature can only be tested at unit level, that is a design smell — add a 
 - Tests live in `tests/unit/`, `tests/integration/`, fixtures in `tests/fixtures/`. One test file per module, mirroring `src/` layout.
 - Every feature ships unit + e2e coverage per "Testing Requirements" above.
 - Specs stay in sync per "Documentation Sync" above.
+- TUI screens are keyboard-only (ARCH §3.2): declare `BINDINGS` for every action,
+  render an on-screen key legend, and never require mouse interaction.
 - Commit style: conventional commits (`feat:`, `fix:`, `test:`, `docs:`, `chore:`).
 - Work task-by-task from a plan in `docs/superpowers/plans/`; each plan task ends with a commit.
 - TDD: write the failing test first, watch it fail, implement minimally, watch it pass, commit.

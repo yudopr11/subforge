@@ -40,6 +40,18 @@ tests/unit/  tests/integration/  tests/fixtures/
 Screens construct and call `app/pipeline.py`, `app/export.py`, etc. Widgets render
 state and forward user intent; sequencing, validation, persistence live in `app/`.
 
+### 3.2 Keyboard-only interaction
+
+Screens are keyboard-first by contract (PRD §7):
+
+- Every user-reachable action is exposed as a Textual `BINDINGS` entry; pointer events
+  are treated as incidental duplicates.
+- Each screen renders an always-visible key legend so shortcuts are discoverable.
+- Focus order follows visual order (`AUTO_FOCUS` targets the primary control);
+  `Tab`/arrows walk every control, `Enter` activates.
+- Widgets that consume typing (e.g. `Input`) naturally shadow single-letter bindings
+  while focused, preventing collisions.
+
 ## 4. Core runtime components
 
 `Project`/`Segment` (models) → `Pipeline` orchestrates stages over them → providers do
