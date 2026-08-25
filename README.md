@@ -54,6 +54,14 @@ pip install subforge          # core (works with remote providers)
 pip install "subforge[local]"
 ```
 
+**Required for caption audio preview:** [ffmpeg](https://ffmpeg.org) — used to play a
+caption's audio range while you review (`p` in the Review Captions screen):
+
+```bash
+sudo apt install ffmpeg       # Debian/Ubuntu
+brew install ffmpeg           # macOS
+```
+
 Whisper models download automatically on first use and are cached locally.
 
 ## Quick Start
@@ -71,7 +79,7 @@ subforge            # launches the TUI
    exported audio file.
 3. **Transcribe** — one run at a time; failures show a retryable `[ERROR]` status.
 4. **Review Captions** — edit text inline (`Ctrl+S` saves) and press `p` to play the
-   segment's audio range to verify timing.
+   segment's audio range to verify timing (requires ffmpeg — see Installation).
 5. **Translate** — choose the target language, then review side-by-side.
 6. **Export SRT / ASS** — writes `exports/source.*` plus every completed translation.
 
