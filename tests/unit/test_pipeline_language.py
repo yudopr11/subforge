@@ -1,14 +1,10 @@
-import json
 from pathlib import Path
 
-import pytest
-
-from subforge.app.pipeline import Pipeline, StageError
+from subforge.app.pipeline import Pipeline
 from subforge.app.project_store import create_project, load_project
 from subforge.config.settings import Settings
-from subforge.models.project import ProjectMeta, StageState
+from subforge.models.project import ProjectMeta
 from subforge.models.transcript import Transcript, TranscriptSegment
-from subforge.providers.base import TranslationOutput
 
 
 class FakeASR:
