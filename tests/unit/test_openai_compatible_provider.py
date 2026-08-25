@@ -103,6 +103,65 @@ def test_http_400_surfaces_plain_body_when_not_json():
     assert "json_object" in str(exc.value)
 
 
+def test_max_tokens_400_retries_with_max_completion_tokens():
+    """Newer reasoning models reject max_tokens: auto-fallback once, remember."""
+    bodies: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        bodies.append(json.loads(request.read()))
+        if len(bodies) == 1:
+            return httpx.Response(
+                400,
+                json={
+                    "error": {
+                        "message": "Unsupported parameter: 'max_tokens' is not supported with this model. "
+                        "Use 'max_completion_tokens' instead."
+                    }
+                },
+            )
+        return chat_response(VALID)
+
+    provider = OpenAICompatibleProvider("http://t.local/v1", "k", "m", client=transport_handler(handler))
+    outs = provider.translate([TranslationInput(1, "x")], "id", "en")
+
+    assert [o.id for o in outs] == [1, 2]
+    assert "max_tokens" in bodies[0]
+    assert bodies[1]["max_completion_tokens"] == 2048
+    assert "max_tokens" not in bodies[1]
+    assert provider._use_max_completion_tokens is True
+
+
+def test_max_completion_tokens_preference_skips_rejected_call():
+    """Later batches go straight to max_completion_tokens — no wasted 400."""
+    bodies: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        bodies.append(json.loads(request.read()))
+        return chat_response(VALID)
+
+    provider = OpenAICompatibleProvider("http://t.local/v1", "k", "m", client=transport_handler(handler))
+    provider._use_max_completion_tokens = True
+    provider.translate([TranslationInput(1, "x")], "id", "en")
+    provider.translate([TranslationInput(1, "x")], "id", "en")
+
+    assert len(bodies) == 2  # no 400 probe at all
+    assert all("max_completion_tokens" in b and "max_tokens" not in b for b in bodies)
+
+
+def test_unrelated_400_is_not_retried():
+    calls = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        return httpx.Response(400, json={"error": {"message": "context length exceeded"}})
+
+    provider = OpenAICompatibleProvider("http://t.local/v1", "k", "m", client=transport_handler(handler))
+    with pytest.raises(ValueError, match="context length exceeded"):
+        provider.translate([TranslationInput(1, "x")], "id", "en")
+    assert len(calls) == 1  # only the original call; error body surfaced
+    assert provider._use_max_completion_tokens is None
+
+
 def test_list_models_http_error_surfaces_reason():
     def handler(request):
         return httpx.Response(500, json={"error": {"message": "rate limited"}})

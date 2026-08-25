@@ -40,20 +40,35 @@ R = TypeVar("R")
 
 
 class ApiKeyInputScreen(ModalScreen[str | None]):
-    """Single masked key entry (Enter confirms, Esc cancels)."""
+    """Single masked key entry (Enter confirms, Esc cancels).
+
+    ``initial`` pre-fills the stored key (selected, so typing replaces it) —
+    the Connect step always asks, even when a key is already configured.
+    """
 
     AUTO_FOCUS = "Input"
 
-    def __init__(self, title: str) -> None:
+    def __init__(self, title: str, initial: str = "") -> None:
         super().__init__()
         self.picker_title = title
+        self.initial_value = initial
         self.result: str | None = None
 
     def compose(self) -> ComposeResult:
+        from subforge.config.app_config import default_config_path
+
         with Vertical():
             yield Label(f"[b]{self.picker_title}[/b]")
-            yield Input(password=True, placeholder="paste API key, Enter to confirm")
-            yield Label("Esc cancel — stored locally in ~/.config/subforge/config.json")
+            yield Input(
+                password=True,
+                value=self.initial_value,
+                placeholder="paste API key, Enter to confirm",
+            )
+            yield Label(f"Esc cancel — stored locally in {default_config_path()}")
+
+    def on_mount(self) -> None:
+        if self.initial_value:
+            self.query_one(Input).select_all()  # typing replaces the old key
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         self.result = event.input.value.strip() or None
@@ -124,13 +139,19 @@ class SettingsScreen(ModalScreen[None]):
 
     On mount it shows a menu with two choices:
 
-      Transcribe  -> provider (Local/OpenAI) -> model -> source language
-      Translation -> provider (Local/Cloud) -> model -> reasoning (if offered)
-                     -> default target language
+      Transcribe  -> Local/OpenAI -> step menu
+      Translation -> Local/Cloud  -> step menu
 
-    Each stage configures and **persists immediately** when finished, then returns
-    to the menu so the other stage can be configured too. Esc on the menu closes
-    settings (already-saved stages are kept); Esc on a step returns to the menu.
+    After the local/cloud choice a **step menu** lists the remaining steps:
+
+      Local : [Select model, Language]
+      Cloud : [Connect (API key), Select model (+ reasoning for translation),
+               Language]
+
+    The user jumps to any step; each completed step **persists immediately** and
+    returns to the step menu. Esc on a step returns to the step menu, Esc on the
+    step menu returns to the two-choice menu, Esc there closes settings
+    (already-saved steps are kept).
 
     Values flow through the public ``apply_*``/``set_*`` methods (the tested
     seam); the model-list loaders are injectable via ``loader_factory`` so the
@@ -245,10 +266,59 @@ class SettingsScreen(ModalScreen[None]):
 
     def tc_source(self, choice: str) -> None:
         if not choice:
-            self.show_menu()  # Esc back to the menu
+            self.show_menu()  # Esc back to the top menu
             return
         self.set_transcription_source("openai" if "OpenAI" in choice else "local")
-        self._pick_transcription_model()
+        self.show_tc_steps()
+
+    # ---- transcription step menu (local: 2 steps · cloud: 3 steps) ------------
+
+    def show_tc_steps(self) -> None:
+        """Steps remaining after the local/cloud choice (PRD §7)."""
+        if self.cfg.transcription.provider == "local":
+            steps = [
+                "1 · Select model — Whisper sizes for your machine",
+                "2 · Source language — or auto-detect",
+            ]
+        else:
+            steps = [
+                "1 · Connect — OpenAI API key",
+                "2 · Select model — live list",
+                "3 · Source language — or auto-detect",
+            ]
+        self._set_status("Transcribe · pick a step — Esc backs up")
+        self._push(
+            ChoiceScreen("Transcription — pick a step", steps),
+            lambda c: self.tc_step(str(c) if c else ""),
+        )
+
+    def tc_step(self, choice: str) -> None:
+        if not choice:
+            self.show_menu()  # Esc on the step menu -> top menu
+            return
+        lowered = choice.lower()
+        if "connect" in lowered:
+            self.tc_connect()
+        elif "model" in lowered:
+            self._pick_transcription_model()
+        else:
+            self.ask_tc_language()
+
+    def tc_connect(self) -> None:
+        self._set_status("Transcribe · connect — paste your OpenAI API key")
+        self._push(
+            ApiKeyInputScreen("OpenAI API key", initial=self.cfg.transcription.api_key),
+            lambda k: self.tc_connect_key(str(k) if k else ""),
+        )
+
+    def tc_connect_key(self, key: str) -> None:
+        if not key:
+            self._set_status("[ERROR] OpenAI API key required.")
+            self.tc_connect()
+            return
+        self.apply_tc_key(key)
+        self.save_config()  # step done -> back to the step menu
+        self.show_tc_steps()
 
     def _pick_transcription_model(self) -> None:
         if self.cfg.transcription.provider == "local":
@@ -265,9 +335,10 @@ class SettingsScreen(ModalScreen[None]):
             self._pick_tc_model_openai()
 
     def tc_key(self, key: str) -> None:
+        """API key prompted from the model step before the live list loads."""
         if not key:
             self._set_status("[ERROR] OpenAI API key required.")
-            self.begin_transcription_choice()
+            self._pick_transcription_model()
             return
         self.apply_tc_key(key)
         self._pick_tc_model_openai()
@@ -283,7 +354,8 @@ class SettingsScreen(ModalScreen[None]):
     def tc_model(self, model: str) -> None:
         if model:
             self.apply_tc_model(model.split(" · ")[0])
-        self.ask_tc_language()
+        self.save_config()  # step done -> back to the step menu
+        self.show_tc_steps()
 
     def ask_tc_language(self) -> None:
         self._set_status("Transcribe · source language (type to search)")
@@ -297,8 +369,8 @@ class SettingsScreen(ModalScreen[None]):
 
     def tc_language_chosen(self, lang: str) -> None:
         self.apply_tc_language(lang)
-        self.save_config()  # persist, then back to the menu
-        self.show_menu()
+        self.save_config()  # step done, then back to the step menu
+        self.show_tc_steps()
 
     # ---- stage: translation (provider + model + reasoning + target language) ---
 
@@ -314,23 +386,89 @@ class SettingsScreen(ModalScreen[None]):
 
     def tl_source(self, choice: str) -> None:
         if not choice:
-            self.show_menu()  # Esc back to the menu
+            self.show_menu()  # Esc back to the top menu
             return
         if choice.startswith("Local"):
             self.set_translation_source("local")
-            self._push(
-                UrlInputScreen(self.cfg.translation.local_base_url),
-                lambda u: self.tl_url(str(u) if u else ""),
-            )
         else:
             self.set_translation_source("provider")
-            self._pick_tl_preset()
+        self.show_tl_steps()
+
+    # ---- translation step menu (local: 2 steps · cloud: 3 steps) ---------------
+
+    def show_tl_steps(self) -> None:
+        """Steps remaining after the local/cloud choice (PRD §7)."""
+        if self.cfg.translation.source == "local":
+            steps = [
+                "1 · Select model — server URL + model",
+                "2 · Default target language",
+            ]
+        else:
+            steps = [
+                "1 · Connect — provider + API key",
+                "2 · Select model + reasoning",
+                "3 · Default target language",
+            ]
+        self._set_status("Translation · pick a step — Esc backs up")
+        self._push(
+            ChoiceScreen("Translation — pick a step", steps),
+            lambda c: self.tl_step(str(c) if c else ""),
+        )
+
+    def tl_step(self, choice: str) -> None:
+        if not choice:
+            self.show_menu()  # Esc on the step menu -> top menu
+            return
+        lowered = choice.lower()
+        if "connect" in lowered:
+            self.tl_connect()
+        elif "model" in lowered:
+            self._pick_translation_model()
+        else:
+            self.ask_tl_language()
+
+    def tl_connect(self) -> None:
+        """Cloud connect step: pick the provider preset, then paste its API key."""
+        labels = [f"{preset.name} ({pid})" for pid, preset in TRANSLATION_PRESETS.items()]
+        self._set_status("Translation · connect — pick the cloud provider")
+        self._push(
+            ChoiceScreen("Connect — cloud provider", labels),
+            lambda c: self.tl_connect_preset(str(c) if c else ""),
+        )
+
+    def tl_connect_preset(self, label: str) -> None:
+        if not label:
+            self.show_tl_steps()  # Esc back to the step menu
+            return
+        for pid, preset in TRANSLATION_PRESETS.items():
+            if label.startswith(preset.name):
+                self.apply_tl_preset(pid)
+                break
+        # Always ask — the stored key is pre-filled (selected), so the user can
+        # confirm it or type a replacement (PRD §7 Connect step).
+        name = TRANSLATION_PRESETS[self.cfg.translation.provider].name
+        self._push(
+            ApiKeyInputScreen(f"{name} API key", initial=self.cfg.translation.api_key),
+            lambda k: self.tl_connect_key(str(k) if k else ""),
+        )
+
+    def tl_connect_key(self, key: str) -> None:
+        if not key:
+            self._set_status("[ERROR] API key required.")
+            self.tl_connect()
+            return
+        self.apply_tl_key(key)
+        self.save_config()  # step done -> back to the step menu
+        self.show_tl_steps()
 
     def tl_url(self, url: str) -> None:
         if not url:
-            self.show_menu()
+            self.show_tl_steps()
             return
         self.apply_tl_url(url)
+        if self.cfg.translation.local_api_key:
+            self._pick_tl_model()
+            return
         self._push(
             ApiKeyInputScreen("Local server API key (optional — Enter to skip)"),
             lambda k: self.tl_local_key(str(k) if k else ""),
@@ -338,49 +476,28 @@ class SettingsScreen(ModalScreen[None]):
 
     def tl_local_key(self, key: str) -> None:
         self.apply_tl_local_key(key)
-        self._pick_translation_model()
+        self._pick_tl_model()
 
-    def _pick_tl_preset(self) -> None:
-        labels = [f"{preset.name} ({pid})" for pid, preset in TRANSLATION_PRESETS.items()]
+    def _pick_tl_model(self) -> None:
+        """Local model list after the server URL (+ optional key) is known."""
+        t = self.cfg.translation
+        loader = self._loader(f"local:{t.local_base_url}:{t.local_api_key or ''}")
         self._push(
-            ChoiceScreen("Cloud translation provider", labels),
-            lambda c: self.tl_preset(str(c) if c else ""),
+            ModelPickerScreen("Choose translation model", loader),
+            lambda m: self.tl_model(str(m) if m else ""),
         )
-
-    def tl_preset(self, label: str) -> None:
-        if not label:
-            self.show_menu()
-            return
-        for pid, preset in TRANSLATION_PRESETS.items():
-            if label.startswith(preset.name):
-                self.apply_tl_preset(pid)
-                break
-        self._prompt_tl_key()
-
-    def _prompt_tl_key(self) -> None:
-        if self.cfg.translation.api_key:
-            self._pick_translation_model()
-            return
-        name = TRANSLATION_PRESETS[self.cfg.translation.provider].name
-        self._push(
-            ApiKeyInputScreen(f"{name} API key"),
-            lambda k: self.tl_key(str(k) if k else ""),
-        )
-
-    def tl_key(self, key: str) -> None:
-        if not key:
-            self._set_status("[ERROR] API key required.")
-            self.begin_translation_choice()
-            return
-        self.apply_tl_key(key)
-        self._pick_translation_model()
 
     def _pick_translation_model(self) -> None:
+        """Model step entry: local asks server URL first (then key if missing),
+        cloud goes straight to the live model list."""
         t = self.cfg.translation
         if t.source == "local":
-            loader = self._loader(f"local:{t.local_base_url}:{t.local_api_key or ''}")
-        else:
-            loader = self._loader(f"cloud:{t.provider}")
+            self._push(
+                UrlInputScreen(t.local_base_url),
+                lambda u: self.tl_url(str(u) if u else ""),
+            )
+            return
+        loader = self._loader(f"cloud:{t.provider}")
         self._push(
             ModelPickerScreen("Choose translation model", loader),
             lambda m: self.tl_model(str(m) if m else ""),
@@ -395,7 +512,8 @@ class SettingsScreen(ModalScreen[None]):
         """Offer EXACTLY this model's effort vocabulary (PRD §15)."""
         spec = self._last_spec or self._spec_for_current_model()
         if spec.kind != "effort":
-            self.ask_tl_language()
+            self.save_config()  # model step done (no reasoning offered)
+            self.show_tl_steps()
             return
         self._set_status("Optional · reasoning effort offered by this model")
         self._push(
@@ -406,7 +524,8 @@ class SettingsScreen(ModalScreen[None]):
     def tl_reasoning(self, effort: str) -> None:
         if effort:
             self.apply_reasoning(effort)
-        self.ask_tl_language()
+        self.save_config()  # model + reasoning step done
+        self.show_tl_steps()
 
     def ask_tl_language(self) -> None:
         self._set_status("Translation · default target language (type to search)")
@@ -420,8 +539,8 @@ class SettingsScreen(ModalScreen[None]):
 
     def tl_language_chosen(self, lang: str) -> None:
         self.apply_default_target(lang)
-        self.save_config()  # persist, then back to the menu
-        self.show_menu()
+        self.save_config()  # step done, then back to the step menu
+        self.show_tl_steps()
 
     # ---- public mutation seam (tested; used by the flow above) ------------------
 

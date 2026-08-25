@@ -110,3 +110,8 @@ def test_retry_after_translation_failure_only_reruns_translation(tmp_path: Path)
     assert final.get_stage("translation_en") is StageState.COMPLETED
     assert final.get_stage("transcription") is asr_stage_before is StageState.COMPLETED
     assert final.segments[0].translations["en"] == "Hello everyone!"
+
+    # per-language translation artifact persisted (ARCH §21)
+    artifact = json.loads((d / "translations" / "en.json").read_text())
+    assert artifact["language"] == "en"
+    assert artifact["segments"][0]["text"] == "Hello everyone!"

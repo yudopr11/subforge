@@ -145,7 +145,10 @@ in base URL/key/model (PRD §14 table). Auth: `Authorization: Bearer <key>`.
 HTTP failures (translate and model discovery) surface the server's own reason —
 status code plus the response body's `error.message` (or raw text) — so a 400 such as
 unknown model / unsupported `response_format` / bad `reasoning_effort` is actionable
-(PRD §21).
+(PRD §21). Newer OpenAI reasoning models reject `max_tokens` and demand
+`max_completion_tokens`; the provider auto-detects this from the server's 400
+message, retries that request once with the other parameter, and remembers the
+preference for the rest of the provider session (no rejected probe on later batches).
 
 ## 15–16. Batch flow & output validation
 
@@ -194,7 +197,7 @@ complete across all segments. Unknown formats raise `ValueError`.
   project.json      # single source of truth (pydantic-validated)
   audio/            # user-supplied final audio
   transcripts/      # normalized source.json after transcription
-  translations/
+  translations/     # per-language snapshots: <lang>.json after each completed run
   exports/
 ```
 

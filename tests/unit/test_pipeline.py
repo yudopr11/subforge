@@ -108,6 +108,38 @@ def test_translation_runs_service_and_persists(tmp_path):
     assert project.get_stage("translation_en") is StageState.COMPLETED
 
 
+def test_translation_writes_per_language_artifact(tmp_path):
+    """Each translated language leaves translations/<lang>.json (ARCH §21)."""
+    from subforge.app.translation_service import TranslationService
+
+    d, _ = setup_project(tmp_path)
+    pipe = Pipeline(
+        d,
+        Settings(),
+        transcription=FakeASR(TRANSCRIPT),
+        translation_service=TranslationService(FakeTranslator()),
+    )
+    pipe.run_transcription("final_audio.wav")
+    pipe.run_translation("en")
+    pipe.run_translation("ja")
+
+    en = d / "translations" / "en.json"
+    assert en.is_file()
+    payload = json.loads(en.read_text())
+    assert payload["language"] == "en"
+    assert payload["segments"][0]["id"] == 1
+    assert payload["segments"][0]["text"].startswith("EN:")
+
+    ja = d / "translations" / "ja.json"
+    assert ja.is_file()
+    assert json.loads(ja.read_text())["language"] == "ja"
+
+    # retry re-renders the artifact in place (no stale copies)
+    pipe.run_translation("en")
+    assert en.is_file()
+    assert json.loads(en.read_text())["language"] == "en"
+
+
 def test_status_reports_all_stages(tmp_path):
     d, _ = setup_project(tmp_path)
     pipe = Pipeline(d, Settings(), transcription=FakeASR(TRANSCRIPT))

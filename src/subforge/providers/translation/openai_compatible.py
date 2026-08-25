@@ -30,6 +30,9 @@ class OpenAICompatibleProvider:
         self.api_key = api_key
         self.model = model
         self.client = client or httpx.Client(timeout=120.0)
+        # Auto-detected: newer OpenAI reasoning models reject max_tokens and
+        # demand max_completion_tokens (ARCH §14). None = not probed yet.
+        self._use_max_completion_tokens: bool | None = None
 
     def translate(
         self,
@@ -65,11 +68,7 @@ class OpenAICompatibleProvider:
             ],
             **payload_extra,
         }
-        response = self.client.post(
-            f"{self.base_url}/chat/completions",
-            json=payload,
-            headers={"Authorization": f"Bearer {self.api_key}"},
-        )
+        response = self._chat_completions(payload)
         try:
             response.raise_for_status()
         except httpx.HTTPStatusError as exc:
@@ -90,6 +89,38 @@ class OpenAICompatibleProvider:
                 "pick a chat-completions-capable model"
             )
         return self._parse(content)
+
+    def _chat_completions(self, payload: dict[str, object]) -> httpx.Response:
+        """POST /chat/completions with a one-shot token-parameter fallback.
+
+        Newer OpenAI reasoning models reject ``max_tokens`` and demand
+        ``max_completion_tokens``; LM Studio / Ollama and older models expect the
+        former. We can't know without probing, so when the server's error says so
+        we retry ONCE with the other parameter and remember the preference for
+        the rest of this provider session — later batches skip the rejected call.
+        """
+        if self._use_max_completion_tokens:
+            payload = dict(payload)
+            payload["max_completion_tokens"] = payload.pop("max_tokens")
+        response = self.client.post(
+            f"{self.base_url}/chat/completions",
+            json=payload,
+            headers={"Authorization": f"Bearer {self.api_key}"},
+        )
+        if (
+            self._use_max_completion_tokens is not True
+            and response.status_code == 400
+            and _wants_max_completion_tokens(response)
+        ):
+            self._use_max_completion_tokens = True
+            payload = dict(payload)
+            payload["max_completion_tokens"] = payload.pop("max_tokens")
+            response = self.client.post(
+                f"{self.base_url}/chat/completions",
+                json=payload,
+                headers={"Authorization": f"Bearer {self.api_key}"},
+            )
+        return response
 
     def list_models(self) -> list[str]:
         """Fetch available model IDs from GET /models — live discovery for the TUI picker."""
@@ -114,6 +145,25 @@ class OpenAICompatibleProvider:
         except json.JSONDecodeError as exc:
             raise ValueError(f"translation provider did not return valid JSON: {exc}") from exc
         return [TranslationOutput(id=item["id"], text=str(item["text"])) for item in data["translations"]]
+
+
+def _wants_max_completion_tokens(response: httpx.Response) -> bool:
+    """True when the server rejected ``max_tokens`` and asked for the other name.
+
+    Matches OpenAI-style messages like ``Unsupported parameter: 'max_tokens' is
+    not supported with this model. Use 'max_completion_tokens' instead.``
+    """
+    message = response.text or ""
+    try:
+        payload = response.json()
+        if isinstance(payload, dict):
+            error = payload.get("error")
+            if isinstance(error, dict) and error.get("message"):
+                message = str(error["message"])
+    except ValueError:
+        pass
+    lowered = message.lower()
+    return "max_tokens" in lowered and "max_completion_tokens" in lowered
 
 
 def _error_detail(response: httpx.Response) -> str:

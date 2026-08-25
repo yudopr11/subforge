@@ -93,9 +93,9 @@ footer status line. There is no list menu — commands do the work.
 | `/review` | caption review overlay (edit text, play segment audio) |
 | `/translate [lang]` | translate into a language code; defaults to remembered target |
 | `/export [formats]` | export SRT/ASS for source + completed translations |
-| `/settings` | two-choice menu — **Transcribe** (provider + model + source language)
-  or **Translation** (provider + model + reasoning + target language); each stage
-  saves on completion and returns to the menu |
+| `/settings` | two-stage menu — **Transcribe** or **Translation**; after picking
+  local or cloud, a **step menu** lists the remaining steps (see below); each step
+  saves on completion and returns to the step menu |
 | `/wizard` | re-run the setup wizard, prefilled with current values |
 | `/status` | print pipeline stage states |
 | `/help`, `?` | command list |
@@ -103,21 +103,25 @@ footer status line. There is no list menu — commands do the work.
 
 Setup happens inside the TUI: on **first launch** (no config file yet) the wizard
 opens automatically; after that, **Settings** (`/settings`) opens a two-choice menu — pick
-**Transcribe** or **Translation** — and drills into that stage only; or `/wizard` re-runs
-full wizard-style setup. Providers rebuild without restarting the project:
+**Transcribe** or **Translation**, then **Local or Cloud**, then a **step menu** of
+what's left to configure; or `/wizard` re-runs full wizard-style setup. Providers
+rebuild without restarting the project:
 
-1. **Transcribe** — *Local*: pick/install a Whisper model sized for your machine;
-   or *Provider*: paste your OpenAI API key → pick a model from the live list.
-   Ends by choosing the **source audio language**.
-2. **Translate** — *Local*: point at your LM Studio/Ollama URL → pick a model;
-   or *Provider*: choose OpenAI / OpenCode Zen / OpenCode Go → paste API key →
-   pick a model (+ reasoning level if the model offers one). Ends by choosing the
-   **default target language**.
+- **Transcribe — Local**: `[Select model, Source language]`
+- **Transcribe — Cloud (OpenAI)**: `[Connect (API key), Select model, Source language]`
+- **Translate — Local**: `[Select model (server URL + model), Default target language]`
+- **Translate — Cloud**: `[Connect (provider + API key), Select model + reasoning,
+  Default target language]`
 
-Each stage's language is chosen from a **searchable ISO 639-1 picker**: type to
-filter by code or English name, `↑`/`↓` to move, `Enter` to select (§16). A stage
-persists as soon as it finishes, then returns to the settings menu so the other
-stage can be configured too.
+Steps are jumped to directly from the step menu; each completed step **persists
+immediately** and returns to the step menu, so Esc at any depth never loses finished
+work. The **Connect** step always asks for the API key — prefilled and preselected
+with the stored key — so reconnecting replaces it instead of skipping it. `/settings`
+reads `config.json` fresh from disk, so manual edits to the file are honored, never
+overwritten by stale in-memory values. Languages are chosen from a **searchable ISO
+639-1 picker**: type to filter by code or English name, `↑`/`↓` to move, `Enter` to
+select (§16). An empty language selection maps to application defaults — source
+auto-detect, target falls back to the remembered default.
 
 ### Interaction model — keyboard only
 
@@ -143,7 +147,10 @@ may require the mouse.**
 - `/settings` and `/wizard` are **modal overlays** over the live REPL — the transcript
   stays visible behind them, and the wizard mirrors its current step into the transcript
   as it runs (Pi-style), so setup reads like a conversation. `/settings` opens a
-  **two-choice menu**; `Esc` on a step returns to the menu, `Esc` on the menu closes settings.
+  **two-choice menu** (Transcribe / Translation); after the local/cloud choice a
+  **step menu** of the remaining steps (`[model, language]` local, `[connect, model,
+  language]` cloud — see §7 table); `Esc` on a step returns to the step menu,
+  `Esc` on the step menu returns to the two-choice menu, `Esc` there closes settings.
 - **Searchable choices:** every picker (provider, model, reasoning, language) is a
   keyboard-driven list — type to filter, `↑`/`↓` move the highlight, `Tab`/`Enter` select.
 - Forms: `Tab` / arrows move focus; `Enter` submits the focused field.
@@ -313,7 +320,10 @@ upstream stages. Stages recorded: `transcription` → `alignment` (informational
 WhisperX aligns inside transcription, so v0.2.0 never runs it as its own stage) →
 one `translation_<lang>` per target language → `caption_review` →
 `export`. The project file (`project.json`) is the single source of truth and survives
-restarts mid-pipeline.
+restarts mid-pipeline. Every completed stage also leaves a durable artifact next to it:
+`transcripts/source.json` after transcription and `translations/<lang>.json` (id + text
+snapshots, one per completed language) after translation — rendered SRT/ASS then go to
+`exports/` (§17).
 
 ## 23. MVP scope (v0.2.0) & acceptance criteria
 

@@ -224,29 +224,40 @@ async def test_settings_menu_drives_each_stage_then_saves(tmp_path, monkeypatch)
         # menu appears first
         assert isinstance(app.screen, ChoiceScreen)
 
-        # -> Transcribe: local whisper + source language
+        # -> Transcribe: Local -> step menu -> model -> language
         _pick(app.screen, "Transcribe  —  model + source language")
         await pilot.pause()
-        lbls = [str(l.render()) for l in app.screen.query("Label")]
-        assert any("Transcription — where does it run" in s for s in lbls)
         _pick(app.screen, "Local (WhisperX)")
         await pilot.pause()
+        lbls = [str(l.render()) for l in app.screen.query("Label")]
+        assert any("pick a step" in s for s in lbls)
+        _pick(app.screen, "1 · Select model — Whisper sizes for your machine")
+        await pilot.pause()
         _pick(app.screen, "small · Lightweight")
+        await pilot.pause()
+        assert isinstance(app.screen, ChoiceScreen)  # step menu again
+        _pick(app.screen, "2 · Source language — or auto-detect")
         await pilot.pause()
         _pick(app.screen, "id")  # source language
         await pilot.pause()
 
-        # returns to the menu; configure -> Translation: local server + target lang
+        # step menu -> back to the top menu; configure -> Translation: Local steps
         assert isinstance(app.screen, ChoiceScreen)
+        await pilot.press("escape")
+        await pilot.pause()
         _pick(app.screen, "Translation  —  model + target language")
         await pilot.pause()
         _pick(app.screen, "Local server (LM Studio / Ollama)")
+        await pilot.pause()
+        _pick(app.screen, "1 · Select model — server URL + model")
         await pilot.pause()
         _pick(app.screen, "http://localhost:1234/v1")
         await pilot.pause()
         _pick(app.screen, "")
         await pilot.pause()
         _pick(app.screen, "qwen3-14b")
+        await pilot.pause()
+        _pick(app.screen, "2 · Default target language")
         await pilot.pause()
         _pick(app.screen, "en")  # target language
         await pilot.pause()
@@ -261,7 +272,9 @@ async def test_settings_menu_drives_each_stage_then_saves(tmp_path, monkeypatch)
         assert loaded.translation.default_target == "en"
         # persisted at every stage save, but the host is notified ONCE at close
         assert saved == []
-        await pilot.press("escape")  # menu -> close settings (session ends)
+        await pilot.press("escape")  # step menu -> top menu
+        await pilot.pause()
+        await pilot.press("escape")  # top menu -> close settings (session ends)
         await pilot.pause()
         assert saved == [True]
 
@@ -287,26 +300,38 @@ async def test_settings_guided_flow_cloud_offers_reasoning(tmp_path, monkeypatch
         await app.push_screen(screen)
         await pilot.pause()
 
-        # menu -> Transcribe (OpenAI) -> model + source lang, then back to menu
+        # menu -> Transcribe (OpenAI): step menu = connect, model, language
         _pick(app.screen, "Transcribe  —  model + source language")
         await pilot.pause()
         _pick(app.screen, "OpenAI provider")
         await pilot.pause()
+        _pick(app.screen, "1 · Connect — OpenAI API key")
+        await pilot.pause()
         _pick(app.screen, "sk-test")  # API key
         await pilot.pause()
+        _pick(app.screen, "2 · Select model — live list")
+        await pilot.pause()
         _pick(app.screen, "whisper-1")
+        await pilot.pause()
+        _pick(app.screen, "3 · Source language — or auto-detect")
         await pilot.pause()
         _pick(app.screen, "")
         await pilot.pause()  # source language: auto-detect
 
-        # menu -> Translation (cloud) -> model -> reasoning
+        # step menu -> top menu -> Translation (cloud): connect, model, reasoning
+        await pilot.press("escape")
+        await pilot.pause()
         _pick(app.screen, "Translation  —  model + target language")
         await pilot.pause()
         _pick(app.screen, "Cloud provider")
         await pilot.pause()
+        _pick(app.screen, "1 · Connect — provider + API key")
+        await pilot.pause()
         _pick(app.screen, "OpenCode Zen (opencode-zen)")
         await pilot.pause()
         _pick(app.screen, "oc-key")
+        await pilot.pause()
+        _pick(app.screen, "2 · Select model + reasoning")
         await pilot.pause()
         _pick(app.screen, "glm-5.2")
         await pilot.pause()
@@ -364,3 +389,48 @@ async def test_escape_returns_to_repl_from_settings():
         await pilot.pause()
 
         assert isinstance(app.screen, ReplScreen)
+
+
+async def test_api_key_input_prefills_stored_key(tmp_path):
+    """Connect always asks — prefilled + selected so typing replaces the old key."""
+    from subforge.tui.app import SubForgeApp
+    from subforge.tui.screens.settings import ApiKeyInputScreen
+
+    app = SubForgeApp()
+    async with app.run_test() as pilot:
+        screen = ApiKeyInputScreen("OpenAI API key", initial="sk-old")
+        await app.push_screen(screen)
+        await pilot.pause()
+
+        field = screen.query_one("Input")
+        assert field.value == "sk-old"
+        assert field.selection.start == 0 and field.selection.end == 6  # all selected
+
+
+async def test_connect_step_asks_even_with_stored_key(tmp_path, monkeypatch):
+    """Translation cloud Connect: stored key does NOT skip the key prompt."""
+    from subforge.tui.app import SubForgeApp
+    from subforge.tui.screens.settings import ApiKeyInputScreen, SettingsScreen
+
+    monkeypatch.setenv("SUBFORGE_CONFIG", str(tmp_path / "config.json"))
+    app = SubForgeApp(app_config=AppConfig())
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        cfg = AppConfig(
+            translation={"source": "provider", "provider": "opencode-go", "api_key": "sk-stored"}
+        )
+        screen = SettingsScreen(cfg)
+        await app.push_screen(screen)
+        await pilot.pause()
+
+        _pick(app.screen, "Translation  —  model + target language")
+        await pilot.pause()
+        _pick(app.screen, "Cloud provider")
+        await pilot.pause()
+        _pick(app.screen, "1 · Connect — provider + API key")
+        await pilot.pause()
+        _pick(app.screen, "OpenCode Go (opencode-go)")
+        await pilot.pause()
+
+        assert isinstance(app.screen, ApiKeyInputScreen)
+        assert app.screen.query_one("Input").value == "sk-stored"

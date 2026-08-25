@@ -4,6 +4,7 @@ The pipeline owns NO business logic: it sequences stages, records explicit
 state, persists after every transition, and never reruns COMPLETED stages.
 """
 
+import json
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -118,6 +119,27 @@ class Pipeline:
             self._save(project)  # persist FAILED state recorded by service
             raise StageError(f"[ERROR] translation to '{target_language}' failed: {exc}") from exc
         self._save(project)
+        self._write_translation_artifact(target_language, project)
+
+    def _write_translation_artifact(self, target_language: str, project: Project) -> None:
+        """Per-language artifact mirroring transcripts/source.json (ARCH §21).
+
+        Written only after the run fully succeeds; retries re-render in place.
+        The canonical storage stays project.json — this file is a durable,
+        inspectable snapshot of the batch output for that language.
+        """
+        (self.dir / "translations").mkdir(exist_ok=True)
+        artifact = {
+            "language": target_language,
+            "segments": [
+                {"id": seg.id, "text": seg.translations.get(target_language, "")}
+                for seg in project.segments
+            ],
+        }
+        (self.dir / "translations" / f"{target_language}.json").write_text(
+            json.dumps(artifact, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
 
     # ---- resumability ------------------------------------------------------
 

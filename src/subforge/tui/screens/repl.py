@@ -623,9 +623,14 @@ class ReplScreen(Screen[None]):
         self.log_line(f"▸ exported: {names}")
 
     def _cmd_settings(self, arg: str) -> None:
+        # Load FRESH from disk: manual edits to config.json are honored instead
+        # of being overwritten by the boot-time snapshot (PRD §20 TUI-first).
+        from subforge.config.app_config import load_app_config
         from subforge.tui.screens.settings import SettingsScreen
 
-        self._host.push_screen(SettingsScreen(self._host.app_config, on_saved=self.reload_config))
+        self._host.push_screen(
+            SettingsScreen(load_app_config(), on_saved=self.reload_config)
+        )
 
     def _cmd_wizard(self, arg: str) -> None:
         from subforge.tui.screens.setup_wizard import FirstRunSetupScreen

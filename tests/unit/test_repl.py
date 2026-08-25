@@ -501,24 +501,36 @@ async def test_settings_session_reloads_config_once(tmp_path, monkeypatch):
         await pilot.pause()
         _pick(app.screen, "Local (WhisperX)")
         await pilot.pause()
+        _pick(app.screen, "1 · Select model — Whisper sizes for your machine")
+        await pilot.pause()
         _pick(app.screen, "small · Lightweight")
         await pilot.pause()
+        _pick(app.screen, "2 · Source language — or auto-detect")
+        await pilot.pause()
         _pick(app.screen, "id")
+        await pilot.pause()
+        await pilot.press("escape")  # step menu -> top menu
         await pilot.pause()
         _pick(app.screen, "Translation  —  model + target language")
         await pilot.pause()
         _pick(app.screen, "Local server (LM Studio / Ollama)")
         await pilot.pause()
+        _pick(app.screen, "1 · Select model — server URL + model")
+        await pilot.pause()
         _pick(app.screen, "http://localhost:1234/v1")
         await pilot.pause()
+        _pick(app.screen, "")
+        await pilot.pause()
         _pick(app.screen, "qwen3-14b")
+        await pilot.pause()
+        _pick(app.screen, "2 · Default target language")
         await pilot.pause()
         _pick(app.screen, "en")
         await pilot.pause()
 
-        await pilot.press("escape")  # menu -> close settings
+        await pilot.press("escape")  # step menu -> top menu
         await pilot.pause()
-        await pilot.press("escape")  # settings modal pops too
+        await pilot.press("escape")  # top menu -> close settings
         await pilot.pause()
         assert isinstance(app.screen, ReplScreen)
 
@@ -668,3 +680,29 @@ async def test_arrow_up_with_empty_history_is_harmless(tmp_path):
         await pilot.press("up")
         await pilot.pause()
         assert prompt.value == "draft"  # untouched, no crash
+
+
+async def test_settings_loads_fresh_config_from_disk(tmp_path, monkeypatch):
+    """/settings reads config.json from disk: manual edits are honored, not
+    overwritten by the boot-time snapshot."""
+    import json as _json
+
+    monkeypatch.setenv("SUBFORGE_CONFIG", str(tmp_path / "config.json"))
+    (tmp_path / "config.json").write_text("{}")
+    app = SubForgeApp(app_config=AppConfig())
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        # user edits the config file while the app is running
+        (tmp_path / "config.json").write_text(
+            _json.dumps({"translation": {"source": "local", "model": "qwen3-14b"}})
+        )
+
+        repl = app.repl
+        repl.run_command("/settings")
+        await pilot.pause()
+
+        from subforge.tui.screens.settings import SettingsScreen
+
+        settings = app.screen_stack[-2]
+        assert isinstance(settings, SettingsScreen)
+        assert settings.cfg.translation.model == "qwen3-14b"  # fresh, not boot snapshot
