@@ -71,10 +71,14 @@ stop at transcription; existing translation tools don't understand subtitles.
 │    Translate                                             │
 │    Review Translation                                    │
 │    Export SRT / ASS                                      │
+│    Settings                                              │
 │                                                          │
 │ Status: Ready                                    q: Quit │
 └──────────────────────────────────────────────────────────┘
 ```
+
+The Settings screen offers both **re-running the setup wizard** (prefilled with current
+values) and direct manual editing of every transcription/translation option.
 
 End-to-end flow:
 
@@ -92,8 +96,9 @@ final_audio.wav
  subtitle.id.srt · subtitle.en.srt · subtitle.en.ass …
 ```
 
-Setup happens once inside the TUI (**Settings**) and can be changed later without
-restarting the project:
+Setup happens inside the TUI (**Settings**, reachable from the main menu or `s`) and
+can be changed at any time without restarting the project — including re-running the
+full setup wizard:
 
 1. **Transcribe** — *Local*: pick/install a Whisper model sized for your machine;
    or *Provider*: paste your OpenAI API key → pick a model from the live list.
