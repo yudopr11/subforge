@@ -1,0 +1,64 @@
+"""App-level configuration typed by the user in the TUI.
+
+Primary configuration path: NO .env step for creators. Keys are entered in the
+Setup/Settings screens and stored here. File holds PLAINTEXT SECRETS — atomic
+writes and 0600 permissions are mandatory. Never commit, never log contents.
+"""
+
+import os
+import sys
+from pathlib import Path
+from typing import Literal
+
+from pydantic import BaseModel
+
+
+class TranscriptionConfig(BaseModel):
+    provider: Literal["local", "openai"] = "local"
+    model: str = ""  # local: large-v3|medium|small|base ; openai: picked from live /models
+    api_key: str = ""  # only meaningful when provider == "openai"
+
+
+class TranslationConfig(BaseModel):
+    source: Literal["local", "provider"] = "local"
+    local_base_url: str = "http://localhost:1234/v1"  # LM Studio / Ollama (OpenAI-compatible)
+    local_api_key: str = ""  # usually empty for local servers
+    provider: Literal["openai", "opencode-zen", "opencode-go"] = "openai"
+    api_key: str = ""
+    model: str = ""
+    reasoning_effort: str = ""  # MUST be one of the model's discovered values (Task 21)
+    batch_size: int = 5  # PRD §11 contextual batch of five segments
+
+
+class AppConfig(BaseModel):
+    transcription: TranscriptionConfig = TranscriptionConfig()
+    translation: TranslationConfig = TranslationConfig()
+
+
+def default_config_path() -> Path:
+    env = os.environ.get("SUBFORGE_CONFIG")
+    if env:
+        return Path(env)
+    return Path.home() / ".config" / "subforge" / "config.json"
+
+
+def save_app_config(config: AppConfig, path: Path | None = None) -> Path:
+    target = path or default_config_path()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    tmp = target.with_suffix(".json.tmp")
+    tmp.write_text(config.model_dump_json(indent=2), encoding="utf-8")
+    os.replace(tmp, target)
+    if os.name == "posix":
+        os.chmod(target, 0o600)
+    return target
+
+
+def load_app_config(path: Path | None = None) -> AppConfig:
+    target = path or default_config_path()
+    if not target.exists():
+        return AppConfig()
+    try:
+        return AppConfig.model_validate_json(target.read_text(encoding="utf-8"))
+    except ValueError as exc:
+        print(f"[WARN] Ignoring corrupt config file {target}: {exc}", file=sys.stderr)
+        return AppConfig()
