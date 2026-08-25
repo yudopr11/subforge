@@ -6,7 +6,7 @@ model install. Esc on the wizard skips setup — guided Settings kick in later.
 """
 
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, ClassVar, cast
+from typing import TYPE_CHECKING, Any, ClassVar, Protocol, cast
 
 from textual.app import ComposeResult
 from textual.binding import Binding
@@ -19,9 +19,15 @@ from subforge.config.providers import TRANSLATION_PRESETS
 from subforge.tui.screens.model_manager import ModelManagerScreen
 from subforge.tui.screens.model_picker import ModelPickerScreen
 from subforge.tui.screens.project import ChoiceScreen
-from subforge.tui.screens.settings import ApiKeyInputScreen, UrlInputScreen
+from subforge.tui.screens.settings import (
+    ApiKeyInputScreen,
+    ReasoningPickerScreen,
+    TextInputScreen,
+    UrlInputScreen,
+)
 
 if TYPE_CHECKING:
+    from subforge.providers.capabilities import ReasoningSpec
     from subforge.tui.app import SubForgeApp
 
 Loader = Callable[[], list[str]]
@@ -41,12 +47,14 @@ class FirstRunSetupScreen(Screen[None]):
         on_done: Callable[[], None] | None = None,
         loader_factory: Callable[[str], Loader] | None = None,
         model_manager_factory: Callable[[], LocalModelManager] | None = None,
+        capability_client: object | None = None,
     ) -> None:
         super().__init__()
         self.cfg = AppConfig()
         self.on_done = on_done
         self._loader_factory = loader_factory
         self._mm_factory = model_manager_factory or LocalModelManager
+        self._cap_client = capability_client
 
     # ---- rendering -------------------------------------------------------
 
@@ -138,6 +146,21 @@ class FirstRunSetupScreen(Screen[None]):
         """Accept a raw id ('small') or a picker entry ('small · Lightweight …')."""
         self.cfg.transcription.model = entry.split(" · ")[0]
         self._set_status(f"Transcription: {self.cfg.transcription.provider} · {self.cfg.transcription.model}")
+        self._ask_source_language()
+
+    def _ask_source_language(self) -> None:
+
+        self._push(
+            TextInputScreen(
+                "Audio source language",
+                current=self.cfg.transcription.language,
+                placeholder="Enter for auto-detect (e.g. id, en, ja)",
+            ),
+            lambda lang: self._source_language_chosen(lang or ""),
+        )
+
+    def _source_language_chosen(self, language: str) -> None:
+        self.cfg.transcription.language = language.strip().lower()
         if self.cfg.transcription.provider == "local":
             self._offer_local_install()
         else:
@@ -215,7 +238,68 @@ class FirstRunSetupScreen(Screen[None]):
 
     def apply_tl_model(self, entry: str) -> None:
         self.cfg.translation.model = entry.split(" · ")[0]
-        self.finish()
+        self._ask_reasoning()
+
+    def _ask_reasoning(self) -> None:
+        """Offer EXACTLY this model's effort vocabulary (PRD §15).
+
+        Skipped silently for local servers and models without one.
+        """
+        t = self.cfg.translation
+        spec = self._current_reasoning_spec()
+        if t.source != "provider" or spec.kind != "effort":
+            self._ask_default_target()
+            return
+
+        self._set_status("Optional · reasoning effort offered by this model")
+
+        def chosen(value: str | None) -> None:
+            if value:
+                self.cfg.translation.reasoning_effort = value.strip().lower()
+            self._ask_default_target()
+
+        self._push(
+            ReasoningPickerScreen(spec),
+            lambda value: chosen(str(value)) if value else chosen(None),
+        )
+
+    def _current_reasoning_spec(self) -> "ReasoningSpec":
+        from subforge.providers.capabilities import (
+            PROVIDER_TO_CATALOG,
+            CapabilityClient,
+            ReasoningSpec,
+        )
+
+        t = self.cfg.translation
+        try:
+
+            class _Cap(Protocol):
+                def reasoning_spec(self, provider_preset: str, model_id: str) -> "ReasoningSpec": ...
+
+            client = cast(_Cap, self._cap_client if self._cap_client is not None else CapabilityClient())
+            catalog_id = PROVIDER_TO_CATALOG[t.provider]
+            return client.reasoning_spec(catalog_id, t.model)
+        except Exception:  # noqa: BLE001 — offline/degraded catalog hides the control
+            return ReasoningSpec("unsupported", ())
+
+    def _ask_default_target(self) -> None:
+
+        self._set_status("Almost done — which language do you translate into most?")
+
+        def target_chosen(lang: str | None) -> None:
+            chosen = (lang or self.cfg.translation.default_target or "en").strip().lower()
+            if chosen:
+                self.cfg.translation.default_target = chosen
+            self.finish()
+
+        self._push(
+            TextInputScreen(
+                "Default target language",
+                current=self.cfg.translation.default_target,
+                placeholder="e.g. en",
+            ),
+            target_chosen,
+        )
 
     # ---- finish ----------------------------------------------------------------
 

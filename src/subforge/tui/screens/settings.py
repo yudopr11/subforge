@@ -52,6 +52,33 @@ class ApiKeyInputScreen(ModalScreen[str | None]):
         self.dismiss(None)
 
 
+class TextInputScreen(ModalScreen[str | None]):
+    """Generic single-line prompt (Enter submits, Esc cancels)."""
+
+    BINDINGS: ClassVar[list[Binding | tuple[str, str] | tuple[str, str, str]]] = [
+        ("escape", "cancel", "Cancel")
+    ]
+
+    def __init__(self, title: str, current: str = "", placeholder: str = "") -> None:
+        super().__init__()
+        self.picker_title = title
+        self.current = current
+        self.placeholder_text = placeholder
+        self.result: str | None = None
+
+    def compose(self) -> ComposeResult:
+        yield Label(f"[b]{self.picker_title}[/b]")
+        yield Input(value=self.current, placeholder=self.placeholder_text)
+        yield Label("Enter confirm · Esc cancel")
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        self.result = event.input.value.strip() or None
+        self.dismiss(self.result)
+
+    def action_cancel(self) -> None:
+        self.dismiss(None)
+
+
 class ReasoningPickerScreen(ModalScreen[str | None]):
     """Offers EXACTLY the effort values discovered for the selected model."""
 
@@ -154,6 +181,7 @@ class SettingsScreen(Screen[None]):
                     yield RadioButton(label="Local (WhisperX)", value=self.cfg.transcription.provider == "local", id="tc-local")
                     yield RadioButton(label="OpenAI", value=self.cfg.transcription.provider == "openai", id="tc-openai")
                 yield Button(f"Model: {self._model_label()}", id="btn-tc-model")
+                yield Button(f"Audio language: {self._lang_label()}", id="btn-tc-lang")
                 yield Button("Manage local models…", id="btn-tc-manage")
                 yield Button("API key…", id="btn-tc-key")
             with Vertical(id="tl-section"):
@@ -171,6 +199,7 @@ class SettingsScreen(Screen[None]):
                 yield Button(f"Model: {self.cfg.translation.model or '—'}", id="btn-tl-model")
                 yield Button(f"Reasoning: {self._reasoning_label()}", id="btn-tl-reasoning")
                 yield Button(f"Batch size: {self.cfg.translation.batch_size}", id="btn-tl-batch")
+                yield Button(f"Target language: {self.cfg.translation.default_target or '—'}", id="btn-tl-target")
             with Horizontal():
                 yield Button("Save", variant="primary", id="btn-save")
                 yield Button("Cancel", id="btn-cancel")
@@ -218,6 +247,28 @@ class SettingsScreen(Screen[None]):
 
     def apply_tc_key(self, key: str) -> None:
         self.cfg.transcription.api_key = key
+
+    def _lang_label(self) -> str:
+        return self.cfg.transcription.language or "auto-detect"
+
+    def apply_tc_language(self, language: str) -> None:
+        self.cfg.transcription.language = language.strip().lower()
+        if self.is_mounted:
+            try:
+                self.query_one("#btn-tc-lang", Button).label = f"Audio language: {self._lang_label()}"
+            except NoMatches:
+                pass
+
+    def apply_default_target(self, language: str) -> None:
+        language = language.strip().lower()
+        if not language:
+            return
+        self.cfg.translation.default_target = language
+        if self.is_mounted:
+            try:
+                self.query_one("#btn-tl-target", Button).label = f"Target language: {language}"
+            except NoMatches:
+                pass
 
     def apply_tc_model(self, model: str) -> None:
         self.cfg.transcription.model = model
@@ -314,10 +365,28 @@ class SettingsScreen(Screen[None]):
             self._cycle_preset()
         elif button_id == "btn-tc-model":
             self._pick_transcription_model()
+        elif button_id == "btn-tc-lang":
+            self._host.push_screen(
+                TextInputScreen(
+                    "Audio source language",
+                    current=self.cfg.transcription.language,
+                    placeholder="empty = auto-detect (e.g. id, en, ja)",
+                ),
+                lambda lang: self.apply_tc_language(lang or ""),
+            )
         elif button_id == "btn-tc-manage":
             self._open_model_manager()
         elif button_id == "btn-tl-model":
             self._pick_translation_model()
+        elif button_id == "btn-tl-target":
+            self._host.push_screen(
+                TextInputScreen(
+                    "Default target language",
+                    current=self.cfg.translation.default_target,
+                    placeholder="e.g. en",
+                ),
+                lambda lang: self.apply_default_target(lang or ""),
+            )
         elif button_id == "btn-tl-reasoning":
             self._pick_reasoning()
 

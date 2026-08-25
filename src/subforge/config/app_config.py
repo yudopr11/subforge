@@ -17,6 +17,7 @@ class TranscriptionConfig(BaseModel):
     provider: Literal["local", "openai"] = "local"
     model: str = ""  # local: large-v3|medium|small|base ; openai: picked from live /models
     api_key: str = ""  # only meaningful when provider == "openai"
+    language: str = ""  # audio source language ("": auto-detect)
 
 
 class TranslationConfig(BaseModel):
@@ -28,6 +29,7 @@ class TranslationConfig(BaseModel):
     model: str = ""
     reasoning_effort: str = ""  # MUST be one of the model's discovered values (Task 21)
     batch_size: int = 5  # PRD §11 contextual batch of five segments
+    default_target: str = "en"  # remembered translation target language
 
 
 class AppConfig(BaseModel):

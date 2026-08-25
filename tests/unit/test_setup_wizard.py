@@ -27,11 +27,13 @@ def _wizard(app: SubForgeApp) -> FirstRunSetupScreen:
 
 def _pick(screen: object, prompt: str) -> None:
     """Drive an OptionList-based modal through its public choose/submit seam."""
+    from subforge.tui.screens.settings import ReasoningPickerScreen
+
     if isinstance(screen, ChoiceScreen):
         screen.choose(prompt)
-    elif isinstance(screen, ModelPickerScreen):
+    elif isinstance(screen, (ReasoningPickerScreen, ModelPickerScreen)):
         screen.on_option_list_option_selected(type("Evt", (), {"option": type("O", (), {"prompt": prompt})()})())
-    elif isinstance(screen, (ApiKeyInputScreen, UrlInputScreen)):
+    elif isinstance(screen, (ApiKeyInputScreen, UrlInputScreen)) or type(screen).__name__ == 'TextInputScreen':
         field = screen.query_one("Input")
         field.value = prompt
         screen.on_input_submitted(type("Evt", (), {"input": field})())
@@ -88,8 +90,13 @@ async def test_happy_path_local_transcription_local_translation(first_run_env):
         _pick(app.screen, "small · Lightweight (~2 GB VRAM)")
         await pilot.pause()
 
-        # install offer -> skip; manager reachable later via Settings
-        assert isinstance(app.screen, ChoiceScreen)
+        from subforge.tui.screens.settings import TextInputScreen
+
+        assert isinstance(app.screen, TextInputScreen)  # source language prompt
+        _pick(app.screen, "id")
+        await pilot.pause()
+
+        assert isinstance(app.screen, ChoiceScreen)  # install offer
         _pick(app.screen, "Later (I'll do it in Settings)")
         await pilot.pause()
 
@@ -106,12 +113,17 @@ async def test_happy_path_local_transcription_local_translation(first_run_env):
         await pilot.pause()
         assert isinstance(app.screen, ModelPickerScreen)
         _pick(app.screen, "qwen3-14b")
+        await pilot.pause()
+        assert isinstance(app.screen, TextInputScreen)  # default target prompt
+        _pick(app.screen, "en")
 
         await pilot.pause()
         cfg = load_app_config(first_run_env)
         assert cfg.transcription.provider == "local"
         assert cfg.transcription.model == "small"
+        assert cfg.transcription.language == "id"
         assert cfg.translation.source == "local"
+        assert cfg.translation.default_target == "en"
         assert cfg.translation.local_base_url == "http://localhost:1234/v1"
         assert cfg.translation.model == "qwen3-14b"
         assert saved_flags == [True]
@@ -126,6 +138,16 @@ async def test_happy_path_openai_and_cloud_provider(first_run_env):
         wizard = _wizard(app)
         wizard._loader_factory = loaders
 
+        class FakeCaps:
+            def reasoning_spec(self, provider_preset, model_id):
+                from subforge.providers.capabilities import ReasoningSpec
+
+                if model_id == "glm-5.2":
+                    return ReasoningSpec("effort", ("high", "max"))
+                return ReasoningSpec("unsupported", ())
+
+        wizard._cap_client = FakeCaps()
+
         _pick(app.screen, "OpenAI provider")           # transcription source
         await pilot.pause()
         assert isinstance(app.screen, ApiKeyInputScreen)
@@ -135,6 +157,11 @@ async def test_happy_path_openai_and_cloud_provider(first_run_env):
         _pick(app.screen, "whisper-1")                 # loader injected: no network
         await pilot.pause()
 
+        from subforge.tui.screens.settings import TextInputScreen
+
+        assert isinstance(app.screen, TextInputScreen)
+        _pick(app.screen, "ja")  # source language
+        await pilot.pause()
         _pick(app.screen, "Cloud provider")
         await pilot.pause()
         _pick(app.screen, "OpenCode Zen (opencode-zen)")
@@ -143,15 +170,31 @@ async def test_happy_path_openai_and_cloud_provider(first_run_env):
         await pilot.pause()
         _pick(app.screen, "glm-5.2")
         await pilot.pause()
+        from subforge.tui.screens.settings import ReasoningPickerScreen
+        from subforge.tui.screens.settings import TextInputScreen as TIS
+
+        # PRD §15: exactly this model's discovered vocabulary is offered
+        assert isinstance(app.screen, ReasoningPickerScreen)
+        options = [str(o.prompt) for o in app.screen.query_one("OptionList").options]
+        assert options == ["high", "max"]
+        _pick(app.screen, "max")
+        await pilot.pause()
+
+        assert isinstance(app.screen, TIS)
+        _pick(app.screen, "es")  # default target
+        await pilot.pause()
 
         cfg = load_app_config(first_run_env)
         assert cfg.transcription.provider == "openai"
+        assert cfg.transcription.language == "ja"
+        assert cfg.translation.default_target == "es"
         assert cfg.transcription.api_key == "sk-test"
         assert cfg.transcription.model == "whisper-1"
         assert cfg.translation.source == "provider"
         assert cfg.translation.provider == "opencode-zen"
         assert cfg.translation.api_key == "oc-key"
         assert cfg.translation.model == "glm-5.2"
+        assert cfg.translation.reasoning_effort == "max"
 
 
 async def test_incomplete_setup_does_not_save(first_run_env):
@@ -203,6 +246,11 @@ async def test_after_setup_menu_status_refreshes(first_run_env):
         await pilot.pause()
         _pick(app.screen, "small · Lightweight (~2 GB VRAM)")
         await pilot.pause()
+        from subforge.tui.screens.settings import TextInputScreen
+
+        assert isinstance(app.screen, TextInputScreen)
+        _pick(app.screen, "")  # auto-detect
+        await pilot.pause()
         _pick(app.screen, "Later (I'll do it in Settings)")
         await pilot.pause()
         _pick(app.screen, "Local server (LM Studio / Ollama)")
@@ -212,6 +260,9 @@ async def test_after_setup_menu_status_refreshes(first_run_env):
         _pick(app.screen, "")
         await pilot.pause()
         _pick(app.screen, "m1")
+        await pilot.pause()
+        assert isinstance(app.screen, TextInputScreen)
+        _pick(app.screen, "en")  # default target
         await pilot.pause()
 
         assert isinstance(app.screen, MainMenuScreen)
@@ -224,3 +275,32 @@ def _menu_import_guard() -> None:  # keep explicit import referenced for readers
     from subforge.tui.screens.main_menu import MainMenuScreen  # noqa: F401
 
     assert ProjectPickerScreen and NewProjectScreen and ModelManagerScreen
+
+
+async def test_reasoning_skipped_for_non_reasoning_model_and_local(first_run_env):
+    """No vocabulary / local server -> straight to target-language prompt."""
+    from subforge.providers.capabilities import ReasoningSpec
+    from subforge.tui.screens.settings import ReasoningPickerScreen, TextInputScreen
+
+    class NoCaps:
+        def reasoning_spec(self, provider_preset, model_id):
+            return ReasoningSpec("unsupported", ())
+
+    app = SubForgeApp()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        wizard = _wizard(app)
+        wizard._cap_client = NoCaps()
+
+        # local server: never asked, regardless of model
+        wizard.cfg.translation.source = "local"
+        wizard.apply_tl_model("qwen3-14b")
+        assert not isinstance(app.screen, ReasoningPickerScreen)
+        assert isinstance(app.screen, TextInputScreen)  # target-language prompt follows
+
+        # cloud but non-reasoning model: also skipped
+        wizard2_cfg_source = "provider"
+        wizard.cfg.translation.source = wizard2_cfg_source  # type: ignore[assignment]
+        wizard.cfg.translation.provider = "opencode-zen"
+        wizard.apply_tl_model("nemotron")
+        assert not isinstance(app.screen, ReasoningPickerScreen)
