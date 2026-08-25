@@ -57,54 +57,70 @@ stop at transcription; existing translation tools don't understand subtitles.
 - Real-time/live captioning.
 - Being an LLM prompt playground — translation is a focused, constrained task.
 
-## 7. Primary UX flow (Terminal UI)
+## 7. Primary UX flow — subtitle REPL
 
-`subforge` launches the Textual TUI. The main menu matches this mockup:
-
-```
-┌──────────────────────────────────────────────────────────┐
-│ SUBFORGE — local-first subtitles                         │
-│                                                          │
-│  ▸ Select Audio / Open Project                           │
-│    Transcribe                                            │
-│    Review Captions                                       │
-│    Translate                                             │
-│    Review Translation                                    │
-│    Export SRT / ASS                                      │
-│    Settings                                              │
-│                                                          │
-│ ↑↓ Enter · n new · o open · s settings · m spk    q: Quit│
-└──────────────────────────────────────────────────────────┘
-```
-
-The Settings screen offers both **re-running the setup wizard** (prefilled with current
-values) and direct manual editing of every transcription/translation option.
-
-End-to-end flow:
+SubForge's home is a **transcript-driven REPL**, modeled on terminal coding tools
+(pi, Claude Code, Codex CLI): a scrolling session log, a single `>` prompt, and a thin
+footer status line. There is no list menu — commands do the work.
 
 ```
-final_audio.wav
-      ↓
- Transcribe (local WhisperX or remote STT)
-      ↓
- Review Captions (edit text; timing stays application-owned)
-      ↓
- Translate   (LM Studio / Ollama / OpenAI-compatible LLM)
-      ↓
- Review Translation
-      ↓
- subtitle.id.srt · subtitle.en.srt · subtitle.en.ass …
+ subforge v0.1.0                     episode · transcribe ✓ · translate ● · export ○
+ ────────────────────────────────────────────────────────────────────────────
+   Local-first subtitles. Type /new to start, ? for help.
+
+   ▸ created project 'episode' from episode.wav
+   ✓ transcribed — 24 captions (local/small)
+   ▸ translating to 'en'…
+   ✓ translated — 24 segments
+
+ > /translate ja
+ ────────────────────────────────────────────────────────────────────────────
+ /new /open /transcribe /review /translate /export /speakers /settings ?  q quit
 ```
 
-Setup happens inside the TUI (**Settings**, reachable from the main menu or `s`) and
-can be changed at any time without restarting the project — including re-running the
-full setup wizard:
+### Commands
+
+| Command | Effect |
+|---|---|
+| `/new <audio>` | create project around an exported audio file and import it |
+| `/open [name|n]` | list recent projects; open by name or list number |
+| `/transcribe` | run the transcription stage (busy-guarded, retryable) |
+| `/review` | caption review overlay (edit text, play segment audio) |
+| `/translate [lang]` | translate into a language code; defaults to remembered target |
+| `/export [formats]` | export SRT/ASS for source + completed translations |
+| `/speakers` | name anonymous diarization speakers |
+| `/settings` | manual editing of every transcription/translation option |
+| `/wizard` | re-run the setup wizard, prefilled with current values |
+| `/models` | local Whisper model cache/install manager |
+| `/status` | print pipeline stage states |
+| `/help`, `?` | command list |
+| `/quit`, Ctrl+C | exit |
+
+Setup happens inside the TUI: **Settings** (`/settings`) for manual edits, or `/wizard`
+to re-run guided setup prefilled with current values. Providers rebuild without
+restarting the project:
 
 1. **Transcribe** — *Local*: pick/install a Whisper model sized for your machine;
    or *Provider*: paste your OpenAI API key → pick a model from the live list.
 2. **Translate** — *Local*: point at your LM Studio/Ollama URL → pick a model;
    or *Provider*: choose OpenAI / OpenCode Zen / OpenCode Go → paste API key →
    pick a model (+ reasoning level if the model offers one).
+
+### Interaction model — keyboard only
+
+The TUI is CLI-style: **every action must be reachable from the keyboard, and no flow
+may require the mouse.**
+
+- Global: `Ctrl+C` exit · `Esc` back / cancel / dismiss overlays.
+- Home prompt accepts slash commands (`/transcribe`) and bare aliases (`transcribe`).
+- Review/edit/speaker/model screens are full-keyboard overlays launched by commands;
+  each renders its own key legend on-screen (`p` play, `x` stop, `i` install, …).
+- Forms: `Tab` / arrows move focus; `Enter` submits the focused field.
+- Mouse support is incidental convenience, never a requirement.
+
+Every interactive screen ships its key legend on-screen so the interface stays
+discoverable without documentation.
+
 
 ## 8. Hardware profiles & local model management
 

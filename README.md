@@ -67,24 +67,31 @@ Whisper models download automatically on first use and are cached locally.
 ## Quick Start
 
 ```bash
-subforge            # launches the TUI
+subforge            # launches the subtitle REPL
 ```
 
-1. **First launch opens setup**: choose where Transcription runs (*Local* WhisperX with
-   model install, or OpenAI with API key + live model list) and where Translation runs
-   (*Local* LM Studio/Ollama URL [+ optional key], or OpenAI / OpenCode Zen / OpenCode Go).
-   Reasoning effort is offered when the chosen model supports it; pick your source and
-   default target languages. Everything can be changed later in Settings (`s`).
-2. **Select Audio** (`n`) — recent projects are listed to reopen, or create new from an
-   exported audio file.
-3. **Transcribe** — one run at a time; failures show a retryable `[ERROR]` status.
-4. **Review Captions** — edit text inline (`Ctrl+S` saves) and press `p` to play the
-   segment's audio range to verify timing (requires ffmpeg — see Installation).
-5. **Translate** — choose the target language, then review side-by-side.
-6. **Export SRT / ASS** — writes `exports/source.*` plus every completed translation.
+First launch opens guided setup: pick where Transcription runs (*Local* WhisperX with
+model install, or OpenAI with API key + live model list) and where Translation runs
+(*Local* LM Studio/Ollama URL [+ optional key], or OpenAI / OpenCode Zen / OpenCode Go).
+Reasoning effort is offered when the chosen model supports it; choose your audio
+language and default target language. Everything is editable later via `/settings`,
+or re-run `/wizard` anytime.
 
-Speakers from diarization can be named via the speakers screen (`m`). `Esc` always
-returns to the main menu.
+Then work in commands:
+
+```
+ > /new podcast/final_audio.wav      # create project + import audio
+ ✓ created project 'final_audio'
+ > /transcribe                       # local WhisperX or OpenAI — as configured
+ ✓ transcribed — 24 captions
+ > /review                           # edit text, p plays the segment audio
+ > /translate en                     # or just /translate for your default target
+ ✓ translated — 24 segments
+ > /export                           # writes exports/source.* and exports/en.*
+```
+
+`?` lists all commands (`/open`, `/speakers`, `/models`, `/status`, `/settings`,
+`/wizard`, `/quit`). `Esc` backs out of any overlay. Audio preview requires ffmpeg.
 
 Changed your mind later? Everything above can be switched in the Settings menu at any time — no project restart.
 

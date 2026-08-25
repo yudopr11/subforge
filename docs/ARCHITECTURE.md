@@ -52,6 +52,11 @@ Screens are keyboard-first by contract (PRD §7):
 - Widgets that consume typing (e.g. `Input`) naturally shadow single-letter bindings
   while focused, preventing collisions.
 
+- The home screen is a **REPL shell**: a scrolling transcript log, one bottom prompt,
+  and a footer status line (project · stage glyphs · active models). Commands are parsed
+  by a registry (`repl.py::COMMANDS`) that routes to `app/*` services — the screen adds
+  presentation only (rule 7). Review/edit screens are overlays pushed above the REPL.
+
 ## 4. Core runtime components
 
 `Project`/`Segment` (models) → `Pipeline` orchestrates stages over them → providers do
