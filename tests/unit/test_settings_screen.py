@@ -224,3 +224,103 @@ async def test_wizard_button_present_in_dom():
         await pilot.pause()
         buttons = [str(b.label) for b in app.screen.query("Button")]
         assert any("wizard" in b.lower() for b in buttons)
+
+
+# ---- keyboard-only interaction (ARCH §3.2) ---------------------------------
+
+
+async def test_keybindings_drive_settings(tmp_path, monkeypatch):
+    from subforge.tui.app import SubForgeApp
+    from subforge.tui.screens.settings import SettingsScreen
+
+    monkeypatch.setenv("SUBFORGE_CONFIG", str(tmp_path / "config.json"))
+    app = SubForgeApp()
+    async with app.run_test() as pilot:
+        screen = SettingsScreen(AppConfig())
+        await app.push_screen(screen)
+        await pilot.pause()
+
+        # 't' cycles transcribe source local -> openai
+        await pilot.press("t")
+        assert screen.cfg.transcription.provider == "openai"
+        await pilot.press("t")
+        assert screen.cfg.transcription.provider == "local"
+
+        # 'c' cycles translate source local -> provider
+        await pilot.press("c")
+        assert screen.cfg.translation.source == "provider"
+
+        # 'o' opens the audio-language prompt
+        from subforge.tui.screens.settings import TextInputScreen
+
+        await pilot.press("o")
+        assert isinstance(app.screen, TextInputScreen)
+        app.screen.action_cancel()  # type: ignore[union-attr]
+        await pilot.pause()
+
+
+async def test_wizard_and_save_keys(tmp_path, monkeypatch):
+    from subforge.tui.app import SubForgeApp
+    from subforge.tui.screens.settings import SettingsScreen
+    from subforge.tui.screens.setup_wizard import FirstRunSetupScreen
+
+    monkeypatch.setenv("SUBFORGE_CONFIG", str(tmp_path / "config.json"))
+    app = SubForgeApp()
+    async with app.run_test() as pilot:
+        screen = SettingsScreen(AppConfig(transcription={"provider": "local", "model": "small"}))
+        await app.push_screen(screen)
+        await pilot.pause()
+
+        await pilot.press("w")  # wizard
+        await pilot.pause()
+        for s in reversed(list(app.screen_stack)):
+            if isinstance(s, FirstRunSetupScreen):
+                break
+        else:
+            raise AssertionError("wizard not opened by 'w'")
+        app.screen.action_cancel()  # type: ignore[union-attr]  # leave wizard step modal
+        await pilot.pause()
+        app.screen.action_cancel()  # type: ignore[union-attr]  # leave wizard itself
+        await pilot.pause()
+
+        await pilot.press("ctrl+s")  # save without mouse
+        await pilot.pause()
+        assert (tmp_path / "config.json").exists()
+
+
+async def test_escape_returns_to_menu_from_settings():
+    from subforge.tui.app import SubForgeApp
+    from subforge.tui.screens.main_menu import MainMenuScreen
+    from subforge.tui.screens.settings import SettingsScreen
+
+    app = SubForgeApp()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        menu = app.screen
+        await app.push_screen(SettingsScreen(AppConfig()))
+        await pilot.pause()
+
+        await pilot.press("escape")
+        await pilot.pause()
+
+        assert isinstance(app.screen, MainMenuScreen)
+        assert menu is not None
+
+
+def test_keymap_legend_rendered():
+    from subforge.tui.app import SubForgeApp
+    from subforge.tui.screens.settings import SettingsScreen
+
+    async def go():
+        app = SubForgeApp()
+        async with app.run_test() as pilot:
+            await app.push_screen(SettingsScreen(AppConfig()))
+            await pilot.pause()
+            labels = " ".join(str(l.render()) for l in app.screen.query("Label"))
+            return labels
+
+    import asyncio
+
+    labels = asyncio.get_event_loop_policy().new_event_loop().run_until_complete(go())
+    for key in ("w", "t", "y", "k", "o", "c", "p", "i", "d", "n", "r", "b", "g"):
+        assert key in labels

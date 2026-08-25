@@ -32,6 +32,7 @@ class ReviewTranslateScreen(ModalScreen[None]):
             yield Label("Translation Review")
             yield DataTable(id="review")
             yield Input(placeholder="Fix translation; Enter applies to selected row", id="fix")
+            yield Label("Enter apply · Esc back", id="hints")
             yield Label("", id="export-status")
 
     def on_mount(self) -> None:

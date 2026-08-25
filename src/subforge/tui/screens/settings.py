@@ -13,7 +13,7 @@ from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.css.query import NoMatches
 from textual.screen import ModalScreen, Screen
-from textual.widgets import Button, Input, Label, OptionList, RadioButton
+from textual.widgets import Button, Input, Label, OptionList
 
 from subforge.app.provider_factory import validate_reasoning_choice
 from subforge.config.app_config import AppConfig, save_app_config
@@ -30,9 +30,31 @@ def refresh_reasoning(current: str, spec: ReasoningSpec) -> str:
 
 
 class ApiKeyInputScreen(ModalScreen[str | None]):
+    KEYMAP: ClassVar[str] = (
+        "w wizard · t transcribe src · y model · k key · o audio lang · "
+        "c translate src · n url · p preset · i key · d model · "
+        "r reasoning · b batch · g target lang · ctrl+s save · esc back"
+    )
+
     BINDINGS: ClassVar[list[Binding | tuple[str, str] | tuple[str, str, str]]] = [
-        ("escape", "cancel", "Cancel")
+        ("escape", "cancel", "Back"),
+        ("w", "wizard", "Wizard"),
+        ("t", "tc_source", "Transcribe source"),
+        ("y", "tc_model", "Transcribe model"),
+        ("k", "tc_key", "Transcribe key"),
+        ("o", "tc_lang", "Audio language"),
+        ("c", "tl_source", "Translate source"),
+        ("n", "tl_url", "Base URL"),
+        ("p", "tl_preset", "Cloud preset"),
+        ("i", "tl_key", "Translate key"),
+        ("d", "tl_model", "Translate model"),
+        ("r", "reasoning", "Reasoning"),
+        ("b", "batch", "Batch size"),
+        ("g", "target", "Target language"),
+        ("ctrl+s", "save", "Save"),
     ]
+
+    AUTO_FOCUS = "#btn-wizard"
 
     def __init__(self, title: str) -> None:
         super().__init__()
@@ -55,9 +77,31 @@ class ApiKeyInputScreen(ModalScreen[str | None]):
 class TextInputScreen(ModalScreen[str | None]):
     """Generic single-line prompt (Enter submits, Esc cancels)."""
 
+    KEYMAP: ClassVar[str] = (
+        "w wizard · t transcribe src · y model · k key · o audio lang · "
+        "c translate src · n url · p preset · i key · d model · "
+        "r reasoning · b batch · g target lang · ctrl+s save · esc back"
+    )
+
     BINDINGS: ClassVar[list[Binding | tuple[str, str] | tuple[str, str, str]]] = [
-        ("escape", "cancel", "Cancel")
+        ("escape", "cancel", "Back"),
+        ("w", "wizard", "Wizard"),
+        ("t", "tc_source", "Transcribe source"),
+        ("y", "tc_model", "Transcribe model"),
+        ("k", "tc_key", "Transcribe key"),
+        ("o", "tc_lang", "Audio language"),
+        ("c", "tl_source", "Translate source"),
+        ("n", "tl_url", "Base URL"),
+        ("p", "tl_preset", "Cloud preset"),
+        ("i", "tl_key", "Translate key"),
+        ("d", "tl_model", "Translate model"),
+        ("r", "reasoning", "Reasoning"),
+        ("b", "batch", "Batch size"),
+        ("g", "target", "Target language"),
+        ("ctrl+s", "save", "Save"),
     ]
+
+    AUTO_FOCUS = "#btn-wizard"
 
     def __init__(self, title: str, current: str = "", placeholder: str = "") -> None:
         super().__init__()
@@ -82,9 +126,31 @@ class TextInputScreen(ModalScreen[str | None]):
 class ReasoningPickerScreen(ModalScreen[str | None]):
     """Offers EXACTLY the effort values discovered for the selected model."""
 
+    KEYMAP: ClassVar[str] = (
+        "w wizard · t transcribe src · y model · k key · o audio lang · "
+        "c translate src · n url · p preset · i key · d model · "
+        "r reasoning · b batch · g target lang · ctrl+s save · esc back"
+    )
+
     BINDINGS: ClassVar[list[Binding | tuple[str, str] | tuple[str, str, str]]] = [
-        ("escape", "cancel", "Cancel")
+        ("escape", "cancel", "Back"),
+        ("w", "wizard", "Wizard"),
+        ("t", "tc_source", "Transcribe source"),
+        ("y", "tc_model", "Transcribe model"),
+        ("k", "tc_key", "Transcribe key"),
+        ("o", "tc_lang", "Audio language"),
+        ("c", "tl_source", "Translate source"),
+        ("n", "tl_url", "Base URL"),
+        ("p", "tl_preset", "Cloud preset"),
+        ("i", "tl_key", "Translate key"),
+        ("d", "tl_model", "Translate model"),
+        ("r", "reasoning", "Reasoning"),
+        ("b", "batch", "Batch size"),
+        ("g", "target", "Target language"),
+        ("ctrl+s", "save", "Save"),
     ]
+
+    AUTO_FOCUS = "#btn-wizard"
 
     def __init__(self, spec: ReasoningSpec) -> None:
         super().__init__()
@@ -111,9 +177,31 @@ class ReasoningPickerScreen(ModalScreen[str | None]):
 class UrlInputScreen(ModalScreen[str | None]):
     """Enter a local OpenAI-compatible base URL (LM Studio / Ollama)."""
 
+    KEYMAP: ClassVar[str] = (
+        "w wizard · t transcribe src · y model · k key · o audio lang · "
+        "c translate src · n url · p preset · i key · d model · "
+        "r reasoning · b batch · g target lang · ctrl+s save · esc back"
+    )
+
     BINDINGS: ClassVar[list[Binding | tuple[str, str] | tuple[str, str, str]]] = [
-        ("escape", "cancel", "Cancel")
+        ("escape", "cancel", "Back"),
+        ("w", "wizard", "Wizard"),
+        ("t", "tc_source", "Transcribe source"),
+        ("y", "tc_model", "Transcribe model"),
+        ("k", "tc_key", "Transcribe key"),
+        ("o", "tc_lang", "Audio language"),
+        ("c", "tl_source", "Translate source"),
+        ("n", "tl_url", "Base URL"),
+        ("p", "tl_preset", "Cloud preset"),
+        ("i", "tl_key", "Translate key"),
+        ("d", "tl_model", "Translate model"),
+        ("r", "reasoning", "Reasoning"),
+        ("b", "batch", "Batch size"),
+        ("g", "target", "Target language"),
+        ("ctrl+s", "save", "Save"),
     ]
+
+    AUTO_FOCUS = "#btn-wizard"
 
     def __init__(self, current: str) -> None:
         super().__init__()
@@ -154,9 +242,31 @@ class SettingsScreen(Screen[None]):
     seam; widget handlers only collect input and call them.
     """
 
+    KEYMAP: ClassVar[str] = (
+        "w wizard · t transcribe src · y model · k key · o audio lang · "
+        "c translate src · n url · p preset · i key · d model · "
+        "r reasoning · b batch · g target lang · ctrl+s save · esc back"
+    )
+
     BINDINGS: ClassVar[list[Binding | tuple[str, str] | tuple[str, str, str]]] = [
-        ("escape", "cancel", "Cancel")
+        ("escape", "cancel", "Back"),
+        ("w", "wizard", "Wizard"),
+        ("t", "tc_source", "Transcribe source"),
+        ("y", "tc_model", "Transcribe model"),
+        ("k", "tc_key", "Transcribe key"),
+        ("o", "tc_lang", "Audio language"),
+        ("c", "tl_source", "Translate source"),
+        ("n", "tl_url", "Base URL"),
+        ("p", "tl_preset", "Cloud preset"),
+        ("i", "tl_key", "Translate key"),
+        ("d", "tl_model", "Translate model"),
+        ("r", "reasoning", "Reasoning"),
+        ("b", "batch", "Batch size"),
+        ("g", "target", "Target language"),
+        ("ctrl+s", "save", "Save"),
     ]
+
+    AUTO_FOCUS = "#btn-wizard"
 
     def __init__(
         self,
@@ -175,25 +285,22 @@ class SettingsScreen(Screen[None]):
     def compose(self) -> ComposeResult:
         with Vertical():
             yield Label("[b]SubForge Settings[/b] — changes apply immediately, no restart needed")
-            yield Button("Re-run setup wizard…", id="btn-wizard")
+            yield Button("Re-run setup wizard…  [w]", id="btn-wizard")
+            yield Label(f"[dim]{self.KEYMAP}[/dim]", id="keymap")
             with Vertical(id="tc-section"):
                 yield Label("Transcription")
-                with Horizontal():
-                    yield RadioButton(label="Local (WhisperX)", value=self.cfg.transcription.provider == "local", id="tc-local")
-                    yield RadioButton(label="OpenAI", value=self.cfg.transcription.provider == "openai", id="tc-openai")
+                yield Button(
+                    f"Source: {self.cfg.transcription.provider}  [t]", id="btn-tc-source"
+                )
                 yield Button(f"Model: {self._model_label()}", id="btn-tc-model")
                 yield Button(f"Audio language: {self._lang_label()}", id="btn-tc-lang")
                 yield Button("Manage local models…", id="btn-tc-manage")
                 yield Button("API key…", id="btn-tc-key")
             with Vertical(id="tl-section"):
                 yield Label("Translation")
-                with Horizontal():
-                    yield RadioButton(label="Local server", value=self.cfg.translation.source == "local", id="tl-local")
-                    yield RadioButton(
-                        label=f"Cloud ({self.cfg.translation.provider})",
-                        value=self.cfg.translation.source == "provider",
-                        id="tl-provider",
-                    )
+                yield Button(
+                    f"Source: {self.cfg.translation.source}  [c]", id="btn-tl-source"
+                )
                 yield Button(f"Base URL: {self._url_label()}", id="btn-tl-url")
                 yield Button(f"Preset: {self.cfg.translation.provider}", id="btn-tl-preset")
                 yield Button("API key…", id="btn-tl-key")
@@ -227,7 +334,9 @@ class SettingsScreen(Screen[None]):
         if not self.is_mounted:
             return  # mutation seam may run before compose in unit tests
         try:
+            self.query_one("#btn-tc-source", Button).label = f"Source: {self.cfg.transcription.provider}  [t]"
             self.query_one("#btn-tc-model", Button).label = f"Model: {self._model_label()}"
+            self.query_one("#btn-tl-source", Button).label = f"Source: {self.cfg.translation.source}  [c]"
             self.query_one("#btn-tl-url", Button).label = f"Base URL: {self._url_label()}"
             self.query_one("#btn-tl-preset", Button).label = f"Preset: {self.cfg.translation.provider}"
             self.query_one("#btn-tl-model", Button).label = f"Model: {self.cfg.translation.model or '—'}"
@@ -353,6 +462,77 @@ class SettingsScreen(Screen[None]):
     @property
     def _host(self) -> "SubForgeApp":
         return cast("SubForgeApp", self.app)
+
+    # ---- keyboard actions (ARCH §3.2) ------------------------------------
+
+    def action_wizard(self) -> None:
+        self.open_wizard()
+
+    def action_tc_source(self) -> None:
+        self.set_transcription_source(
+            "openai" if self.cfg.transcription.provider == "local" else "local"
+        )
+
+    def action_tl_source(self) -> None:
+        self.set_translation_source(
+            "provider" if self.cfg.translation.source == "local" else "local"
+        )
+
+    def action_tc_model(self) -> None:
+        self._pick_transcription_model()
+
+    def action_tc_key(self) -> None:
+        self._host.push_screen(
+            ApiKeyInputScreen("OpenAI API key"), lambda key: self.apply_tc_key(key or "")
+        )
+
+    def action_tc_lang(self) -> None:
+        self._host.push_screen(
+            TextInputScreen(
+                "Audio source language",
+                current=self.cfg.transcription.language,
+                placeholder="empty = auto-detect (e.g. id, en, ja)",
+            ),
+            lambda lang: self.apply_tc_language(lang or ""),
+        )
+
+    def action_tl_url(self) -> None:
+        self._host.push_screen(
+            UrlInputScreen(self.cfg.translation.local_base_url),
+            lambda url: self.apply_tl_url(url or self.cfg.translation.local_base_url),
+        )
+
+    def action_tl_preset(self) -> None:
+        self._cycle_preset()
+
+    def action_tl_key(self) -> None:
+        preset_name = TRANSLATION_PRESETS[self.cfg.translation.provider].name
+        self._host.push_screen(
+            ApiKeyInputScreen(f"{preset_name} API key"), lambda key: self.apply_tl_key(key or "")
+        )
+
+    def action_tl_model(self) -> None:
+        self._pick_translation_model()
+
+    def action_reasoning(self) -> None:
+        self._pick_reasoning()
+
+    def action_batch(self) -> None:
+        self._prompt_batch_size()
+
+    def action_target(self) -> None:
+        self._host.push_screen(
+            TextInputScreen(
+                "Default target language",
+                current=self.cfg.translation.default_target,
+                placeholder="e.g. en",
+            ),
+            lambda lang: self.apply_default_target(lang or ""),
+        )
+
+    def action_save(self) -> None:
+        self.save_config()
+        self.dismiss(None)
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         button_id = event.button.id or ""

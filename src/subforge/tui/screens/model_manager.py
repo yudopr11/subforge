@@ -30,7 +30,8 @@ class ModelManagerScreen(ModalScreen[None]):
         with Vertical():
             yield Label("[b]Local Whisper models[/b]")
             yield DataTable(id="models")
-            yield Button("Install selected", id="btn-install")
+            yield Button("Install selected  [i]", id="btn-install")
+            yield Label("i install · ↑↓ select · esc back", id="mm-hints")
             yield Label("", id="mm-status")
 
     def on_mount(self) -> None:
@@ -93,3 +94,6 @@ class ModelManagerScreen(ModalScreen[None]):
 
     def action_cancel(self) -> None:
         self.dismiss(None)
+
+    def action_install_selected_action(self) -> None:
+        self.run_worker(self.install_selected, thread=True, exclusive=True, group="install")
