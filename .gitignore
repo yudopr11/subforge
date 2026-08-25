@@ -1,0 +1,85 @@
+# --- Secrets & config ---
+# Never commit API keys or environment files.
+.env
+.env.*
+*.pem
+
+# User-local app config lives in ~/.config/subforge/, but guard stray copies.
+config.json
+config.local.json
+
+# --- Media & generated artifacts (user data) ---
+# Audio, subtitles, and exported output are never committed.
+*.wav
+*.mp3
+*.flac
+*.m4a
+*.aac
+*.ogg
+*.opus
+*.mkv
+*.mp4
+*.srt
+*.ass
+*.vtt
+
+# Model weights & ML caches
+*.bin
+*.pt
+*.pth
+*.onnx
+*.gguf
+*.safetensors
+whisper*/
+models/
+cache/
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+build/
+dist/
+wheels/
+pip-wheel-metadata/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# uv
+# Keep uv.lock tracked; ignore only local cache noise if needed.
+
+# Testing & coverage
+.pytest_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.tox/
+
+# Type checking / linting caches
+.mypy_cache/
+.ruff_cache/
+.pytype/
+pyrightconfig.json
+
+# Jupyter
+.ipynb_checkpoints/
+
+# --- Editors & OS ---
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+.DS_Store
+Thumbs.db
+
+# --- Project runtime data ---
+# Local projects created by SubForge during development
+projects/
+*.subforge/
