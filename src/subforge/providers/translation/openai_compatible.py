@@ -1,0 +1,105 @@
+"""OpenAI-compatible translation provider (LM Studio, Ollama, OpenAI, ... — ARCH §14)."""
+
+import json
+import re
+
+import httpx
+
+from subforge.providers.base import TranslationInput, TranslationOutput
+from subforge.providers.registry import REGISTRY
+
+_SYSTEM_PROMPT = (
+    "You are a professional subtitle translator. "
+    "Translate each numbered subtitle segment from {source} to {target}. "
+    "Preserve meaning, tone, and terminology. Keep translations concise like natural subtitles. "
+    "Respond ONLY with valid JSON of the form: "
+    '{{"translations": [{{"id": <int>, "text": "<string>"}}]}} '
+    "with exactly one entry per input id. Never modify ids."
+)
+
+
+class OpenAICompatibleProvider:
+    def __init__(
+        self,
+        base_url: str,
+        api_key: str,
+        model: str,
+        client: httpx.Client | None = None,
+    ) -> None:
+        self.base_url = base_url.rstrip("/")
+        self.api_key = api_key
+        self.model = model
+        self.client = client or httpx.Client(timeout=120.0)
+
+    def translate(
+        self,
+        segments: list[TranslationInput],
+        source_language: str,
+        target_language: str,
+        reasoning_effort: str | None = None,
+    ) -> list[TranslationOutput]:
+        payload_extra: dict[str, str] = {}
+        if reasoning_effort is not None:
+            # Value comes from Task 21 capability discovery; sent verbatim or not at all.
+            payload_extra["reasoning_effort"] = reasoning_effort
+        payload = {
+            "model": self.model,
+            "response_format": {"type": "json_object"},
+            "max_tokens": 2048,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": _SYSTEM_PROMPT.format(source=source_language, target=target_language),
+                },
+                {
+                    "role": "user",
+                    "content": json.dumps(
+                        {
+                            "source_language": source_language,
+                            "target_language": target_language,
+                            "segments": [{"id": s.id, "text": s.text} for s in segments],
+                        },
+                        ensure_ascii=False,
+                    ),
+                },
+            ],
+            **payload_extra,
+        }
+        response = self.client.post(
+            f"{self.base_url}/chat/completions",
+            json=payload,
+            headers={"Authorization": f"Bearer {self.api_key}"},
+        )
+        response.raise_for_status()
+
+        choice = response.json()["choices"][0]["message"]
+        content = choice.get("content")
+        if content is None:
+            # Reasoning models (MiMo, Nemotron, ...) sometimes answer with reasoning
+            # fields only. Fail loudly here; batch validation is NOT the right place.
+            raise ValueError(
+                "translation model returned no content (reasoning-only response); "
+                "pick a chat-completions-capable model"
+            )
+        return self._parse(content)
+
+    def list_models(self) -> list[str]:
+        """Fetch available model IDs from GET /models — live discovery for the TUI picker."""
+        response = self.client.get(
+            f"{self.base_url}/models",
+            headers={"Authorization": f"Bearer {self.api_key}"},
+        )
+        response.raise_for_status()
+        return sorted(str(item["id"]) for item in response.json().get("data", []) if item.get("id"))
+
+    @staticmethod
+    def _parse(content: str) -> list[TranslationOutput]:
+        cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", content.strip())
+        try:
+            data = json.loads(cleaned)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"translation provider did not return valid JSON: {exc}") from exc
+        return [TranslationOutput(id=item["id"], text=str(item["text"])) for item in data["translations"]]
+
+
+REGISTRY.register_translation("openai-compatible", OpenAICompatibleProvider)
