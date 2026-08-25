@@ -54,8 +54,25 @@ Screens are keyboard-first by contract (PRD §7):
 
 - The home screen is a **REPL shell**: a scrolling transcript log, one bottom prompt,
   and a footer status line (project · stage glyphs · active models). Commands are parsed
-  by a registry (`repl.py::COMMANDS`) that routes to `app/*` services — the screen adds
-  presentation only (rule 7). Review/edit screens are overlays pushed above the REPL.
+  by a registry in `repl.py` (`SLASH_COMMANDS`, exposed through a `/`-triggered
+  autocomplete picker with `↑`/`↓`/`Tab`/`Enter`) that routes to `app/*` services — the
+  screen adds presentation only (rule 7). Review/edit screens are overlays pushed above
+  the REPL; `/settings` and `/wizard` are modal overlays that keep the live transcript
+  visible underneath (the wizard mirrors each step into the transcript).
+- The transcript widget is `widgets.SelectableRichLog`: plain `RichLog` renders no
+  `offset` style metadata, so the compositor can't compute content offsets and
+  drag-selection comes back empty. The selectable variant attaches per-segment offsets
+  at `render_line` time and extracts selections from its stored lines, making
+  **drag-select + Ctrl+C copy** work (OSC 52 clipboard; Ctrl+C quits only when no
+  selection is active).
+- `/settings` opens a **two-choice menu** (`settings.py::SettingsScreen`): pick
+  **Transcribe** (provider → model → source language) or **Translation** (provider →
+  model → reasoning → target language). Language choices use a **searchable ISO 639-1
+  picker** (`language_picker.py`, catalog in `languages.py`) — searchable with
+  `↑`/`↓`/`Enter` like the slash picker; the ISO table is presentation data, codes stay
+  canonical. Each stage persists immediately (`save_app_config`) then returns to the
+  menu; `Esc` on a step returns to the menu, `Esc` on the menu closes settings.
+  Model-list loaders are injectable (`loader_factory`) so the flow is testable offline.
 
 ## 4. Core runtime components
 
@@ -72,12 +89,10 @@ their own module. Core pipeline code stays untouched when a provider is added.
 ## 6. Provider protocols & normalization
 
 - `TranscriptionProvider.transcribe(audio_path, language=None) -> Transcript`
-- `DiarizationProvider.diarize(audio_path) -> list[DiarizationTurn]`
 - `TranslationProvider.translate(segments, source_language, target_language) -> list[TranslationOutput]`
 
 Every provider normalizes to identical internal types inside its own module:
 `Transcript` is byte-for-byte the same shape regardless of where inference ran.
-Diarization turns carry anonymous speakers (`SPEAKER_00`, …).
 
 ## 7. Optional dependencies policy
 
@@ -97,8 +112,9 @@ to "unsupported", hiding the control — never a crash.
 
 ## 10. Remote STT contract
 
-OpenAI-style `POST {base_url}/audio/transcriptions`, multipart file upload,
-`response_format=verbose_json`. Responses normalize into `Transcript`; models without
+OpenAI-style `POST {base_url}/transcriptions`, multipart file upload,
+`model: subforge-remote`; responses normalize into `Transcript` via the same
+`{id,start,end,text}` shape as the OpenAI Audio API. Models without
 segment timestamps degrade to a single `[0, duration]` segment rather than failing.
 
 ## 11. Translation request shape
@@ -114,10 +130,12 @@ Robust parsing: markdown code fences stripped; invalid JSON raises `ValueError`;
 reasoning-only responses (`content: null`, seen from MiMo/Nemotron on OpenCode) raise a
 clear error instead of crashing batch processing.
 
-## 13. Diarization merge rule
+## 13. Pipeline stage inventory
 
-Speaker assignment uses maximum-overlap-wins between segment interval and turn interval;
-fully uncovered segments get no speaker.
+Stages recorded in `project.json` (v0.2.0): `transcription`, `alignment`
+(informational only — WhisperX aligns inside transcription, never run as its own
+stage), one `translation_<lang>` per target language, `caption_review`, `export`.
+Every stage carries one of the five states of §22.
 
 ## 14. OpenAI-compatible translation provider
 
@@ -142,7 +160,7 @@ still merge, errors aggregate, stage records FAILED, nothing corrupts the projec
 ## 17. Canonical data shapes
 
 ```json
-{ "id": 0, "start": 1.2, "end": 3.4, "source": "…", "speaker": null,
+{ "id": 0, "start": 1.2, "end": 3.4, "source": "…",
   "translations": { "en": "…" } }
 ```
 
@@ -164,7 +182,6 @@ complete across all segments. Unknown formats raise `ValueError`.
 
 `H:MM:SS.cc` centisecond stamps; header carries `PlayResX/Y` and one configurable
 `Style: Default` line (font, size, primary colour); one `Dialogue:` event per segment.
-Speaker-specific styles are V2+.
 
 ## 21. Project storage
 
@@ -199,14 +216,14 @@ underscores.
 
 ## 25. `.env.example`
 
-Documents headless-only knobs (transcription/diarization/translation groups) with
+Documents headless-only knobs (transcription/translation groups) with
 placeholder values and empty `TRANSLATION_API_KEY`/`TRANSLATION_MODEL`. Never commit
 a real `.env`.
 
 ## 26. Provider registry
 
 `REGISTRY` singleton; factories registered at module bottom via
-`register_transcription/register_diarization/register_translation(name, factory)`.
+`register_transcription/register_translation(name, factory)`.
 Resolution failures raise `ProviderNotFound`. Built-ins: transcription
 `local-whisperx`, `remote`, `openai`; translation `openai-compatible`.
 
@@ -229,10 +246,11 @@ covers these. AppConfig holds plaintext keys by design — written atomically
 (`os.replace`) with mode `0600` to `~/.config/subforge/config.json` (env override
 `SUBFORGE_CONFIG`). Keys are never echoed in logs, errors, or tests.
 
-## 30. Hardware detection (future)
+## 30. Hardware profiles (model guidance)
 
-Recommended profiles from runtime inspection (GPU presence/VRAM) feeding PRD §8
-suggestions. Deferred.
+`app/model_manager.py` ships the shipped VRAM-guidance table (PRD §8) as known
+Whisper profiles (`large-v3` … `base`) with install-on-demand via faster-whisper.
+Runtime GPU inspection/auto-detection is not implemented.
 
 ## 31. Concurrency model
 
@@ -241,8 +259,9 @@ clients and timeouts (120 s chat completions, 600 s STT).
 
 ## 32. Audio ingestion
 
-MVP assumes editor-exported WAV/FLAC/MP3 opened read-only. FFmpeg-based
-conversion/validation is deferred.
+Projects own exactly one audio file, copied read-only into `<project>/audio/` at
+creation (`wav flac mp3 m4a aac ogg opus`; extension-validated, loud error on
+anything else). FFmpeg-based conversion/validation is not implemented.
 
 ## 33. Versioning
 
@@ -252,7 +271,7 @@ it. Project files tolerate additive schema changes via pydantic defaults.
 ## 34. Testing strategy
 
 All tests run without network access, GPU, downloaded models, or running LLM servers:
-`httpx.MockTransport` for HTTP providers, scripted fakes for ASR/diarization/LLM
+`httpx.MockTransport` for HTTP providers, scripted fakes for ASR/LLM
 (`tests/integration/test_full_flow.py` is the pattern). Binary audio fixtures are never
 committed — generated deterministically at test time (`tests/fixtures/make_sine_wav.py`).
 Integration covers audio → transcript → translation → export plus retry-after-failure

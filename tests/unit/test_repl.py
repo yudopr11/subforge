@@ -7,6 +7,8 @@ persisted files, and project.json stage states.
 
 from pathlib import Path
 
+from textual.widgets import Input, OptionList
+
 from subforge.app.pipeline import Pipeline
 from subforge.app.project_store import create_project, load_project
 from subforge.config.app_config import AppConfig
@@ -94,7 +96,7 @@ async def test_help_lists_all_commands(tmp_path):
         repl.run_command("/help")
         text = transcript_text(app)
         for cmd in ("/new", "/open", "/transcribe", "/review", "/translate",
-                    "/export", "/speakers", "/settings", "/wizard", "/models", "/status", "/quit"):
+                    "/export", "/settings", "/wizard", "/status", "/quit"):
             assert cmd in text, cmd
 
 
@@ -183,12 +185,29 @@ async def test_open_lists_and_opens_by_index(tmp_path, monkeypatch):
         await pilot.pause()
         repl = app.repl
 
+        # bare /open -> searchable picker, recent-first, with +create-new row
         repl.run_command("/open")
-        text = transcript_text(app)
-        assert "recent projects:" in text
-        # listing is recent-first: position 1 must be d2
-        assert text.index("a-2") < text.index("a\n") or "a-2" in text.split("recent projects:")[1]
+        await pilot.pause()
+        from subforge.tui.screens.project import ProjectPickerScreen
 
+        picker = app.screen
+        assert isinstance(picker, ProjectPickerScreen)
+        options = [str(o.prompt) for o in picker.query_one("#projects").options]
+        assert options[0].startswith("[+] Create new")
+        assert "a-2" in options[1]  # recent-first: d2 before d1
+        assert "a " in options[2] or "a   ·" in options[2]
+
+        # type to search -> filters to a-2 -> Enter opens it
+        search = picker.query_one("#project-search")
+        search.value = "a-2"
+        await pilot.pause()
+        filtered = [str(o.prompt) for o in picker.query_one("#projects").options]
+        assert len(filtered) == 1 and "a-2" in filtered[0]
+        picker.on_input_submitted(type("Evt", (), {"input": search})())
+        await pilot.pause()
+        assert app.project_dir == d2
+
+        # direct lookup still works: by number and by name
         repl.run_command("/open 1")
         assert app.project_dir == d2
 
@@ -312,3 +331,140 @@ async def test_at_opens_filtered_picker_and_picks_into_prompt(tmp_path, monkeypa
         repl._submit_prompt_value(prompt.value)
         await pilot.pause()
         assert app.project_dir.name == "take02"
+
+
+# ---- Pi-style slash-command autocomplete -----------------------------------
+
+
+def _prompt(repl: ReplScreen) -> Input:
+    return repl.query_one("#prompt", Input)
+
+
+def _picker_visible(repl: ReplScreen) -> bool:
+    return repl.query_one("#autocomplete-container").styles.display != "none"
+
+
+def _options(repl: ReplScreen) -> list[str]:
+    ol = repl.query_one("#autocomplete-list", OptionList)
+    return [str(o.prompt) for o in ol.options]
+
+
+def _submit(repl: ReplScreen, prompt: Input) -> None:
+    """Drive the real Enter path with a value-carrying fake Input.Submitted."""
+    repl.on_input_submitted(type("Evt", (), {"input": prompt, "value": prompt.value})())
+
+
+async def test_slash_opens_filtered_autocomplete(tmp_path):
+    app = SubForgeApp()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        repl = app.repl
+        _prompt(repl).value = "/tr"
+        await pilot.pause()
+        assert _picker_visible(repl)
+        options = _options(repl)
+        assert any("/transcribe" in o for o in options)
+        assert any("/translate" in o for o in options)
+        assert all("/transcribe" in o or "/translate" in o for o in options)
+
+
+async def test_non_slash_input_hides_autocomplete(tmp_path):
+    app = SubForgeApp()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        repl = app.repl
+        _prompt(repl).value = "transcribe"
+        await pilot.pause()
+        assert not _picker_visible(repl)
+
+
+async def test_autocomplete_up_down_and_enter_fills_prompt(tmp_path):
+    app = SubForgeApp()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        repl = app.repl
+        prompt = _prompt(repl)
+        prompt.value = "/tr"
+        await pilot.pause()
+
+        # Enter without navigation selects the first match (highlighted = 0)
+        _submit(repl, prompt)
+        await pilot.pause()
+        assert prompt.value.startswith("/transcribe")
+        assert not _picker_visible(repl)
+
+        # Re-open and navigate with arrows before filling
+        prompt.value = "/tr"
+        await pilot.pause()
+        await pilot.press("down")
+        await pilot.pause()
+        assert repl.query_one("#autocomplete-list", OptionList).highlighted == 1
+        repl._autocomplete_fill()
+        assert prompt.value.startswith("/translate")
+
+
+async def test_tab_fills_highlighted_command(tmp_path):
+    app = SubForgeApp()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        repl = app.repl
+        prompt = _prompt(repl)
+        prompt.value = "/se"
+        await pilot.pause()
+        await pilot.press("tab")
+        await pilot.pause()
+        assert prompt.value.startswith("/settings")
+        assert not _picker_visible(repl)
+
+
+async def test_escape_hides_autocomplete_keeps_input(tmp_path):
+    app = SubForgeApp()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        repl = app.repl
+        prompt = _prompt(repl)
+        prompt.value = "/tr"
+        await pilot.pause()
+        assert _picker_visible(repl)
+        await pilot.press("escape")
+        await pilot.pause()
+        assert not _picker_visible(repl)
+        assert prompt.value == "/tr"  # input untouched
+
+
+async def test_locate_mode_disables_autocomplete(tmp_path):
+    app = SubForgeApp()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        repl = app.repl
+        repl.run_command("/new")
+        await pilot.pause()
+        _prompt(repl).value = "/home/me/audio.wav"  # starts with '/' but it's a path
+        await pilot.pause()
+        assert not _picker_visible(repl)
+
+
+async def test_bare_q_routes_to_quit(tmp_path):
+    app = SubForgeApp()
+    quits: list[bool] = []
+    app.exit = lambda: quits.append(True)  # type: ignore[assignment]
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        repl = app.repl
+        prompt = _prompt(repl)
+        prompt.value = "q"
+        _submit(repl, prompt)
+        assert quits == [True]
+
+
+async def test_quit_alias_routes_to_quit(tmp_path):
+    app = SubForgeApp()
+    quits: list[bool] = []
+    app.exit = lambda: quits.append(True)  # type: ignore[assignment]
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        repl = app.repl
+        prompt = _prompt(repl)
+        prompt.value = "quit"
+        _submit(repl, prompt)
+        assert quits == [True]

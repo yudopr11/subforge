@@ -27,13 +27,14 @@ def _wizard(app: SubForgeApp) -> FirstRunSetupScreen:
 
 def _pick(screen: object, prompt: str) -> None:
     """Drive an OptionList-based modal through its public choose/submit seam."""
+    from subforge.tui.screens.language_picker import LanguagePickerScreen
     from subforge.tui.screens.settings import ReasoningPickerScreen
 
     if isinstance(screen, ChoiceScreen):
         screen.choose(prompt)
     elif isinstance(screen, (ReasoningPickerScreen, ModelPickerScreen)):
         screen.on_option_list_option_selected(type("Evt", (), {"option": type("O", (), {"prompt": prompt})()})())
-    elif isinstance(screen, (ApiKeyInputScreen, UrlInputScreen)) or type(screen).__name__ == 'TextInputScreen':
+    elif isinstance(screen, (ApiKeyInputScreen, UrlInputScreen, LanguagePickerScreen)) or type(screen).__name__ == 'TextInputScreen':
         field = screen.query_one("Input")
         field.value = prompt
         screen.on_input_submitted(type("Evt", (), {"input": field})())
@@ -90,9 +91,9 @@ async def test_happy_path_local_transcription_local_translation(first_run_env):
         _pick(app.screen, "small · Lightweight (~2 GB VRAM)")
         await pilot.pause()
 
-        from subforge.tui.screens.settings import TextInputScreen
+        from subforge.tui.screens.language_picker import LanguagePickerScreen
 
-        assert isinstance(app.screen, TextInputScreen)  # source language prompt
+        assert isinstance(app.screen, LanguagePickerScreen)  # source language prompt
         _pick(app.screen, "id")
         await pilot.pause()
 
@@ -114,7 +115,7 @@ async def test_happy_path_local_transcription_local_translation(first_run_env):
         assert isinstance(app.screen, ModelPickerScreen)
         _pick(app.screen, "qwen3-14b")
         await pilot.pause()
-        assert isinstance(app.screen, TextInputScreen)  # default target prompt
+        assert isinstance(app.screen, LanguagePickerScreen)  # default target prompt
         _pick(app.screen, "en")
 
         await pilot.pause()
@@ -157,9 +158,9 @@ async def test_happy_path_openai_and_cloud_provider(first_run_env):
         _pick(app.screen, "whisper-1")                 # loader injected: no network
         await pilot.pause()
 
-        from subforge.tui.screens.settings import TextInputScreen
+        from subforge.tui.screens.language_picker import LanguagePickerScreen
 
-        assert isinstance(app.screen, TextInputScreen)
+        assert isinstance(app.screen, LanguagePickerScreen)
         _pick(app.screen, "ja")  # source language
         await pilot.pause()
         _pick(app.screen, "Cloud provider")
@@ -170,8 +171,8 @@ async def test_happy_path_openai_and_cloud_provider(first_run_env):
         await pilot.pause()
         _pick(app.screen, "glm-5.2")
         await pilot.pause()
+        from subforge.tui.screens.language_picker import LanguagePickerScreen as TIS
         from subforge.tui.screens.settings import ReasoningPickerScreen
-        from subforge.tui.screens.settings import TextInputScreen as TIS
 
         # PRD §15: exactly this model's discovered vocabulary is offered
         assert isinstance(app.screen, ReasoningPickerScreen)
@@ -245,9 +246,9 @@ async def test_after_setup_menu_status_refreshes(first_run_env):
         await pilot.pause()
         _pick(app.screen, "small · Lightweight (~2 GB VRAM)")
         await pilot.pause()
-        from subforge.tui.screens.settings import TextInputScreen
+        from subforge.tui.screens.language_picker import LanguagePickerScreen
 
-        assert isinstance(app.screen, TextInputScreen)
+        assert isinstance(app.screen, LanguagePickerScreen)
         _pick(app.screen, "")  # auto-detect
         await pilot.pause()
         _pick(app.screen, "Later (I'll do it in Settings)")
@@ -260,7 +261,7 @@ async def test_after_setup_menu_status_refreshes(first_run_env):
         await pilot.pause()
         _pick(app.screen, "m1")
         await pilot.pause()
-        assert isinstance(app.screen, TextInputScreen)
+        assert isinstance(app.screen, LanguagePickerScreen)
         _pick(app.screen, "en")  # default target
         await pilot.pause()
 
@@ -282,7 +283,8 @@ def _menu_import_guard() -> None:  # keep explicit import referenced for readers
 async def test_reasoning_skipped_for_non_reasoning_model_and_local(first_run_env):
     """No vocabulary / local server -> straight to target-language prompt."""
     from subforge.providers.capabilities import ReasoningSpec
-    from subforge.tui.screens.settings import ReasoningPickerScreen, TextInputScreen
+    from subforge.tui.screens.language_picker import LanguagePickerScreen
+    from subforge.tui.screens.settings import ReasoningPickerScreen
 
     class NoCaps:
         def reasoning_spec(self, provider_preset, model_id):
@@ -298,7 +300,7 @@ async def test_reasoning_skipped_for_non_reasoning_model_and_local(first_run_env
         wizard.cfg.translation.source = "local"
         wizard.apply_tl_model("qwen3-14b")
         assert not isinstance(app.screen, ReasoningPickerScreen)
-        assert isinstance(app.screen, TextInputScreen)  # target-language prompt follows
+        assert isinstance(app.screen, LanguagePickerScreen)  # target-language prompt follows
 
         # cloud but non-reasoning model: also skipped
         wizard2_cfg_source = "provider"
@@ -306,3 +308,45 @@ async def test_reasoning_skipped_for_non_reasoning_model_and_local(first_run_env
         wizard.cfg.translation.provider = "opencode-zen"
         wizard.apply_tl_model("nemotron")
         assert not isinstance(app.screen, ReasoningPickerScreen)
+
+
+# ---- Pi-style wizard: modal overlay + transcript mirroring ----------------
+
+
+async def test_wizard_is_modal_overlay_not_fullscreen(first_run_env):
+    """The wizard stays on the stack over the REPL, never hides it (Pi-style)."""
+    from textual.screen import ModalScreen
+
+    from subforge.tui.screens.repl import ReplScreen
+
+    app = SubForgeApp()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        wizard = _wizard(app)
+        assert isinstance(wizard, ModalScreen)
+        # REPL remains underneath, reachable and mounted
+        assert any(isinstance(s, ReplScreen) for s in app.screen_stack)
+
+
+async def test_wizard_mirrors_steps_into_repl_transcript(first_run_env):
+    from subforge.tui.screens.repl import ReplScreen
+
+    def transcript(repl: ReplScreen) -> str:
+        log = repl.query_one("#transcript")
+        lines = ["".join(seg.text for seg in strip) for strip in log.lines]
+        return "\n".join(lines)
+
+    app = SubForgeApp()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        wizard = _wizard(app)
+
+        # Step 1 status is already mirrored on mount
+        repl = next(s for s in app.screen_stack if isinstance(s, ReplScreen))
+        assert "Step 1/2" in transcript(repl)
+
+        # Advancing steps keeps mirroring
+        wizard._set_status("Step 2/2 · Translation — where should it run?")
+        await pilot.pause()
+        repl = next(s for s in app.screen_stack if isinstance(s, ReplScreen))
+        assert "Step 2/2" in transcript(repl)

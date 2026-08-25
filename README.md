@@ -38,7 +38,6 @@ final_audio.wav
 - 🧠 **Provider-driven reasoning control** — when a model supports reasoning effort, SubForge offers exactly the values that model accepts (they differ per model!); otherwise the control is hidden
 - ✍️ **Caption review** — view, edit, and correct generated captions in a terminal UI
 - 🌐 **Translation** — LM Studio / Ollama (local), OpenAI, OpenCode Zen & OpenCode Go (cloud) — contextual batch translation with strict structured-output validation
-- 👥 **Speaker diarization** *(optional)* — anonymous speaker IDs you can map to real names
 - 📤 **Export** — SRT (universal compatibility) and ASS (advanced styling), source language plus translations
 - 🔁 **Resumable pipeline** — retry just the failed stage; completed stages never rerun
 - 🖥️ **Terminal UI** — built with [Textual](https://textual.textualize.io/)
@@ -90,8 +89,9 @@ Then work in commands:
  > /export                           # writes exports/source.* and exports/en.*
 ```
 
-`?` lists all commands (`/open`, `/speakers`, `/models`, `/status`, `/settings`,
-`/wizard`, `/quit`). `Esc` backs out of any overlay. Audio preview requires ffmpeg.
+`?` lists all commands (`/open`, `/transcribe`, `/review`, `/translate`, `/export`,
+`/settings`, `/wizard`, `/status`, `/quit`). `Esc` backs out of any overlay. Audio
+preview requires ffmpeg.
 
 Changed your mind later? Everything above can be switched in the Settings menu at any time — no project restart.
 
@@ -134,11 +134,6 @@ uv run ruff check . && uv run mypy src
 ```
 
 See [AGENTS.md](AGENTS.md) for contributor/agent guidance and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for design principles.
-
-## Roadmap
-
-- **V2** — multiple target languages, translation memory & terminology dictionaries, better segmentation, waveform visualization, batch processing
-- **V3** — automatic sound-event captions (`[laughter]`, `♪ music ♪`), plugin architecture, subtitle styling templates, video preview
 
 Full details: [docs/PRD.md](docs/PRD.md).
 

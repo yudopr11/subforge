@@ -5,6 +5,7 @@ from typing import ClassVar
 
 from textual.app import ComposeResult
 from textual.binding import Binding
+from textual.containers import Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Label, OptionList
 
@@ -23,14 +24,15 @@ class AudioFilePickerScreen(ModalScreen[str | None]):
         self.result: str | None = None
 
     def compose(self) -> ComposeResult:
-        yield Label(f"[b]{self.picker_title}[/b] — {len(self.files)} audio file(s)")
-        if self.files:
-            yield OptionList(
-                *[f"{p.name}   ·   {p.parent}" for p in self.files], id="audio-files"
-            )
-        else:
-            yield Label("No audio files found here — cancel and type a full path.", id="empty")
-        yield Label("↑↓ select · Enter pick · Esc cancel", id="picker-hints")
+        with Vertical():
+            yield Label(f"[b]{self.picker_title}[/b]  —  {len(self.files)} audio file(s)")
+            if self.files:
+                yield OptionList(
+                    *[f"{p.name}   ·   {p.parent}" for p in self.files], id="audio-files"
+                )
+            else:
+                yield Label("[dim]No audio files found here — cancel and type a full path.[/dim]", id="empty")
+            yield Label("[dim]↑↓ select · Enter pick · Esc cancel[/dim]", id="picker-hints")
 
     def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
         prompt = str(getattr(event.option, "prompt", ""))

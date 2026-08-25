@@ -20,7 +20,6 @@ class Segment(BaseModel):
     start: float
     end: float
     source: str
-    speaker: str | None = None
     translations: dict[str, str] = Field(default_factory=dict)
 
 
@@ -29,7 +28,6 @@ class TranscriptSegment(BaseModel):
     start: float
     end: float
     text: str
-    speaker: str | None = None
 
 
 class Transcript(BaseModel):
@@ -43,7 +41,6 @@ class ProjectMeta(BaseModel):
     name: str
     source_language: str
     target_languages: list[str] = Field(default_factory=list)
-    speaker_map: dict[str, str] = Field(default_factory=dict)
 
 
 class Project(BaseModel):

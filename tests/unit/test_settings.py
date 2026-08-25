@@ -7,7 +7,6 @@ def test_local_first_defaults():
     s = load_settings(env_file=None)
     assert s.transcription.provider == "local"
     assert s.transcription.model == "large-v3"
-    assert s.diarization.enabled is False
     assert s.translation.provider == "openai-compatible"
     assert s.translation.base_url == "http://localhost:1234/v1"
 

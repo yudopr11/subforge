@@ -58,13 +58,23 @@ class OpenAITranscriptionProvider:
         return Transcript(language=payload.get("language"), segments=segments)
 
     def list_models(self) -> list[str]:
-        """Live model IDs from GET /models so the TUI picker shows real choices."""
+        """Live audio-transcription model IDs from GET /models.
+
+        The raw catalog mixes hundreds of chat/embedding/image models; the TUI
+        transcription picker only needs audio models, so IDs are narrowed to
+        entries whose name marks them as whisper/transcribe ("whisper-1",
+        "gpt-4o-transcribe", …). If the endpoint returns none matching
+        (custom/self-hosted ASR), fall back to the full list so discovery still
+        surfaces everything.
+        """
         response = self.client.get(
             f"{self.base_url}/models",
             headers={"Authorization": f"Bearer {self.api_key}"},
         )
         response.raise_for_status()
-        return sorted(str(m["id"]) for m in response.json().get("data", []) if m.get("id"))
+        ids = sorted(str(m["id"]) for m in response.json().get("data", []) if m.get("id"))
+        audio = [i for i in ids if "whisper" in i.lower() or "transcribe" in i.lower()]
+        return audio or ids
 
 
 REGISTRY.register_transcription("openai", OpenAITranscriptionProvider)

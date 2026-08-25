@@ -10,7 +10,6 @@ from subforge.tui.app import SubForgeApp
 from subforge.tui.screens.caption_review import CaptionReviewScreen
 from subforge.tui.screens.repl import ReplScreen
 from subforge.tui.screens.review_translate import ReviewTranslateScreen
-from subforge.tui.screens.speaker_map import SpeakerMapScreen
 
 
 def seed_segments(tmp_path: Path):
@@ -26,7 +25,6 @@ def seed_segments(tmp_path: Path):
     [
         lambda d: CaptionReviewScreen(d),
         lambda d: ReviewTranslateScreen(d),
-        lambda d: SpeakerMapScreen(d),
     ],
 )
 async def test_escape_returns_to_repl_home(tmp_path, screen_factory):

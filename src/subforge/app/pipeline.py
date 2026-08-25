@@ -22,11 +22,7 @@ class _Transcribes(Protocol):
     def transcribe(self, audio_path: Path, language: str | None = None) -> Transcript: ...
 
 
-class _Diarizes(Protocol):
-    def diarize(self, audio_path: Path) -> list[Any]: ...
-
-
-ALL_STAGES = ("transcription", "alignment", "diarization", "caption_review", "export")
+ALL_STAGES = ("transcription", "alignment", "caption_review", "export")
 
 
 class _Unconfigured:
@@ -49,13 +45,11 @@ class Pipeline:
         project_dir: Path,
         settings: Settings,
         transcription: _Transcribes | None = None,
-        diarization: _Diarizes | None = None,
         translation_service: TranslationService | None = None,
     ) -> None:
         self.dir = project_dir
         self.settings = settings
         self.transcription = transcription
-        self.diarization = diarization
         self.translation_service = translation_service or TranslationService(
             provider=_unconfigured("translation"),
             batch_size=settings.translation.batch_size or DEFAULT_BATCH_SIZE,
@@ -105,36 +99,10 @@ class Pipeline:
             project.project.source_language = transcript.language
 
         project.segments = [
-            Segment(id=int(seg.id), start=seg.start, end=seg.end, source=seg.text, speaker=seg.speaker)
+            Segment(id=int(seg.id), start=seg.start, end=seg.end, source=seg.text)
             for seg in transcript.segments
         ]
         project.set_stage("transcription", StageState.COMPLETED)
-        self._save(project)
-
-    def run_diarization(self, audio_filename: str) -> None:
-        project = self.project
-        if self.diarization is None or not self.settings.diarization.enabled:
-            project.set_stage("diarization", StageState.SKIPPED)
-            self._save(project)
-            return
-        project.set_stage("diarization", StageState.RUNNING)
-        self._save(project)
-        try:
-            turns = self.diarization.diarize(self.dir / "audio" / audio_filename)
-        except Exception as exc:
-            project.set_stage("diarization", StageState.FAILED)
-            self._save(project)
-            raise StageError(f"[ERROR] diarization failed: {exc}") from exc
-
-        for seg in project.segments:
-            overlap_scores = [
-                (min(seg.end, t.end) - max(seg.start, t.start), t.speaker)
-                for t in turns
-                if min(seg.end, t.end) > max(seg.start, t.start)
-            ]
-            if overlap_scores:
-                seg.speaker = max(overlap_scores)[1]
-        project.set_stage("diarization", StageState.COMPLETED)
         self._save(project)
 
     def run_translation(self, target_language: str) -> None:

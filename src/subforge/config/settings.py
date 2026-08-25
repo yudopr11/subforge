@@ -19,11 +19,6 @@ class TranscriptionSettings(BaseModel):
     compute_type: str = "auto"
 
 
-class DiarizationSettings(BaseModel):
-    enabled: bool = False
-    provider: str = "local"
-
-
 class TranslationSettings(BaseModel):
     provider: str = "openai-compatible"
     base_url: str = "http://localhost:1234/v1"
@@ -34,7 +29,6 @@ class TranslationSettings(BaseModel):
 
 class Settings(BaseModel):
     transcription: TranscriptionSettings = TranscriptionSettings()
-    diarization: DiarizationSettings = DiarizationSettings()
     translation: TranslationSettings = TranslationSettings()
 
 
@@ -71,7 +65,6 @@ def load_settings(env_file: Path | str | None = ".env") -> Settings:
     settings = Settings()
     for group_name, group_model in (
         ("transcription", TranscriptionSettings),
-        ("diarization", DiarizationSettings),
         ("translation", TranslationSettings),
     ):
         updates: dict[str, Any] = {}

@@ -52,7 +52,7 @@ stop at transcription; existing translation tools don't understand subtitles.
 
 ## 6. Non-goals (v0.2.x)
 
-- Video editing, playback preview, waveform visualization (V2+).
+- Video editing, playback preview, waveform visualization.
 - Burning subtitles into video.
 - Real-time/live captioning.
 - Being an LLM prompt playground — translation is a focused, constrained task.
@@ -75,7 +75,7 @@ footer status line. There is no list menu — commands do the work.
 
  > /translate ja
  ────────────────────────────────────────────────────────────────────────────
- /new /open /transcribe /review /translate /export /speakers /settings ?  q quit
+ /new /open /transcribe /review /translate /export /settings ?  q quit
 ```
 
 ### Commands
@@ -85,28 +85,38 @@ footer status line. There is no list menu — commands do the work.
 | `/new <audio>` | create project around an exported audio file; bare `/new` enters
   **locate mode** — type a path, or submit `@` (or `@query`) to browse audio files
   under the working directory, newest first |
-| `/open [name|n]` | list recent projects; open by name or list number |
+| `/open [name|n]` | bare `/open` opens a **searchable picker** of recent projects — type
+  to filter, `↑`/`↓` to move, `Enter` to open (plus a *create new* row); `/open <name|n>`
+  still opens directly by name or list number |
 | `/transcribe` | run the transcription stage (busy-guarded, retryable) |
 | `/review` | caption review overlay (edit text, play segment audio) |
 | `/translate [lang]` | translate into a language code; defaults to remembered target |
 | `/export [formats]` | export SRT/ASS for source + completed translations |
-| `/speakers` | name anonymous diarization speakers |
-| `/settings` | manual editing of every transcription/translation option |
+| `/settings` | two-choice menu — **Transcribe** (provider + model + source language)
+  or **Translation** (provider + model + reasoning + target language); each stage
+  saves on completion and returns to the menu |
 | `/wizard` | re-run the setup wizard, prefilled with current values |
-| `/models` | local Whisper model cache/install manager |
 | `/status` | print pipeline stage states |
 | `/help`, `?` | command list |
 | `/quit`, Ctrl+C | exit |
 
-Setup happens inside the TUI: **Settings** (`/settings`) for manual edits, or `/wizard`
-to re-run guided setup prefilled with current values. Providers rebuild without
-restarting the project:
+Setup happens inside the TUI: on **first launch** (no config file yet) the wizard
+opens automatically; after that, **Settings** (`/settings`) opens a two-choice menu — pick
+**Transcribe** or **Translation** — and drills into that stage only; or `/wizard` re-runs
+full wizard-style setup. Providers rebuild without restarting the project:
 
 1. **Transcribe** — *Local*: pick/install a Whisper model sized for your machine;
    or *Provider*: paste your OpenAI API key → pick a model from the live list.
+   Ends by choosing the **source audio language**.
 2. **Translate** — *Local*: point at your LM Studio/Ollama URL → pick a model;
    or *Provider*: choose OpenAI / OpenCode Zen / OpenCode Go → paste API key →
-   pick a model (+ reasoning level if the model offers one).
+   pick a model (+ reasoning level if the model offers one). Ends by choosing the
+   **default target language**.
+
+Each stage's language is chosen from a **searchable ISO 639-1 picker**: type to
+filter by code or English name, `↑`/`↓` to move, `Enter` to select (§16). A stage
+persists as soon as it finishes, then returns to the settings menu so the other
+stage can be configured too.
 
 ### Interaction model — keyboard only
 
@@ -114,9 +124,23 @@ The TUI is CLI-style: **every action must be reachable from the keyboard, and no
 may require the mouse.**
 
 - Global: `Ctrl+C` exit · `Esc` back / cancel / dismiss overlays.
+- **Transcript copy:** drag the mouse over the transcript to select text; `Ctrl+C`
+  or **right-click** copies the selection to the system clipboard (OSC 52), clears it,
+  and a second `Ctrl+C` exits as usual. Plain `RichLog` can't extract selections, so
+  the transcript uses a selectable variant that attaches the offsets Textual's
+  compositor needs and paints the live selection highlight.
 - Home prompt accepts slash commands (`/transcribe`) and bare aliases (`transcribe`).
-- Review/edit/speaker/model screens are full-keyboard overlays launched by commands;
+- **Slash autocomplete:** typing `/` in the prompt opens a filtered command picker;
+  `↑`/`↓` highlight, `Tab` or `Enter` fills the prompt with the chosen command (then
+  `Enter` runs it), `Esc` dismisses. `q` and `quit` both exit.
+- Review/edit/model screens are full-keyboard overlays launched by commands;
   each renders its own key legend on-screen (`p` play, `x` stop, `i` install, …).
+- `/settings` and `/wizard` are **modal overlays** over the live REPL — the transcript
+  stays visible behind them, and the wizard mirrors its current step into the transcript
+  as it runs (Pi-style), so setup reads like a conversation. `/settings` opens a
+  **two-choice menu**; `Esc` on a step returns to the menu, `Esc` on the menu closes settings.
+- **Searchable choices:** every picker (provider, model, reasoning, language) is a
+  keyboard-driven list — type to filter, `↑`/`↓` move the highlight, `Tab`/`Enter` select.
 - Forms: `Tab` / arrows move focus; `Enter` submits the focused field.
 - Mouse support is incidental convenience, never a requirement.
 
@@ -153,8 +177,7 @@ local inference requires the optional extra (`pip install "subforge[local]"`).
 
 After transcription the user reviews every caption: text is editable per segment,
 navigation by row, edits persist immediately to the project file. Timing is displayed
-but owned by the application (§10). The MVP editing surface is text correction;
-split/merge/delete/add arrive in V2 (see §23).
+but owned by the application (§10). The editing surface is text correction.
 
 ## 10. Metadata ownership guarantee
 
@@ -177,12 +200,13 @@ valid JSON, exactly one output per input ID, no unknown IDs, no duplicates, non-
 text. A failed batch fails alone — completed batches keep their results, and retry
 re-runs only the failed stage.
 
-## 12. Speaker diarization & speaker naming
+## 12. Audio ingestion
 
-Optional stage. When enabled, speakers are detected and assigned to segments as
-anonymous IDs (`SPEAKER_00`, `SPEAKER_01`, …). A speaker-map screen lets the user name
-speakers ("SPEAKER_00" → "Adi"). Diarization being off never blocks the rest of the
-pipeline — the stage records SKIPPED.
+`/new <audio>` imports an exported final-audio file into the project (`<project>/audio/`),
+accepting `wav flac mp3 m4a aac ogg opus`. Bare `/new` enters locate mode — type a path,
+or submit `@` (or `@query`) to browse discoverable audio files under the working
+directory, newest first. Each project owns exactly one audio file; the transcript and
+exports live alongside it (§21 guarantees in ARCH).
 
 ## 13. Translation review
 
@@ -196,7 +220,7 @@ Users never type model IDs. For any configured provider the app fetches
 
 | Stage | Local option | Provider option |
 |---|---|---|
-| Transcribe | WhisperX (`large-v3` … `base`, install on demand) | OpenAI Audio API (`whisper-1`, `gpt-4o-transcribe`, …) |
+| Transcribe | WhisperX (`large-v3` … `base`, install on demand) | OpenAI Audio API (`whisper-1`, `gpt-4o-transcribe`, …); any OpenAI-style `/transcriptions` endpoint is registered as a provider (`remote`) but not yet surfaced in Settings |
 | Translate | any OpenAI-compatible URL (LM Studio `localhost:1234/v1`, Ollama) | OpenAI · OpenCode Zen · OpenCode Go |
 
 Cloud presets (verified live 2026-08-25): `openai` → `https://api.openai.com/v1`,
@@ -223,9 +247,17 @@ values reset.
 
 ## 16. Languages
 
-Any source language the ASR layer detects or the user selects; translations target one
-language per run in the MVP, extensible to multiple targets in V2. Language codes are
+Any source language the ASR layer detects or the user selects; a project can carry
+**multiple target languages** — each `/translate <lang>` run adds its language to the
+project (`target_languages`), records its own stage (`translation_<lang>`), and
+`/export` writes every completed target, skipping incomplete ones. Language codes are
 stored in canonical form (e.g. `id`, `en`, `ja`) and drive output filenames.
+
+Language selection in the TUI uses a **searchable ISO 639-1 picker**: type to filter
+the catalog by code or English name, `↑`/`↓` to move the highlight, `Enter`/`Tab` to
+select. An empty selection maps to application defaults — source language auto-detect,
+target language falls back to the remembered default. Codes never depart the canonical
+form; the ISO table is presentation data only.
 
 ## 17. Output quality bar
 
@@ -244,12 +276,13 @@ are individually retryable so a slow/failing provider never costs upstream work.
 
 Python ≥ 3.11, installed via pip/uv. Core install has no heavy ML dependencies;
 local transcription is an explicit extra (`subforge[local]`). Console command:
-`subforge`.
+`subforge [project_dir]` — an optional project directory opens directly;
+`subforge --version` prints the version.
 
 ## 20. Configuration & privacy defaults (local-first)
 
 Defaults favor fully-local operation: transcription `local/large-v3/auto/auto`,
-diarization disabled, translation via OpenAI-compatible URL pointing at LM Studio
+translation via OpenAI-compatible URL pointing at LM Studio
 (`http://localhost:1234/v1`). Configuration is **TUI-first**: keys and model choices are
 typed into Settings and persisted atomically (mode `0600`) at
 `~/.config/subforge/config.json` (override with `SUBFORGE_CONFIG`). `.env` /
@@ -268,9 +301,11 @@ or auto-"fixed". A failed stage never corrupts completed work.
 
 Every expensive stage records explicit state — `PENDING`, `RUNNING`, `COMPLETED`,
 `FAILED`, `SKIPPED` — in the project file. Retrying a stage must never rerun completed
-upstream stages. Stages: transcription → diarization → translation → review → export.
-The project file (`project.json`) is the single source of truth and survives restarts
-mid-pipeline.
+upstream stages. Stages recorded: `transcription` → `alignment` (informational only —
+WhisperX aligns inside transcription, so v0.2.0 never runs it as its own stage) →
+one `translation_<lang>` per target language → `caption_review` →
+`export`. The project file (`project.json`) is the single source of truth and survives
+restarts mid-pipeline.
 
 ## 23. MVP scope (v0.2.0) & acceptance criteria
 
@@ -283,16 +318,10 @@ In scope:
 2. **Caption review** (§9) — view/edit/correct generated captions; edits persist.
 3. **Translation** (§10–§11) — contextual batches of five with strict validation;
    LM Studio / Ollama / OpenAI / OpenCode Zen / OpenCode Go.
-4. **Speaker diarization** *(optional)* (§12) — anonymous IDs, mappable names.
-5. **Export** — SRT (universal) + ASS (styled default), source language plus completed
+4. **Export** — SRT (universal) + ASS (styled default), source language plus completed
    translations; incomplete translations are skipped, never half-written.
-6. **Resumable pipeline** (§22) — retry just the failed stage; completed stages stay done.
-7. **TUI** (§7) — full setup and workflow in-terminal; no `.env` step required.
-
-Explicitly deferred to V2/V3: multiple target languages, translation memory &
-terminology dictionaries, better segmentation, split/merge/delete/add caption
-operations, waveform visualization, batch processing, sound-event captions
-(`[laughter]`, `♪ music ♪`), plugin architecture, styling templates, video preview.
+5. **Resumable pipeline** (§22) — retry just the failed stage; completed stages stay done.
+6. **TUI** (§7) — full setup and workflow in-terminal; no `.env` step required.
 
 ## 24. Success metrics
 
@@ -301,14 +330,7 @@ operations, waveform visualization, batch processing, sound-event captions
 - Zero support cases of timing drift after translation (guarantee §10).
 - Share of users running fully local pipelines (privacy goal).
 
-## 25. Roadmap
-
-- **V2** — multiple target languages, translation memory & terminology dictionaries,
-  better segmentation, waveform visualization, batch processing.
-- **V3** — automatic sound-event captions (`[laughter]`, `♪ music ♪`), plugin
-  architecture, subtitle styling templates, video preview.
-
-## 26. Philosophy
+## 25. Philosophy
 
 > AI handles the repetitive work. The creator remains the editor.
 

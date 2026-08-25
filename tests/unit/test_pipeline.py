@@ -8,7 +8,7 @@ from subforge.app.project_store import create_project
 from subforge.config.settings import Settings
 from subforge.models.project import ProjectMeta, StageState
 from subforge.models.transcript import Transcript, TranscriptSegment
-from subforge.providers.base import DiarizationTurn, TranslationOutput
+from subforge.providers.base import TranslationOutput
 
 
 class FakeASR:
@@ -19,14 +19,6 @@ class FakeASR:
     def transcribe(self, audio_path, language=None):
         self.calls += 1
         return self.transcript
-
-
-class FakeDiarizer:
-    def __init__(self, turns):
-        self.turns = turns
-
-    def diarize(self, audio_path):
-        return self.turns
 
 
 class FakeTranslator:
@@ -97,37 +89,6 @@ def test_retry_reruns_failed_stage(tmp_path):
 
     pipe.retry("transcription", "final_audio.wav")
     assert pipe.load().get_stage("transcription") is StageState.COMPLETED
-
-
-def test_diarization_skipped_when_disabled(tmp_path):
-    d, _audio = setup_project(tmp_path)
-    pipe = Pipeline(
-        d,
-        Settings(),
-        transcription=FakeASR(TRANSCRIPT),
-        diarization=FakeDiarizer([DiarizationTurn("SPEAKER_00", 0.0, 10.0)]),
-    )
-    pipe.run_diarization("final_audio.wav")
-    assert pipe.load().get_stage("diarization") is StageState.SKIPPED
-
-
-def test_diarization_merges_speakers_when_enabled(tmp_path):
-    d, _audio = setup_project(tmp_path)
-    settings = Settings()
-    settings.diarization.enabled = True
-    pipe = Pipeline(
-        d,
-        settings,
-        transcription=FakeASR(TRANSCRIPT),
-        diarization=FakeDiarizer([DiarizationTurn("SPEAKER_00", 1.0, 2.0)]),
-    )
-    pipe.run_transcription("final_audio.wav")  # seed segments
-    pipe.run_diarization("final_audio.wav")
-    project = pipe.load()
-    assert project.get_stage("diarization") is StageState.COMPLETED
-    # Overlap rule: max coverage wins (segment 1.2–3.4 overlaps turn 1.0–2.0 → SPEAKER_00 assigned;
-    # a fully-uncovered segment would get no speaker).
-    assert project.segments[0].speaker == "SPEAKER_00"
 
 
 def test_translation_runs_service_and_persists(tmp_path):

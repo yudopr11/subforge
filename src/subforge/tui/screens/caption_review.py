@@ -35,14 +35,14 @@ class CaptionReviewScreen(ModalScreen[None]):
 
     def compose(self) -> ComposeResult:
         with Vertical():
-            yield Label(f"Caption Review — {self.project.project.name}")
+            yield Label(f"[b]Caption Review[/b]  —  {self.project.project.name}")
             yield DataTable(id="segments")
             with Horizontal(id="playback"):
                 yield Button("▶ Play (p)", id="btn-play")
                 yield Button("■ Stop (x)", id="btn-stop")
                 yield Label("", id="play-status")
             yield Input(placeholder="Edit text; Enter to apply", id="edit")
-            yield Label("Ctrl+S Save · p Play · x Stop · Esc Back", id="hints")
+            yield Label("[dim]Ctrl+S Save · p Play · x Stop · Esc Back[/dim]", id="hints")
 
     def on_mount(self) -> None:
         table = self.query_one(DataTable)

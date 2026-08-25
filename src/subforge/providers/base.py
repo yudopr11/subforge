@@ -8,13 +8,6 @@ from subforge.models.transcript import Transcript
 
 
 @dataclass(frozen=True)
-class DiarizationTurn:
-    speaker: str  # anonymous: SPEAKER_00, SPEAKER_01, ... (PRD §12)
-    start: float
-    end: float
-
-
-@dataclass(frozen=True)
 class TranslationInput:
     id: int
     text: str
@@ -33,11 +26,6 @@ class TranscriptionProvider(Protocol):
 
 # Alias kept for tests/readability; same interface object.
 TranscriptionLike = TranscriptionProvider
-
-
-@runtime_checkable
-class DiarizationProvider(Protocol):
-    def diarize(self, audio_path: Path) -> list[DiarizationTurn]: ...
 
 
 @runtime_checkable

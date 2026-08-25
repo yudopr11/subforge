@@ -31,7 +31,7 @@ class ModelManagerScreen(ModalScreen[None]):
             yield Label("[b]Local Whisper models[/b]")
             yield DataTable(id="models")
             yield Button("Install selected  [i]", id="btn-install")
-            yield Label("i install · ↑↓ select · esc back", id="mm-hints")
+            yield Label("[dim]i install · ↑↓ select · esc back[/dim]", id="mm-hints")
             yield Label("", id="mm-status")
 
     def on_mount(self) -> None:

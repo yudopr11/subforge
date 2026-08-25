@@ -70,5 +70,41 @@ def test_list_models_for_picker():
     assert provider.list_models() == ["gpt-4o-transcribe", "whisper-1"]
 
 
+def test_list_models_filters_to_audio_models():
+    """A real /models catalog is huge — only whisper/transcribe IDs are returned."""
+    mixed = {
+        "data": [
+            {"id": "gpt-5"},
+            {"id": "gpt-4o"},
+            {"id": "gpt-4o-transcribe"},
+            {"id": "gpt-4o-mini-transcribe"},
+            {"id": "whisper-1"},
+            {"id": "text-embedding-3-large"},
+            {"id": "dall-e-3"},
+        ]
+    }
+
+    def handler(request):
+        return httpx.Response(200, json=mixed)
+
+    provider = OpenAITranscriptionProvider(
+        api_key="k", client=httpx.Client(transport=httpx.MockTransport(handler))
+    )
+    assert provider.list_models() == ["gpt-4o-mini-transcribe", "gpt-4o-transcribe", "whisper-1"]
+
+
+def test_list_models_falls_back_when_no_audio_ids():
+    """Custom/self-hosted ASR with no whisper/transcribe names still lists everything."""
+    only_chat = {"data": [{"id": "my-asr-a"}, {"id": "my-asr-b"}]}
+
+    def handler(request):
+        return httpx.Response(200, json=only_chat)
+
+    provider = OpenAITranscriptionProvider(
+        api_key="k", client=httpx.Client(transport=httpx.MockTransport(handler))
+    )
+    assert provider.list_models() == ["my-asr-a", "my-asr-b"]
+
+
 def test_registered_as_openai():
     assert REGISTRY.resolve_transcription("openai") is OpenAITranscriptionProvider

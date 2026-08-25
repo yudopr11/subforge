@@ -10,19 +10,20 @@ from typing import TYPE_CHECKING, Any, ClassVar, Protocol, cast
 
 from textual.app import ComposeResult
 from textual.binding import Binding
-from textual.screen import Screen
+from textual.containers import Vertical
+from textual.screen import ModalScreen
 from textual.widgets import Label
 
 from subforge.app.model_manager import KNOWN_WHISPER_MODELS, LocalModelManager
 from subforge.config.app_config import AppConfig, save_app_config
 from subforge.config.providers import TRANSLATION_PRESETS
+from subforge.tui.screens.language_picker import LanguagePickerScreen
 from subforge.tui.screens.model_manager import ModelManagerScreen
 from subforge.tui.screens.model_picker import ModelPickerScreen
 from subforge.tui.screens.project import ChoiceScreen
 from subforge.tui.screens.settings import (
     ApiKeyInputScreen,
     ReasoningPickerScreen,
-    TextInputScreen,
     UrlInputScreen,
 )
 
@@ -37,7 +38,7 @@ def _whisper_entries() -> list[str]:
     return [f"{mid} · {meta['profile']} ({meta['vram']})" for mid, meta in KNOWN_WHISPER_MODELS.items()]
 
 
-class FirstRunSetupScreen(Screen[None]):
+class FirstRunSetupScreen(ModalScreen[None]):
     BINDINGS: ClassVar[list[Binding | tuple[str, str] | tuple[str, str, str]]] = [
         ("escape", "cancel", "Skip setup")
     ]
@@ -61,8 +62,9 @@ class FirstRunSetupScreen(Screen[None]):
     # ---- rendering -------------------------------------------------------
 
     def compose(self) -> ComposeResult:
-        yield Label("[b]Welcome to SubForge[/b] — initial setup (Esc to skip for now)")
-        yield Label("", id="setup-status")
+        with Vertical():
+            yield Label("[b]Setup Wizard[/b]  —  configure transcription + translation")
+            yield Label("", id="setup-status")
 
     def on_mount(self) -> None:
         self.begin_transcription_choice()
@@ -79,6 +81,14 @@ class FirstRunSetupScreen(Screen[None]):
     def _set_status(self, message: str) -> None:
         label = self.query_one("#setup-status", Label)
         label.update(message)
+        self._log_repl(message)
+
+    def _log_repl(self, message: str) -> None:
+        """Mirror the wizard's current step into the REPL transcript (Pi-style)."""
+        try:
+            self._host.screen_query_menu().log_line(f"▸ {message}")
+        except LookupError:
+            pass  # REPL not yet mounted (unit seam)
 
     def _loader(self, kind: str) -> Loader:
         if self._loader_factory is not None:  # test seam
@@ -151,12 +161,10 @@ class FirstRunSetupScreen(Screen[None]):
         self._ask_source_language()
 
     def _ask_source_language(self) -> None:
-
         self._push(
-            TextInputScreen(
-                "Audio source language",
+            LanguagePickerScreen(
+                "Audio source language (Enter empty for auto-detect)",
                 current=self.cfg.transcription.language,
-                placeholder="Enter for auto-detect (e.g. id, en, ja)",
             ),
             lambda lang: self._source_language_chosen(lang or ""),
         )
@@ -295,10 +303,9 @@ class FirstRunSetupScreen(Screen[None]):
             self.finish()
 
         self._push(
-            TextInputScreen(
+            LanguagePickerScreen(
                 "Default target language",
                 current=self.cfg.translation.default_target,
-                placeholder="e.g. en",
             ),
             target_chosen,
         )
@@ -325,6 +332,7 @@ class FirstRunSetupScreen(Screen[None]):
             return
         save_app_config(self.cfg)
         done = self.on_done
+        self._log_repl("setup complete — configuration saved")
         self.dismiss(None)
         if done:
             done()

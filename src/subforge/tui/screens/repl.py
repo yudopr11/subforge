@@ -8,11 +8,12 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
+from textual import events
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Vertical
 from textual.screen import Screen
-from textual.widgets import Input, Label, RichLog
+from textual.widgets import Input, Label, OptionList, RichLog, Static
 
 from subforge.app.export import export_subtitles
 from subforge.app.pipeline import ALL_STAGES, Pipeline, StageError
@@ -24,6 +25,7 @@ from subforge.app.provider_factory import (
     translation_configured,
 )
 from subforge.models.project import StageState
+from subforge.tui.widgets import SelectableRichLog
 
 if TYPE_CHECKING:
     from subforge.tui.app import SubForgeApp
@@ -63,20 +65,45 @@ class ReplScreen(Screen[None]):
 
     # ---- layout ----------------------------------------------------------
 
+    SLASH_COMMANDS: ClassVar[list[tuple[str, str]]] = [
+        ("/new", "create project + import audio"),
+        ("/open", "list/open recent projects"),
+        ("/transcribe", "run transcription"),
+        ("/review", "caption review overlay"),
+        ("/translate", "translate (default target remembered)"),
+        ("/export", "export SRT/ASS"),
+        ("/settings", "manual provider/model settings"),
+        ("/wizard", "re-run guided setup"),
+        ("/status", "pipeline stage states"),
+        ("/quit", "exit"),
+    ]
+
     def compose(self) -> ComposeResult:
         yield Label("", id="status-bar")
         with Vertical():
-            yield RichLog(id="transcript", markup=True, wrap=True, highlight=False)
-            yield Input(placeholder="Type a command… (? for help)", id="prompt")
+            yield SelectableRichLog(
+                id="transcript", markup=True, wrap=True, highlight=False
+            )
+        with Vertical(id="autocomplete-container"):
+            yield OptionList(id="autocomplete-list")
+        yield Static(
+            "/new /open /transcribe /review /translate /export /settings /wizard /status ? q quit",
+            id="command-legend",
+        )
+        yield Input(placeholder="Type a command… (? for help)", id="prompt")
+        yield Label("", id="footer-bar")
 
     def on_mount(self) -> None:
-        self.log_line("[b]subforge[/b] v0.1.0 — local-first subtitles")
+        self.log_line("[b]subforge[/b] v0.1.0  —  local-first subtitles")
+        self.log_line("[dim]Type /new to start, ? for help, /quit to exit[/dim]")
+        self.log_line("")
         if self._host.project_dir is not None:
             self.log_line(f"▸ opened '[b]{self._host.project_dir.name}[/b]'")
         else:
-            self.log_line("Type [b]/new <audio-file>[/b] to start, or [b]?[/b] for help.")
+            self.log_line("[dim]No project open — start with /new <audio> or /open[/dim]")
             self._hint_setup_if_needed()
         self.refresh_status()
+        self._refresh_footer()
 
     # ---- transcript + status ----------------------------------------------
 
@@ -86,8 +113,26 @@ class ReplScreen(Screen[None]):
     def _set_status(self, message: str) -> None:
         self.query_one("#status-bar", Label).update(message)
 
+    def _refresh_footer(self) -> None:
+        """Pi-style footer: project · model info · shortcuts."""
+        host = self._host
+        parts: list[str] = []
+        if host.project_dir is not None:
+            parts.append(f"project:{host.project_dir.name}")
+        tc = host.app_config.transcription
+        tl = host.app_config.translation
+        if tc.model:
+            parts.append(f"asr:{tc.provider}:{tc.model}")
+        if tl.model:
+            src = tl.provider if tl.source == "provider" else "local"
+            parts.append(f"mt:{src}:{tl.model}")
+        if not parts:
+            parts.append("no project")
+        footer = " · ".join(parts)
+        self.query_one("#footer-bar", Label).update(footer)
+
     def refresh_status(self) -> None:
-        """Footer status line: project · stage glyphs · active models."""
+        """Header status line: project · stage glyphs · active models."""
         host = self._host
         parts: list[str] = []
         project_dir = host.project_dir
@@ -101,9 +146,9 @@ class ReplScreen(Screen[None]):
             model_bits.append(f"mt:{src}:{tl.model}")
 
         if project_dir is None:
-            parts.append("[dim]no project[/dim]")
+            parts.append("no project")
         else:
-            parts.append(f"[b]{project_dir.name}[/b]")
+            parts.append(f"{project_dir.name}")
             project = load_project(project_dir)
             shown: dict[str, StageState] = {s: project.get_stage(s) for s in ALL_STAGES}
             for key in sorted(project.stages):
@@ -116,6 +161,26 @@ class ReplScreen(Screen[None]):
             parts.append(" · ".join(model_bits))
         busy = f" · ⏳ {'/'.join(sorted(self._running_stages))}" if self._running_stages else ""
         self._set_status(" · ".join(parts) + busy)
+        self._refresh_footer()
+        self._update_prompt_border()
+
+    def _update_prompt_border(self) -> None:
+        """Pi-style editor border: color reflects pipeline state."""
+        prompt = self.query_one("#prompt", Input)
+        for cls in ("running", "failed", "completed"):
+            prompt.remove_class(cls)
+        if self._running_stages:
+            prompt.add_class("running")
+            return
+        project_dir = self._host.project_dir
+        if project_dir is None:
+            return
+        project = load_project(project_dir)
+        states = [project.get_stage(s) for s in ALL_STAGES]
+        if any(s is StageState.FAILED for s in states):
+            prompt.add_class("failed")
+        elif all(s in (StageState.COMPLETED, StageState.SKIPPED) for s in states):
+            prompt.add_class("completed")
 
     def reload_config(self) -> None:
         """Reload AppConfig after settings/wizard changes."""
@@ -173,14 +238,104 @@ class ReplScreen(Screen[None]):
 
     # ---- input -------------------------------------------------------------
 
+    # ---- slash command autocomplete (Pi-style) -----------------------------
+
+    def on_input_changed(self, event: Input.Changed) -> None:
+        """Show/hide the slash-command picker as the prompt content changes."""
+        if event.input.id != "prompt":
+            return
+        if self.locate_mode is not None:
+            self._hide_autocomplete()
+            return
+        value = event.value
+        if value.startswith("/"):
+            self._show_autocomplete(value[1:])
+        else:
+            self._hide_autocomplete()
+
+    def _show_autocomplete(self, query: str) -> None:
+        """Filter commands by prefix and display the picker."""
+        container = self.query_one("#autocomplete-container")
+        option_list = self.query_one("#autocomplete-list", OptionList)
+        option_list.clear_options()
+        matches = [
+            (cmd, desc) for cmd, desc in self.SLASH_COMMANDS
+            if cmd[1:].startswith(query) or (query and query in cmd[1:])
+        ]
+        if not matches:
+            container.styles.display = "none"
+            return
+        for cmd, desc in matches:
+            option_list.add_option(f"{cmd}  —  {desc}")
+        option_list.highlighted = 0
+        container.styles.display = "block"
+
+    def _hide_autocomplete(self) -> None:
+        self.query_one("#autocomplete-container").styles.display = "none"
+
+    def _autocomplete_visible(self) -> bool:
+        return self.query_one("#autocomplete-container").styles.display != "none"
+
+    def _autocomplete_up(self) -> None:
+        option_list = self.query_one("#autocomplete-list", OptionList)
+        count = option_list.option_count
+        if count == 0:
+            return
+        current = option_list.highlighted
+        option_list.highlighted = count - 1 if current is None or current == 0 else current - 1
+
+    def _autocomplete_down(self) -> None:
+        option_list = self.query_one("#autocomplete-list", OptionList)
+        count = option_list.option_count
+        if count == 0:
+            return
+        current = option_list.highlighted
+        option_list.highlighted = 0 if current is None or current >= count - 1 else current + 1
+
+    def _autocomplete_fill(self) -> None:
+        """Fill the prompt with the highlighted command (Tab or Enter)."""
+        option_list = self.query_one("#autocomplete-list", OptionList)
+        highlighted = option_list.highlighted
+        if highlighted is None:
+            return
+        prompt = self.query_one("#prompt", Input)
+        command = str(option_list.get_option_at_index(highlighted).prompt).split("  —  ")[0]
+        prompt.value = command + " "
+        prompt.cursor_position = len(command) + 1
+        self._hide_autocomplete()
+        prompt.focus()
+
+    def on_key(self, event: events.Key) -> None:
+        """Route arrow/Tab/Escape to the autocomplete picker when visible."""
+        if not self._autocomplete_visible():
+            return
+        if event.key in ("up", "down"):
+            event.stop()
+            if event.key == "up":
+                self._autocomplete_up()
+            else:
+                self._autocomplete_down()
+        elif event.key == "tab":
+            event.stop()
+            self._autocomplete_fill()
+        elif event.key == "escape":
+            event.stop()
+            self._hide_autocomplete()
+
+    # ---- input -------------------------------------------------------------
+
     def on_input_submitted(self, event: Input.Submitted) -> None:
         if event.input.id != "prompt":
             return
         raw = event.value.strip()
+        if self._autocomplete_visible():
+            # Enter selects the highlighted command instead of submitting.
+            self._autocomplete_fill()
+            return
         self.log_line(f"[dim]>[/dim] {raw}")
         event.input.clear()
         if self.locate_mode == "new":
-            if event.input.id == "prompt" and raw == "" :
+            if raw == "":
                 self.exit_locate_mode()
                 self.log_line("[dim]cancelled[/dim]")
             else:
@@ -188,6 +343,8 @@ class ReplScreen(Screen[None]):
             return
         if raw in {"?", "help"}:
             self.run_command("/help")
+        elif raw in {"q", "quit"}:
+            self.run_command("/quit")
         elif raw.startswith("/"):
             self.run_command(raw)
         elif raw:
@@ -247,7 +404,7 @@ class ReplScreen(Screen[None]):
     def _log_result(self, message: str) -> None:
         ok = not message.startswith(("[ERROR]", "[SETUP]"))
         glyph = "✓" if ok else "✗"
-        color = "green" if ok else "red"
+        color = "#00ff00" if ok else "#ff4444"
         self.log_line(f"[{color}]{glyph}[/{color}] {message}")
         self.refresh_status()
 
@@ -278,17 +435,18 @@ class ReplScreen(Screen[None]):
             self.log_line("No projects yet — use /new <audio>")
             return
         if not arg:
+            # Pi-style: searchable picker — type to filter, ↑/↓, Enter to open.
             self._recent_listing = projects
-            self.log_line("recent projects:")
-            for i, proj in enumerate(projects, 1):
-                self.log_line(f"  {i}. [b]{proj.name}[/b] · {proj}")
-            self.log_line("open one with: /open <number-or-name>")
+            from subforge.tui.screens.project import ProjectPickerScreen
+
+            self._host.push_screen(ProjectPickerScreen(projects), self._open_picked)
             return
         target: Path | None = None
-        if arg.isdigit() and self._recent_listing:
+        if arg.isdigit():
+            listing = self._recent_listing or projects
             idx = int(arg) - 1
-            if 0 <= idx < len(self._recent_listing):
-                target = self._recent_listing[idx]
+            if 0 <= idx < len(listing):
+                target = listing[idx]
         if target is None:
             # resolution priority: exact name > prefix > substring (deterministic)
             by_name = sorted(projects, key=lambda p: p.name)
@@ -302,6 +460,18 @@ class ReplScreen(Screen[None]):
             self.log_line(f"[red]✗[/red] no project matching '{arg}'")
             return
         self._project_opened(target)
+
+    def _open_picked(self, picked: object) -> None:
+        """Project picker result: Path to open, NEW to create, None to cancel."""
+        if picked is None:
+            return
+        from subforge.tui.screens.project import ProjectPickerScreen
+
+        if picked == ProjectPickerScreen.NEW:
+            self._cmd_new("")
+            return
+        if isinstance(picked, Path):
+            self._project_opened(picked)
 
     def _project_opened(self, directory: Path) -> None:
         self._host.project_dir = directory
@@ -397,13 +567,6 @@ class ReplScreen(Screen[None]):
         names = ", ".join(p.name for p in paths) or "(nothing to export yet)"
         self.log_line(f"▸ exported: {names}")
 
-    def _cmd_speakers(self, arg: str) -> None:
-        project_dir = self._require_project()
-        if project_dir is not None:
-            from subforge.tui.screens.speaker_map import SpeakerMapScreen
-
-            self._host.push_screen(SpeakerMapScreen(project_dir))
-
     def _cmd_settings(self, arg: str) -> None:
         from subforge.tui.screens.settings import SettingsScreen
 
@@ -418,12 +581,6 @@ class ReplScreen(Screen[None]):
                 on_done=self.reload_config,
             )
         )
-
-    def _cmd_models(self, arg: str) -> None:
-        from subforge.app.model_manager import LocalModelManager
-        from subforge.tui.screens.model_manager import ModelManagerScreen
-
-        self._host.push_screen(ModelManagerScreen(manager=LocalModelManager()))
 
     def _cmd_status(self, arg: str) -> None:
         project_dir = self._require_project()
@@ -448,10 +605,8 @@ class ReplScreen(Screen[None]):
             ("/review", "caption review overlay"),
             ("/translate [lang]", "translate (default target remembered)"),
             ("/export [formats]", "export SRT/ASS"),
-            ("/speakers", "name diarization speakers"),
             ("/settings", "manual provider/model settings"),
             ("/wizard", "re-run guided setup"),
-            ("/models", "local whisper model manager"),
             ("/status", "pipeline stage states"),
             ("/quit", "exit"),
         ]
@@ -459,11 +614,15 @@ class ReplScreen(Screen[None]):
         for cmd, desc in rows:
             self.log_line(f"  [b]{cmd:<20}[/b] {desc}")
         self.log_line("[dim]leading '/' optional · esc backs out of overlays[/dim]")
+        self.log_line("[dim]copy: drag mouse over transcript to select · right-click or Ctrl+C copies · Ctrl+C again quits[/dim]")
 
     def _cmd_quit(self, arg: str) -> None:
         self._host.exit()
 
     def action_cancel_or_prompt(self) -> None:
+        if self._autocomplete_visible():
+            self._hide_autocomplete()
+            return
         if self.locate_mode == "new":
             self.exit_locate_mode()
             self.log_line("[dim]locate cancelled[/dim]")
@@ -471,4 +630,12 @@ class ReplScreen(Screen[None]):
         self.query_one("#prompt", Input).focus()
 
     def action_quit(self) -> None:
+        """Ctrl+C: copy an active mouse selection, otherwise quit (terminal UX)."""
+        selection = self.get_selected_text() if self.selections else None
+        if selection:
+            self._host.copy_to_clipboard(selection)
+            self.clear_selection()
+            self.log_line("[green]✓[/green] selection copied to clipboard")
+            self._set_status("copied selection · Ctrl+C again to quit")
+            return
         self._host.exit()

@@ -177,15 +177,6 @@ def test_build_pipeline_wires_providers_or_leaves_unset(tmp_path):
     # translation_service falls back to the pipeline's unconfigured placeholder
 
 
-def test_build_pipeline_diarization_passthrough(tmp_path):
-    class D:
-        def diarize(self, audio_path):
-            return []
-
-    pipe = build_pipeline(tmp_path / "p", AppConfig(), diarization=D())
-    assert pipe.diarization is not None
-
-
 def test_readiness_checks():
     from subforge.app.provider_factory import transcription_configured, translation_configured
 

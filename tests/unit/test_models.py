@@ -19,7 +19,6 @@ def make_project() -> Project:
 
 def test_segment_defaults():
     seg = Segment(id=1, start=0.0, end=1.0, source="hi")
-    assert seg.speaker is None
     assert seg.translations == {}
 
 

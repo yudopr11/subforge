@@ -141,151 +141,203 @@ def test_batch_size_coerced_and_clamped(tmp_path, monkeypatch):
     assert screen.cfg.translation.batch_size == 5
 
 
-async def test_settings_screen_renders_section_labels():
+async def test_settings_opens_two_choice_menu():
+    """Opening /settings presents a 2-choice menu: Transcribe or Translation."""
     from subforge.tui.app import SubForgeApp
+    from subforge.tui.screens.project import ChoiceScreen
     from subforge.tui.screens.settings import SettingsScreen
 
     app = SubForgeApp(app_config=AppConfig())
     async with app.run_test() as pilot:
         await app.push_screen(SettingsScreen(AppConfig()))
         await pilot.pause()
-        labels = " ".join(str(l.render()) for l in app.screen.query("Label"))
-        assert "Transcription" in labels and "Translation" in labels
-        buttons = " ".join(str(b.label) for b in app.screen.query("Button"))
-        assert "Reasoning:" in buttons and "Batch size:" in buttons
+        assert isinstance(app.screen, ChoiceScreen)
+        options = [str(o.prompt) for o in app.screen.query_one("#choices").options]
+        assert any("Transcribe" in o for o in options)
+        assert any("Translation" in o for o in options)
 
 
-# ---- wizard re-run from Settings -------------------------------------------
+# ---- guided settings flow (Pi-style choice walk) ------------------------------
 
 
-async def test_open_wizard_prefills_and_completion_saves(tmp_path, monkeypatch):
+class _StaticLoader(list):
+    """Callable list — satisfies Loader contract offline."""
+
+    def __call__(self) -> list[str]:
+        return list(self)
+
+
+def fake_loaders(models: dict[str, list[str]]) -> object:
+    def factory(kind: str) -> _StaticLoader:
+        return _StaticLoader(models.get(kind.split(":")[0], ["fake-model-1"]))
+
+    return factory
+
+
+def _pick(screen: object, prompt: str) -> None:
+    from subforge.tui.screens.language_picker import LanguagePickerScreen
+    from subforge.tui.screens.model_picker import ModelPickerScreen
+    from subforge.tui.screens.project import ChoiceScreen
+    from subforge.tui.screens.settings import (
+        ApiKeyInputScreen,
+        ReasoningPickerScreen,
+        UrlInputScreen,
+    )
+
+    if isinstance(screen, ChoiceScreen):
+        screen.choose(prompt)
+    elif isinstance(screen, (ReasoningPickerScreen, ModelPickerScreen)):
+        screen.on_option_list_option_selected(
+            type("Evt", (), {"option": type("O", (), {"prompt": prompt})()})()
+        )
+    elif isinstance(screen, (ApiKeyInputScreen, UrlInputScreen, LanguagePickerScreen)):
+        field = screen.query_one("Input")
+        field.value = prompt
+        screen.on_input_submitted(type("Evt", (), {"input": field})())
+    else:  # pragma: no cover — guards future modal additions
+        raise TypeError(f"no driver for {type(screen).__name__}")
+
+
+async def test_settings_menu_drives_each_stage_then_saves(tmp_path, monkeypatch):
+    """Menu -> Transcribe (model + source lang) -> menu -> Translation (model + target)."""
     from subforge.config.app_config import load_app_config
     from subforge.tui.app import SubForgeApp
+    from subforge.tui.screens.project import ChoiceScreen
     from subforge.tui.screens.settings import SettingsScreen
-    from subforge.tui.screens.setup_wizard import FirstRunSetupScreen
 
     monkeypatch.setenv("SUBFORGE_CONFIG", str(tmp_path / "config.json"))
-
-    cfg = AppConfig(transcription={"provider": "local", "model": "medium"})
+    loaders = fake_loaders({"whisper": ["small · Lightweight"], "local": ["qwen3-14b"]})
     saved: list[bool] = []
-    app = SubForgeApp(app_config=cfg.model_copy(deep=True))
+    app = SubForgeApp(app_config=AppConfig())
     async with app.run_test() as pilot:
         await pilot.pause()
-        screen = SettingsScreen(cfg, on_saved=lambda: saved.append(True))
+        screen = SettingsScreen(
+            AppConfig(), on_saved=lambda: saved.append(True), loader_factory=loaders  # type: ignore[arg-type]
+        )
         await app.push_screen(screen)
         await pilot.pause()
 
-        # button exists and seam pushes the wizard prefilled with current values
-        assert app.screen.query_one("#btn-wizard")
-        screen.open_wizard()
+        # menu appears first
+        assert isinstance(app.screen, ChoiceScreen)
+
+        # -> Transcribe: local whisper + source language
+        _pick(app.screen, "Transcribe  —  model + source language")
+        await pilot.pause()
+        lbls = [str(l.render()) for l in app.screen.query("Label")]
+        assert any("Transcription — where does it run" in s for s in lbls)
+        _pick(app.screen, "Local (WhisperX)")
+        await pilot.pause()
+        _pick(app.screen, "small · Lightweight")
+        await pilot.pause()
+        _pick(app.screen, "id")  # source language
         await pilot.pause()
 
-        def find_wizard() -> FirstRunSetupScreen:
-            for s in reversed(list(app.screen_stack)):
-                if isinstance(s, FirstRunSetupScreen):
-                    return s
-            raise AssertionError("wizard not pushed")
-
-        wizard = find_wizard()
-        assert wizard.cfg.transcription.model == "medium"  # prefilled, not blank
-
-        # user changes translation side inside the wizard and finishes
-        wizard.cfg.translation.source = "local"
-        wizard.cfg.translation.local_base_url = "http://localhost:1234/v1"
-        wizard.cfg.translation.source = "local"
-        wizard.cfg.translation.local_base_url = "http://localhost:1234/v1"
-        wizard.cfg.translation.model = "qwen3-14b"
-
-        # close the wizard's own first-step modal (as a user would), then finish
-        app.screen.action_cancel()  # type: ignore[union-attr]
+        # returns to the menu; configure -> Translation: local server + target lang
+        assert isinstance(app.screen, ChoiceScreen)
+        _pick(app.screen, "Translation  —  model + target language")
         await pilot.pause()
-        wizard.finish()
+        _pick(app.screen, "Local server (LM Studio / Ollama)")
+        await pilot.pause()
+        _pick(app.screen, "http://localhost:1234/v1")
+        await pilot.pause()
+        _pick(app.screen, "")
+        await pilot.pause()
+        _pick(app.screen, "qwen3-14b")
+        await pilot.pause()
+        _pick(app.screen, "en")  # target language
         await pilot.pause()
 
         loaded = load_app_config()
-        assert loaded.transcription.model == "medium"
+        assert loaded.transcription.provider == "local"
+        assert loaded.transcription.model == "small"
         assert loaded.translation.source == "local"
+        assert loaded.translation.local_base_url == "http://localhost:1234/v1"
         assert loaded.translation.model == "qwen3-14b"
-
-        # settings reloaded its view of config and notified the app
-        assert screen.cfg.translation.model == "qwen3-14b"
-        assert saved == [True]
-        # back on settings after finish (step modals dismissed with the wizard)
-        assert isinstance(app.screen, SettingsScreen)
+        assert loaded.transcription.language == "id"
+        assert loaded.translation.default_target == "en"
+        # persisted once per configured stage (transcribe, then translation)
+        assert saved == [True, True]
 
 
-async def test_wizard_button_present_in_dom():
+async def test_settings_guided_flow_cloud_offers_reasoning(tmp_path, monkeypatch):
+    """Cloud translation path asks reasoning ONLY for the model's vocabulary."""
     from subforge.tui.app import SubForgeApp
-    from subforge.tui.screens.settings import SettingsScreen
+    from subforge.tui.screens.settings import ReasoningPickerScreen, SettingsScreen
 
-    app = SubForgeApp()
+    class FakeCaps:
+        def reasoning_spec(self, provider_preset: str, model_id: str) -> ReasoningSpec:
+            if model_id == "glm-5.2":
+                return ReasoningSpec("effort", ("high", "max"))
+            return ReasoningSpec("unsupported", ())
+
+    loaders = fake_loaders({"cloud": ["glm-5.2"]})
+    app = SubForgeApp(app_config=AppConfig())
     async with app.run_test() as pilot:
-        await app.push_screen(SettingsScreen(AppConfig()))
         await pilot.pause()
-        buttons = [str(b.label) for b in app.screen.query("Button")]
-        assert any("wizard" in b.lower() for b in buttons)
+        screen = SettingsScreen(
+            AppConfig(), capability_client=FakeCaps(), loader_factory=loaders  # type: ignore[arg-type]
+        )
+        await app.push_screen(screen)
+        await pilot.pause()
+
+        # menu -> Transcribe (OpenAI) -> model + source lang, then back to menu
+        _pick(app.screen, "Transcribe  —  model + source language")
+        await pilot.pause()
+        _pick(app.screen, "OpenAI provider")
+        await pilot.pause()
+        _pick(app.screen, "sk-test")  # API key
+        await pilot.pause()
+        _pick(app.screen, "whisper-1")
+        await pilot.pause()
+        _pick(app.screen, "")
+        await pilot.pause()  # source language: auto-detect
+
+        # menu -> Translation (cloud) -> model -> reasoning
+        _pick(app.screen, "Translation  —  model + target language")
+        await pilot.pause()
+        _pick(app.screen, "Cloud provider")
+        await pilot.pause()
+        _pick(app.screen, "OpenCode Zen (opencode-zen)")
+        await pilot.pause()
+        _pick(app.screen, "oc-key")
+        await pilot.pause()
+        _pick(app.screen, "glm-5.2")
+        await pilot.pause()
+
+        assert isinstance(app.screen, ReasoningPickerScreen)
+        options = [str(o.prompt) for o in app.screen.query_one("OptionList").options]
+        assert options == ["high", "max"]
+        _pick(app.screen, "max")
+        await pilot.pause()
+        assert screen.cfg.translation.reasoning_effort == "max"
 
 
 # ---- keyboard-only interaction (ARCH §3.2) ---------------------------------
 
 
-async def test_keybindings_drive_settings(tmp_path, monkeypatch):
+async def test_settings_escape_mid_flow_cancels(tmp_path, monkeypatch):
+    """Esc on the first step backs out through settings to the REPL, unsaved."""
     from subforge.tui.app import SubForgeApp
+    from subforge.tui.screens.repl import ReplScreen
     from subforge.tui.screens.settings import SettingsScreen
 
     monkeypatch.setenv("SUBFORGE_CONFIG", str(tmp_path / "config.json"))
-    app = SubForgeApp()
+    app = SubForgeApp(app_config=AppConfig())
     async with app.run_test() as pilot:
-        screen = SettingsScreen(AppConfig())
-        await app.push_screen(screen)
         await pilot.pause()
-
-        # 't' cycles transcribe source local -> openai
-        await pilot.press("t")
-        assert screen.cfg.transcription.provider == "openai"
-        await pilot.press("t")
-        assert screen.cfg.transcription.provider == "local"
-
-        # 'c' cycles translate source local -> provider
-        await pilot.press("c")
-        assert screen.cfg.translation.source == "provider"
-
-        # 'o' opens the audio-language prompt
-        from subforge.tui.screens.settings import TextInputScreen
-
-        await pilot.press("o")
-        assert isinstance(app.screen, TextInputScreen)
-        app.screen.action_cancel()  # type: ignore[union-attr]
-        await pilot.pause()
-
-
-async def test_wizard_and_save_keys(tmp_path, monkeypatch):
-    from subforge.tui.app import SubForgeApp
-    from subforge.tui.screens.settings import SettingsScreen
-    from subforge.tui.screens.setup_wizard import FirstRunSetupScreen
-
-    monkeypatch.setenv("SUBFORGE_CONFIG", str(tmp_path / "config.json"))
-    app = SubForgeApp()
-    async with app.run_test() as pilot:
         screen = SettingsScreen(AppConfig(transcription={"provider": "local", "model": "small"}))
         await app.push_screen(screen)
         await pilot.pause()
 
-        await pilot.press("w")  # wizard
+        # first step modal is up; Esc closes it -> SettingsScreen acts cancelled
+        await pilot.press("escape")
         await pilot.pause()
-        for s in reversed(list(app.screen_stack)):
-            if isinstance(s, FirstRunSetupScreen):
-                break
-        else:
-            raise AssertionError("wizard not opened by 'w'")
-        app.screen.action_cancel()  # type: ignore[union-attr]  # leave wizard step modal
         await pilot.pause()
-        app.screen.action_cancel()  # type: ignore[union-attr]  # leave wizard itself
-        await pilot.pause()
+        assert isinstance(app.screen, ReplScreen)
+        # nothing was persisted for the (never-completed) flow: disk stays defaults
+        from subforge.config.app_config import load_app_config as _load
 
-        await pilot.press("ctrl+s")  # save without mouse
-        await pilot.pause()
-        assert (tmp_path / "config.json").exists()
+        assert _load().transcription.model == ""
 
 
 async def test_escape_returns_to_repl_from_settings():
@@ -305,22 +357,3 @@ async def test_escape_returns_to_repl_from_settings():
         await pilot.pause()
 
         assert isinstance(app.screen, ReplScreen)
-
-
-def test_keymap_legend_rendered():
-    from subforge.tui.app import SubForgeApp
-    from subforge.tui.screens.settings import SettingsScreen
-
-    async def go():
-        app = SubForgeApp()
-        async with app.run_test() as pilot:
-            await app.push_screen(SettingsScreen(AppConfig()))
-            await pilot.pause()
-            labels = " ".join(str(l.render()) for l in app.screen.query("Label"))
-            return labels
-
-    import asyncio
-
-    labels = asyncio.get_event_loop_policy().new_event_loop().run_until_complete(go())
-    for key in ("w", "t", "y", "k", "o", "c", "p", "i", "d", "n", "r", "b", "g"):
-        assert key in labels

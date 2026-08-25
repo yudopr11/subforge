@@ -10,7 +10,6 @@ from subforge.app.translation_service import DEFAULT_BATCH_SIZE, TranslationServ
 from subforge.config.app_config import AppConfig
 from subforge.config.providers import TRANSLATION_PRESETS
 from subforge.config.settings import Settings
-from subforge.providers.base import DiarizationProvider
 from subforge.providers.capabilities import PROVIDER_TO_CATALOG, CapabilityClient, ReasoningSpec
 from subforge.providers.transcription.openai import OpenAITranscriptionProvider
 from subforge.providers.transcription.whisperx import WhisperXProvider
@@ -92,7 +91,6 @@ def build_translation_service(
 def build_pipeline(
     project_dir: Path,
     cfg: AppConfig,
-    diarization: DiarizationProvider | None = None,
     capability_client: object | None = None,
 ) -> Pipeline:
     """Assemble a ready-to-run Pipeline; unconfigured stages stay unset so the
@@ -111,7 +109,6 @@ def build_pipeline(
         project_dir,
         _settings_for(cfg),
         transcription=transcription,
-        diarization=diarization,
         translation_service=translation_service,
     )
 
@@ -123,7 +120,6 @@ def _settings_for(cfg: AppConfig) -> Settings:
 
     settings = Settings()
     settings.translation.batch_size = cfg.translation.batch_size or settings.translation.batch_size
-    settings.diarization.enabled = False  # MVP: diarization opt-in via future UI toggle
     return settings
 
 

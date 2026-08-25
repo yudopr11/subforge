@@ -59,7 +59,6 @@ def test_audio_to_srt_and_ass(tmp_path: Path):
         translation_service=TranslationService(ScriptedLLM()),
     )
     pipe.run_transcription("final_audio.wav")
-    pipe.run_diarization("final_audio.wav")  # no provider -> SKIPPED, must not block
     pipe.run_translation("en")
     written = export_subtitles(d, formats=["srt", "ass"], languages=["en"])
 
@@ -71,7 +70,6 @@ def test_audio_to_srt_and_ass(tmp_path: Path):
     assert "2\n00:00:03,500 --> 00:00:06,800\nWelcome back." in en_srt
 
     project = load_project(d)
-    assert project.get_stage("diarization") is StageState.SKIPPED
     assert project.get_stage("export") is StageState.COMPLETED
 
     # transcripts/source.json matches canonical normalization

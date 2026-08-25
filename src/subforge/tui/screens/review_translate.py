@@ -29,10 +29,10 @@ class ReviewTranslateScreen(ModalScreen[None]):
 
     def compose(self) -> ComposeResult:
         with Vertical():
-            yield Label("Translation Review")
+            yield Label("[b]Translation Review[/b]")
             yield DataTable(id="review")
             yield Input(placeholder="Fix translation; Enter applies to selected row", id="fix")
-            yield Label("Enter apply · Esc back", id="hints")
+            yield Label("[dim]Enter apply · Esc back[/dim]", id="hints")
             yield Label("", id="export-status")
 
     def on_mount(self) -> None:
