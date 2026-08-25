@@ -55,16 +55,16 @@ Specs: `docs/PRD.md`, `docs/ARCHITECTURE.md` (v0.2.0).
 - [x] `TranslationConfig.default_target` asked at end of wizard; remembered and used as
       TargetLanguageScreen default; persisted back after each translate
 
-## Task 8: First-run setup wizard — IN PROGRESS ← current
+## Task 8: First-run setup wizard — DONE
 
 - [x] `FirstRunSetupScreen`: Step 1 transcribe (Local→model→install offer | OpenAI→key→live model list)
 - [x] Step 2 translate (Local→URL→optional key→live model list | Cloud→preset→key→live model list)
 - [x] App routes to wizard when `is_first_run()`; Esc skips without saving
 - [x] Validation blocks save until both models chosen (+URL/key where applicable)
-- [ ] **Reasoning-effort prompt after translation model choice** (PRD §15): cloud only,
+- [x] **Reasoning-effort prompt after translation model choice** (PRD §15): cloud only,
       offers exactly the model's discovered values via `ReasoningPickerScreen`; skipped
       silently for local servers / non-reasoning models / catalog failure
-      ← code written, tests pending, NOT committed
+  Commit: `feat: reasoning effort prompt in first-run wizard for capable models`
 
 ## Task 9: CI — DONE
 

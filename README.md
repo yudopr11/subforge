@@ -62,16 +62,21 @@ Whisper models download automatically on first use and are cached locally.
 subforge            # launches the TUI
 ```
 
-1. **Select Audio** (`n`) — paste the path to your exported audio; SubForge creates the project and imports it.
-2. Pick your setup (**Settings**, `s`) — everything is configurable in-app, no `.env` needed:
-   - **Transcribe**: *Local* → choose/install a Whisper model sized for your machine, or *Provider* → paste your OpenAI API key → pick a model from the live list.
-   - **Translate**: *Local* → point at your LM Studio/Ollama URL → pick a model, or *Provider* → choose OpenAI / OpenCode Zen / OpenCode Go → paste your API key → pick a model (+ reasoning level if the model offers one).
-3. **Transcribe** — pick it from the menu; failures show a retryable `[ERROR]` status.
-4. **Review Captions** — fix text inline (`Ctrl+S` saves).
-5. **Translate** — choose the language code, then review side-by-side.
+1. **First launch opens setup**: choose where Transcription runs (*Local* WhisperX with
+   model install, or OpenAI with API key + live model list) and where Translation runs
+   (*Local* LM Studio/Ollama URL [+ optional key], or OpenAI / OpenCode Zen / OpenCode Go).
+   Reasoning effort is offered when the chosen model supports it; pick your source and
+   default target languages. Everything can be changed later in Settings (`s`).
+2. **Select Audio** (`n`) — recent projects are listed to reopen, or create new from an
+   exported audio file.
+3. **Transcribe** — one run at a time; failures show a retryable `[ERROR]` status.
+4. **Review Captions** — edit text inline (`Ctrl+S` saves) and press `p` to play the
+   segment's audio range to verify timing.
+5. **Translate** — choose the target language, then review side-by-side.
 6. **Export SRT / ASS** — writes `exports/source.*` plus every completed translation.
 
-Name speakers detected by diarization with the speakers screen (`m`).
+Speakers from diarization can be named via the speakers screen (`m`). `Esc` always
+returns to the main menu.
 
 Changed your mind later? Everything above can be switched in the Settings menu at any time — no project restart.
 
