@@ -12,6 +12,8 @@ from typing import Literal
 
 from pydantic import BaseModel
 
+from subforge.app.storage import get_config_path
+
 
 class TranscriptionConfig(BaseModel):
     provider: Literal["local"] = "local"
@@ -39,10 +41,7 @@ class AppConfig(BaseModel):
 
 
 def default_config_path() -> Path:
-    env = os.environ.get("SUBFORGE_CONFIG")
-    if env:
-        return Path(env)
-    return Path.home() / ".config" / "subforge" / "config.json"
+    return get_config_path()
 
 
 def save_app_config(config: AppConfig, path: Path | None = None) -> Path:

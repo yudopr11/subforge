@@ -1,12 +1,12 @@
 """Discovery and management of local GGML Whisper models for whisper.cpp."""
 
-import os
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from subforge.app.device import DeviceDetector, DeviceSpecs
+from subforge.app.storage import get_models_dir
 
 GGML_WHISPER_MODELS: dict[str, dict[str, str]] = {
     "tiny": {
@@ -63,13 +63,7 @@ class LocalModelInfo:
 
 
 def default_models_dir() -> Path:
-    env = os.environ.get("SUBFORGE_MODELS_DIR")
-    if env:
-        return Path(env)
-    if os.name == "nt":
-        app_data = os.environ.get("LOCALAPPDATA", str(Path.home() / "AppData" / "Local"))
-        return Path(app_data) / "subforge" / "models"
-    return Path.home() / ".local" / "share" / "subforge" / "models"
+    return get_models_dir()
 
 
 class LocalModelManager:

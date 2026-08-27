@@ -8,15 +8,13 @@ import tempfile
 from pathlib import Path
 
 from subforge.app.model_manager import LocalModelManager
+from subforge.app.storage import get_bin_dir
 from subforge.models.transcript import Transcript, TranscriptSegment
 from subforge.providers.registry import REGISTRY
 
 
 def default_bin_dir() -> Path:
-    if os.name == "nt":
-        app_data = os.environ.get("LOCALAPPDATA", str(Path.home() / "AppData" / "Local"))
-        return Path(app_data) / "subforge" / "bin"
-    return Path.home() / ".local" / "share" / "subforge" / "bin"
+    return get_bin_dir()
 
 
 def install_whisper_cli_binaries(target_dir: Path | None = None) -> Path:

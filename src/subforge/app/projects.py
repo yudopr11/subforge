@@ -9,6 +9,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from subforge.app.project_store import create_project
+from subforge.app.storage import get_projects_dir
 from subforge.models.project import ProjectMeta
 
 AUDIO_SUFFIXES = {".wav", ".flac", ".mp3", ".m4a", ".aac", ".ogg", ".opus"}
@@ -16,9 +17,7 @@ AUDIO_SUFFIXES = {".wav", ".flac", ".mp3", ".m4a", ".aac", ".ogg", ".opus"}
 
 def projects_root() -> Path:
     """Directory under which new projects are created (override for tests)."""
-    import os
-
-    return Path(os.environ.get("SUBFORGE_PROJECTS_DIR", "projects"))
+    return get_projects_dir()
 
 
 def is_audio_file(path: Path) -> bool:
