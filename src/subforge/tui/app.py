@@ -417,7 +417,14 @@ class SubForgeApp(App[None]):
         self.needs_setup = force_setup if force_setup is not None else is_first_run()
 
     def on_mount(self) -> None:
+        from subforge.app.storage import migrate_legacy_projects
+
+        migrated = migrate_legacy_projects()
         self.push_screen(ReplScreen())
+        if migrated:
+            self.repl.log_line(
+                f"[dim]Migrated {len(migrated)} legacy project(s) to app storage.[/dim]"
+            )
         if self.needs_setup:
             self.push_screen(FirstRunSetupScreen(on_done=self._setup_finished))
 
