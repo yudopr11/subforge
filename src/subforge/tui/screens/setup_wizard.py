@@ -14,7 +14,7 @@ from textual.containers import Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Label
 
-from subforge.app.model_manager import KNOWN_WHISPER_MODELS, LocalModelManager
+from subforge.app.model_manager import LocalModelManager
 from subforge.config.app_config import AppConfig, save_app_config
 from subforge.config.providers import TRANSLATION_PRESETS
 from subforge.tui.screens.language_picker import LanguagePickerScreen
@@ -35,7 +35,13 @@ Loader = Callable[[], list[str]]
 
 
 def _whisper_entries() -> list[str]:
-    return [f"{mid} · {meta['profile']} ({meta['vram']})" for mid, meta in KNOWN_WHISPER_MODELS.items()]
+    manager = LocalModelManager()
+    models = manager.list_models()
+    entries = []
+    for m in models:
+        rec = " [RECOMMENDED]" if m.recommended else ""
+        entries.append(f"{m.id} · {m.profile} ({m.vram}, {m.size}){rec}")
+    return entries
 
 
 class FirstRunSetupScreen(ModalScreen[None]):
@@ -118,19 +124,14 @@ class FirstRunSetupScreen(ModalScreen[None]):
     # ---- step 1: transcription ---------------------------------------------
 
     def begin_transcription_choice(self) -> None:
-        self._set_status("Step 1/2 · Transcription — where should it run?")
+        self._set_status("Step 1/2 · Transcription — choose Whisper model (always local)")
         self._push(
-            ChoiceScreen("Transcription", ["Local (WhisperX)", "OpenAI provider"]),
-            lambda choice: self._tc_source(str(choice) if choice else ""),
+            ModelPickerScreen("Choose Whisper model (always local)", self._loader("whisper")),
+            lambda model: self.apply_tc_model(str(model)) if model else None,
         )
 
     def _tc_source(self, choice: str) -> None:
-        if not choice:
-            return  # cancelled — remain on the wizard
-        self._push(
-            ModelPickerScreen("Choose Whisper model", self._loader("whisper")),
-            lambda model: self.apply_tc_model(str(model)) if model else None,
-        )
+        self.begin_transcription_choice()
 
     def _tc_key(self, key: str) -> None:
         pass
@@ -152,10 +153,7 @@ class FirstRunSetupScreen(ModalScreen[None]):
 
     def _source_language_chosen(self, language: str) -> None:
         self.cfg.transcription.language = language.strip().lower()
-        if self.cfg.transcription.provider == "local":
-            self._offer_local_install()
-        else:
-            self.begin_translation_choice()
+        self._offer_local_install()
 
     def _offer_local_install(self) -> None:
         self._push(

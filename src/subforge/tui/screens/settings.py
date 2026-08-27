@@ -18,7 +18,6 @@ from textual.css.query import NoMatches
 from textual.screen import ModalScreen, Screen
 from textual.widgets import Input, Label, OptionList
 
-from subforge.app.model_manager import KNOWN_WHISPER_MODELS
 from subforge.app.provider_factory import validate_reasoning_choice
 from subforge.config.app_config import AppConfig, save_app_config
 from subforge.config.providers import TRANSLATION_PRESETS
@@ -182,7 +181,15 @@ class SettingsScreen(ModalScreen[None]):
         if self._loader_factory is not None:
             return self._loader_factory(kind)
         if kind == "whisper":
-            return lambda: [f"{mid} · {meta['profile']}" for mid, meta in KNOWN_WHISPER_MODELS.items()]
+            from subforge.app.model_manager import LocalModelManager
+
+            manager = LocalModelManager()
+            models = manager.list_models()
+            entries = []
+            for m in models:
+                rec = " [RECOMMENDED]" if m.recommended else ""
+                entries.append(f"{m.id} · {m.profile} ({m.vram}, {m.size}){rec}")
+            return lambda: entries
         if kind.startswith("openai:"):
             raise ValueError(f"OpenAI transcription is no longer supported: {kind}")
         if kind.startswith("local:"):
@@ -256,34 +263,19 @@ class SettingsScreen(ModalScreen[None]):
     # ---- stage: transcription (provider + model + source language) -----------
 
     def begin_transcription_choice(self) -> None:
-        self._set_status("Transcribe · where does it run?")
-        self._push(
-            ChoiceScreen("Transcription — where does it run?", ["Local (WhisperX)", "OpenAI provider"]),
-            lambda c: self.tc_source(str(c) if c else ""),
-        )
-
-    def tc_source(self, choice: str) -> None:
-        if not choice:
-            self.show_menu()  # Esc back to the top menu
-            return
-        self.set_transcription_source("openai" if "OpenAI" in choice else "local")
         self.show_tc_steps()
 
-    # ---- transcription step menu (local: 2 steps · cloud: 3 steps) ------------
+    def tc_source(self, choice: str) -> None:
+        self.show_tc_steps()
+
+    # ---- transcription step menu (always local: 2 steps) ----------------------
 
     def show_tc_steps(self) -> None:
-        """Steps remaining after the local/cloud choice (PRD §7)."""
-        if self.cfg.transcription.provider == "local":
-            steps = [
-                "1 · Select model — Whisper sizes for your machine",
-                "2 · Source language — or auto-detect",
-            ]
-        else:
-            steps = [
-                "1 · Connect — OpenAI API key",
-                "2 · Select model — live list",
-                "3 · Source language — or auto-detect",
-            ]
+        """Steps remaining for local transcription (PRD §7)."""
+        steps = [
+            "1 · Select model — Whisper sizes for your machine",
+            "2 · Source language — or auto-detect",
+        ]
         self._set_status("Transcribe · pick a step — Esc backs up")
         self._push(
             ChoiceScreen("Transcription — pick a step", steps),

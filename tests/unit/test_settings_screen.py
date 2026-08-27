@@ -79,15 +79,14 @@ def test_transcription_mutations_roundtrip_to_disk(tmp_path, monkeypatch):
     from subforge.config.app_config import load_app_config
 
     screen, saved = _screen(tmp_path, monkeypatch)
-    screen.set_transcription_source("openai")
-    screen.apply_tc_key("sk-xyz")
-    screen.apply_tc_model("whisper-1")
+    screen.apply_tc_model("small")
+    screen.apply_tc_language("ja")
     screen.save_config()
 
     loaded = load_app_config()
-    assert loaded.transcription.provider == "openai"
-    assert loaded.transcription.api_key == "sk-xyz"
-    assert loaded.transcription.model == "whisper-1"
+    assert loaded.transcription.provider == "local"
+    assert loaded.transcription.model == "small"
+    assert loaded.transcription.language == "ja"
     assert saved == []  # deferred to close
     screen.on_unmount()
     assert saved == [True]
@@ -369,7 +368,7 @@ async def test_settings_escape_mid_flow_cancels(tmp_path, monkeypatch):
         # nothing was persisted for the (never-completed) flow: disk stays defaults
         from subforge.config.app_config import load_app_config as _load
 
-        assert _load().transcription.model == ""
+        assert _load().transcription.model == "large-v3-turbo"
 
 
 async def test_escape_returns_to_repl_from_settings():

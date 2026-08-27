@@ -71,8 +71,8 @@ async def test_first_run_launches_wizard_over_menu(first_run_env):
     async with app.run_test() as pilot:
         await pilot.pause()
         assert isinstance(_wizard(app), FirstRunSetupScreen)
-        # the first step modal is on top; menu is underneath
-        assert isinstance(app.screen, ChoiceScreen)
+        # the first step modal is on top (ModelPickerScreen for local whisper); menu is underneath
+        assert isinstance(app.screen, ModelPickerScreen)
         assert any(isinstance(s, ReplScreen) for s in app.screen_stack)
 
 
@@ -84,11 +84,9 @@ async def test_happy_path_local_transcription_local_translation(first_run_env):
         wizard = _wizard(app)
         wizard.on_done = lambda: (saved_flags.append(True), app._setup_finished())
 
-        # -- step 1: transcription = local whisper
-        _pick(app.screen, "Local (WhisperX)")          # ChoiceScreen
-        await pilot.pause()
+        # -- step 1: transcription = local whisper model picker
         assert isinstance(app.screen, ModelPickerScreen)
-        _pick(app.screen, "small · Lightweight (~2 GB VRAM)")
+        _pick(app.screen, "small · Balanced (~2 GB RAM, ~466 MB)")
         await pilot.pause()
 
         from subforge.tui.screens.language_picker import LanguagePickerScreen
@@ -131,8 +129,8 @@ async def test_happy_path_local_transcription_local_translation(first_run_env):
         assert app.needs_setup is False
 
 
-async def test_happy_path_openai_and_cloud_provider(first_run_env):
-    loaders = fake_loaders({"openai": ["whisper-1"], "cloud": ["glm-5.2"]})
+async def test_happy_path_cloud_translation(first_run_env):
+    loaders = fake_loaders({"whisper": ["large-v3-turbo"], "cloud": ["glm-5.2"]})
     app = SubForgeApp()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -149,13 +147,9 @@ async def test_happy_path_openai_and_cloud_provider(first_run_env):
 
         wizard._cap_client = FakeCaps()
 
-        _pick(app.screen, "OpenAI provider")           # transcription source
-        await pilot.pause()
-        assert isinstance(app.screen, ApiKeyInputScreen)
-        _pick(app.screen, "sk-test")
-        await pilot.pause()
+        # Step 1: Transcription model picker
         assert isinstance(app.screen, ModelPickerScreen)
-        _pick(app.screen, "whisper-1")                 # loader injected: no network
+        _pick(app.screen, "large-v3-turbo")
         await pilot.pause()
 
         from subforge.tui.screens.language_picker import LanguagePickerScreen
@@ -163,6 +157,11 @@ async def test_happy_path_openai_and_cloud_provider(first_run_env):
         assert isinstance(app.screen, LanguagePickerScreen)
         _pick(app.screen, "ja")  # source language
         await pilot.pause()
+        assert isinstance(app.screen, ChoiceScreen)
+        _pick(app.screen, "Later (I'll do it in Settings)")
+        await pilot.pause()
+
+        # Step 2: Translation
         _pick(app.screen, "Cloud provider")
         await pilot.pause()
         _pick(app.screen, "OpenCode Zen (opencode-zen)")
@@ -186,11 +185,10 @@ async def test_happy_path_openai_and_cloud_provider(first_run_env):
         await pilot.pause()
 
         cfg = load_app_config(first_run_env)
-        assert cfg.transcription.provider == "openai"
+        assert cfg.transcription.provider == "local"
         assert cfg.transcription.language == "ja"
+        assert cfg.transcription.model == "large-v3-turbo"
         assert cfg.translation.default_target == "es"
-        assert cfg.transcription.api_key == "sk-test"
-        assert cfg.transcription.model == "whisper-1"
         assert cfg.translation.source == "provider"
         assert cfg.translation.provider == "opencode-zen"
         assert cfg.translation.api_key == "oc-key"
@@ -242,9 +240,8 @@ async def test_after_setup_menu_status_refreshes(first_run_env):
         wizard._loader_factory = fake_loaders({"local": ["m1"]})
 
         # drive the real flow end-to-end so every step modal dismisses itself
-        _pick(app.screen, "Local (WhisperX)")
-        await pilot.pause()
-        _pick(app.screen, "small · Lightweight (~2 GB VRAM)")
+        assert isinstance(app.screen, ModelPickerScreen)
+        _pick(app.screen, "small · Balanced (~2 GB RAM, ~466 MB)")
         await pilot.pause()
         from subforge.tui.screens.language_picker import LanguagePickerScreen
 
