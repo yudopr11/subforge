@@ -28,14 +28,18 @@ def test_find_whisper_cli_custom(tmp_path: Path) -> None:
 
 
 def test_find_whisper_cli_fallback() -> None:
-    with patch("shutil.which", return_value="/usr/local/bin/whisper-cli"):
-        assert find_whisper_cli() == "/usr/local/bin/whisper-cli"
+    with (
+        patch("subforge.providers.transcription.whisper_cpp.default_bin_dir", return_value=Path("/nonexistent/bin")),
+        patch("shutil.which", return_value="/usr/local/bin/whisper-cli"),
+    ):
+        assert find_whisper_cli(auto_install=False) == "/usr/local/bin/whisper-cli"
 
     with (
+        patch("subforge.providers.transcription.whisper_cpp.default_bin_dir", return_value=Path("/nonexistent/bin")),
         patch("shutil.which", return_value=None),
         patch("pathlib.Path.exists", return_value=False),
     ):
-        assert find_whisper_cli() == "whisper-cli"
+        assert find_whisper_cli(auto_install=False) == "whisper-cli"
 
 
 def test_ensure_16khz_wav_conversion(tmp_path: Path) -> None:

@@ -12,29 +12,77 @@ from subforge.models.transcript import Transcript, TranscriptSegment
 from subforge.providers.registry import REGISTRY
 
 
-def find_whisper_cli(custom_path: str = "") -> str:
+def default_bin_dir() -> Path:
+    if os.name == "nt":
+        app_data = os.environ.get("LOCALAPPDATA", str(Path.home() / "AppData" / "Local"))
+        return Path(app_data) / "subforge" / "bin"
+    return Path.home() / ".local" / "share" / "subforge" / "bin"
+
+
+def install_whisper_cli_binaries(target_dir: Path | None = None) -> Path:
+    """Download and install official pre-built whisper.cpp binaries (Windows x64)."""
+    import io
+    import zipfile
+
+    import httpx
+
+    dest_dir = target_dir or default_bin_dir()
+    dest_dir.mkdir(parents=True, exist_ok=True)
+
+    if os.name == "nt":
+        url = "https://github.com/ggml-org/whisper.cpp/releases/latest/download/whisper-bin-x64.zip"
+        res = httpx.get(url, follow_redirects=True, timeout=60.0)
+        res.raise_for_status()
+        with zipfile.ZipFile(io.BytesIO(res.content)) as z:
+            for member in z.infolist():
+                fn = member.filename.removeprefix("Release/")
+                if fn and not fn.endswith("/"):
+                    target_file = dest_dir / fn
+                    target_file.write_bytes(z.read(member))
+        cli_exe = dest_dir / "whisper-cli.exe"
+        if cli_exe.exists():
+            return cli_exe
+    raise RuntimeError(
+        "Auto-installation of whisper-cli is not supported on this platform. "
+        "Please install whisper.cpp manually and add whisper-cli to your PATH."
+    )
+
+
+def find_whisper_cli(custom_path: str = "", auto_install: bool = True) -> str:
     if custom_path and (Path(custom_path).exists() or shutil.which(custom_path)):
         return custom_path
 
     # Standard app bin directories
     candidates: list[Path] = []
+    bin_dir = default_bin_dir()
     if os.name == "nt":
-        app_data = os.environ.get("LOCALAPPDATA", str(Path.home() / "AppData" / "Local"))
-        candidates.append(Path(app_data) / "subforge" / "bin" / "whisper-cli.exe")
-        candidates.append(Path(app_data) / "subforge" / "bin" / "main.exe")
+        candidates.append(bin_dir / "whisper-cli.exe")
+        candidates.append(bin_dir / "main.exe")
     else:
-        candidates.append(Path.home() / ".local" / "share" / "subforge" / "bin" / "whisper-cli")
-        candidates.append(Path.home() / ".local" / "share" / "subforge" / "bin" / "main")
+        candidates.append(bin_dir / "whisper-cli")
+        candidates.append(bin_dir / "main")
 
     for c in candidates:
         if c.exists():
             return str(c)
 
-    # PATH checks
-    for name in ["whisper-cli", "whisper-cpp", "whisper.cpp", "main"]:
+    # PATH checks (avoid bare 'main' on Windows matching system32/main.cpl)
+    names = (
+        ["whisper-cli.exe", "whisper-cli", "whisper-cpp.exe", "whisper-cpp"]
+        if os.name == "nt"
+        else ["whisper-cli", "whisper-cpp", "whisper.cpp", "main"]
+    )
+    for name in names:
         which_path = shutil.which(name)
-        if which_path:
+        if which_path and not which_path.lower().endswith((".cpl", ".dll")):
             return which_path
+
+    # If missing on Windows, attempt auto-install if enabled
+    if auto_install and os.name == "nt":
+        try:
+            return str(install_whisper_cli_binaries(bin_dir))
+        except Exception:  # noqa: BLE001, S110
+            pass
 
     return "whisper-cli"
 
