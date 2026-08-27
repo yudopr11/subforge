@@ -14,7 +14,7 @@ from subforge.config.app_config import (
 def test_defaults_are_local_and_empty_secrets():
     cfg = AppConfig()
     assert cfg.transcription.provider == "local"
-    assert cfg.transcription.model == "large-v3-turbo"
+    assert cfg.transcription.model == ""
     assert cfg.transcription.language == ""
     assert cfg.transcription.binary_path == ""
     assert cfg.transcription.models_dir == ""

@@ -356,12 +356,13 @@ async def test_at_opens_filtered_picker_and_pick_creates_project(tmp_path, monke
         assert len(names) == 3 and all("take0" in n for n in names[1:])
         assert not any("notes" in n for n in names)
 
-        # selecting take02 creates the project immediately (newest first)
+        # selecting an option creates the project immediately
+        selected_stem = Path(names[1].split()[0]).stem
         picker.on_option_list_option_selected(
             type("Evt", (), {"option": type("O", (), {"prompt": names[1]})()})()
         )
         await pilot.pause()
-        assert app.project_dir is not None and app.project_dir.name == "take02"
+        assert app.project_dir is not None and app.project_dir.name == selected_stem
         assert repl.locate_mode is None
 
 

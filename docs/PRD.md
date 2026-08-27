@@ -38,8 +38,8 @@ stop at transcription; existing translation tools don't understand subtitles.
 
 | Persona | Need | Typical setup |
 |---|---|---|
-| Solo YouTuber (ID-speaking) | ID captions + EN translations on a budget | CPU or mid GPU, LM Studio local LLM |
-| Accessibility-focused educator | Reliable, reviewable captions | Local WhisperX, human review every step |
+| Solo YouTuber (ID-speaking) | ID captions + EN translations on a budget | CPU or mid GPU, whisper.cpp + LM Studio local LLM |
+| Accessibility-focused educator | Reliable, reviewable captions | Local whisper.cpp, human review every step |
 | Agency / batch producer | Speed across many videos | Cloud providers, headless automation |
 | Privacy-sensitive creator | Audio never leaves the machine | Fully local pipeline |
 
@@ -110,8 +110,7 @@ opens automatically; after that, **Settings** (`/settings`) opens a two-choice m
 what's left to configure; or `/wizard` re-runs full wizard-style setup. Providers
 rebuild without restarting the project:
 
-- **Transcribe — Local**: `[Select model, Source language]`
-- **Transcribe — Cloud (OpenAI)**: `[Connect (API key), Select model, Source language]`
+- **Transcribe — Local (whisper.cpp)**: `[Select model (with [RECOMMENDED] badge), Source language]`
 - **Translate — Local**: `[Select model (server URL + model), Default target language]`
 - **Translate — Cloud**: `[Connect (provider + API key), Select model + reasoning,
   Default target language]`
@@ -165,28 +164,30 @@ discoverable without documentation.
 
 ## 8. Hardware profiles & local model management
 
-Whisper models are offered as named profiles with VRAM guidance; installation happens
-on demand from within the app (models download automatically on first use and are
-cached locally):
+Whisper GGML models are offered as named profiles with memory guidance and hardware-aware
+recommendations. During setup and settings, SubForge detects available RAM and CPU cores to
+dynamically tag the optimal model with a `[RECOMMENDED]` badge. Models download on demand
+directly from the official GGML repositories into local app storage:
 
-| Model | Profile | Guidance |
-|---|---|---|
-| `large-v3` *(default)* | Quality | ~10 GB VRAM |
-| `medium` | Balanced | ~5 GB VRAM |
-| `small` | Lightweight | ~2 GB VRAM |
-| `base` | Lightweight | ~1 GB VRAM |
+| Model | Profile | Memory Guidance | Model File Size | Recommended For |
+|---|---|---|---|---|
+| `large-v3-turbo` *(default)* | Optimal Quality | ~4 GB RAM | ~800 MB | Modern Desktop (16–32 GB RAM, 6+ cores) |
+| `large-v3` | Maximum Quality | ~8 GB RAM | ~3.1 GB | Workstation (> 32 GB RAM, 12+ cores) |
+| `medium` | High Quality | ~5 GB RAM | ~1.5 GB | Mid-to-High (16 GB RAM) |
+| `small` | Balanced | ~2 GB RAM | ~466 MB | Mid-range (10–16 GB RAM, 4–6 cores) |
+| `base` | Lightweight | ~1 GB RAM | ~142 MB | Budget (< 10 GB RAM, 4 cores) |
+| `tiny` | Ultra-light | ~500 MB RAM | ~75 MB | Low-end (< 6 GB RAM, <= 2 cores) |
 
 Suggested pairings:
 
 | Your hardware | Suggested setup |
 |---|---|
-| High-end GPU | WhisperX large-v3 + local Qwen |
-| Mid-range GPU | WhisperX medium + local/remote LLM |
-| CPU only | WhisperX small + remote LLM |
-| Very low-end | Remote ASR + remote LLM |
+| Modern PC / Laptop (16+ GB RAM) | whisper.cpp large-v3-turbo + local/remote LLM |
+| Mid-range PC (8–16 GB RAM) | whisper.cpp small + local/remote LLM |
+| Budget / Low-end CPU | whisper.cpp base / tiny + remote LLM |
 
-The model manager shows which models are already cached and installs missing ones;
-local inference requires the optional extra (`pip install "subforge[local]"`).
+The model manager shows which models are already cached and installs missing ones.
+Transcription runs natively via `whisper.cpp` without requiring PyTorch, CUDA, or heavy ML dependencies.
 
 ## 9. Caption review
 
@@ -243,7 +244,7 @@ Users never type model IDs. For any configured provider the app fetches
 
 | Stage | Local option | Provider option |
 |---|---|---|
-| Transcribe | WhisperX (`large-v3` … `base`, install on demand) | OpenAI Audio API (`whisper-1`, `gpt-4o-transcribe`, …); any OpenAI-style `/transcriptions` endpoint is registered as a provider (`remote`) but not yet surfaced in Settings |
+| Transcribe | whisper.cpp (`large-v3-turbo`, `small`, `base`, … install on demand) | Always local (cloud transcribe removed for privacy) |
 | Translate | any OpenAI-compatible URL (LM Studio `localhost:1234/v1`, Ollama) | OpenAI · OpenCode Zen · OpenCode Go |
 
 Cloud presets (verified live 2026-08-25): `openai` → `https://api.openai.com/v1`,
@@ -298,14 +299,14 @@ are individually retryable so a slow/failing provider never costs upstream work.
 
 ## 19. Platform & distribution
 
-Python ≥ 3.11, installed via pip/uv. Core install has no heavy ML dependencies;
-local transcription is an explicit extra (`subforge[local]`). Console command:
-`subforge [project_dir]` — an optional project directory opens directly;
+Python ≥ 3.11, installed via pip/uv. Core install has zero heavy ML or PyTorch dependencies,
+keeping package size under 50 MB. Local transcription executes via `whisper.cpp` (`whisper-cli`).
+Console command: `subforge [project_dir]` — an optional project directory opens directly;
 `subforge --version` prints the version.
 
 ## 20. Configuration & privacy defaults (local-first)
 
-Defaults favor fully-local operation: transcription `local/large-v3/auto/auto`,
+Defaults favor fully-local operation: transcription `local` via `whisper.cpp`,
 translation via OpenAI-compatible URL pointing at LM Studio
 (`http://localhost:1234/v1`). Configuration is **TUI-first**: keys and model choices are
 typed into Settings and persisted atomically (mode `0600`) at
@@ -325,8 +326,8 @@ or auto-"fixed". A failed stage never corrupts completed work.
 
 Every expensive stage records explicit state — `PENDING`, `RUNNING`, `COMPLETED`,
 `FAILED`, `SKIPPED` — in the project file. Retrying a stage must never rerun completed
-upstream stages. Stages recorded: `transcription` (WhisperX aligns inside it —
-no separate alignment stage) → one `translation_<lang>` per target language →
+upstream stages. Stages recorded: `transcription` (whisper.cpp outputs full segment
+timestamps directly) → one `translation_<lang>` per target language →
 `caption_review` →
 `export`. The project file (`project.json`) is the single source of truth and survives
 restarts mid-pipeline. Every completed stage also leaves a durable artifact next to it:
@@ -338,10 +339,10 @@ snapshots, one per completed language) after translation — rendered SRT/ASS th
 
 In scope:
 
-1. **Transcription** — local WhisperX (large-v3 → base, installable in-app) or OpenAI
-   Audio API; segment timestamps; auto/manual language. Acceptance: a scripted-provider
-   project goes audio-in → normalized transcript persisted → segments merged, timing
-   untouched.
+1. **Transcription** — always-local whisper.cpp (GGML models installable in-app with
+   hardware recommendations); segment timestamps; auto/manual language. Acceptance: a
+   scripted-provider project goes audio-in → normalized transcript persisted → segments
+   merged, timing untouched.
 2. **Caption review** (§9) — view/edit/correct generated captions; edits persist.
 3. **Translation** (§10–§11) — contextual batches of five with strict validation;
    LM Studio / Ollama / OpenAI / OpenCode Zen / OpenCode Go.

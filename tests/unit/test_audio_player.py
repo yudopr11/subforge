@@ -21,7 +21,7 @@ def test_build_command_ffplay_style():
         {"lead": "-nodisp -autoexit -loglevel quiet", "start": "-ss", "length": "-t"},
     )
     assert cmd[0] == "ffplay"
-    assert cmd[-1] == "/a/b.wav"
+    assert cmd[-1] == str(Path("/a/b.wav"))
     assert cmd[cmd.index("-ss") + 1] == "1.500"
     assert cmd[cmd.index("-t") + 1] == "2.250"
 

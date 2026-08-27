@@ -346,7 +346,7 @@ async def test_settings_escape_mid_flow_cancels(tmp_path, monkeypatch):
         # nothing was persisted for the (never-completed) flow: disk stays defaults
         from subforge.config.app_config import load_app_config as _load
 
-        assert _load().transcription.model == "large-v3-turbo"
+        assert _load().transcription.model == ""
 
 
 async def test_escape_returns_to_repl_from_settings():

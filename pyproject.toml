@@ -12,9 +12,6 @@ dependencies = [
     "textual>=0.60",
 ]
 
-[project.optional-dependencies]
-local = ["whisperx>=3.1"]
-
 [project.scripts]
 subforge = "subforge.cli.main:main"
 

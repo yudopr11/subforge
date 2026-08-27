@@ -15,7 +15,7 @@ from pydantic import BaseModel
 
 class TranscriptionConfig(BaseModel):
     provider: Literal["local"] = "local"
-    model: str = "large-v3-turbo"
+    model: str = ""  # empty until selected in Setup Wizard or Settings
     language: str = ""  # audio source language ("": auto-detect)
     binary_path: str = ""  # optional custom path to whisper-cli
     models_dir: str = ""  # optional custom models directory

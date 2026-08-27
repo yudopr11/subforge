@@ -11,14 +11,14 @@ the codebase and plans (`ARCH §N`) — change them only with a repo-wide search
 
 SubForge is a local Python application (Textual TUI) that turns exported final audio
 into timestamped captions and translations, exporting SRT/ASS. External systems are
-pluggable providers: local WhisperX / LM Studio / Ollama, and cloud OpenAI Audio API /
-OpenAI / OpenCode Zen / OpenCode Go. The application core never knows which.
+pluggable providers: always-local whisper.cpp for transcription, and local (LM Studio / Ollama)
+or cloud (OpenAI / OpenCode Zen / OpenCode Go) for translation.
 
 ## 2. Tech stack
 
 Python ≥ 3.11 · pydantic v2 (+pydantic-settings semantics) · httpx · Textual ·
-pytest + pytest-asyncio · ruff (`line-length = 100`) · mypy `--strict`. Heavy ML deps
-(whisperx/torch) are optional extras — never core dependencies.
+pytest + pytest-asyncio · ruff (`line-length = 100`) · mypy `--strict`. Zero heavy ML or
+PyTorch dependencies — local transcription executes via native `whisper.cpp`.
 
 ## 3. Repository layout & layering
 
@@ -66,11 +66,11 @@ Screens are keyboard-first by contract (PRD §7):
   **drag-select + Ctrl+C copy** work (OSC 52 clipboard; Ctrl+C quits only when no
   selection is active).
 - `/settings` opens a **two-choice menu** (`settings.py::SettingsScreen`): pick
-  **Transcribe** (provider → model → source language) or **Translation** (provider →
-  model → reasoning → target language). Language choices use a **searchable ISO 639-1
-  picker** (`language_picker.py`, catalog in `languages.py`) — searchable with
-  `↑`/`↓`/`Enter` like the slash picker; the ISO table is presentation data, codes stay
-  canonical. Each stage persists immediately (`save_app_config`) then returns to the
+  **Transcribe** (select GGML model with `[RECOMMENDED]` badge → source language) or
+  **Translation** (provider → model → reasoning → target language). Language choices use a
+  **searchable ISO 639-1 picker** (`language_picker.py`, catalog in `languages.py`) —
+  searchable with `↑`/`↓`/`Enter` like the slash picker; the ISO table is presentation data,
+  codes stay canonical. Each stage persists immediately (`save_app_config`) then returns to the
   menu; `Esc` on a step returns to the menu, `Esc` on the menu closes settings.
   Model-list loaders are injectable (`loader_factory`) so the flow is testable offline.
 
@@ -94,15 +94,19 @@ their own module. Core pipeline code stays untouched when a provider is added.
 Every provider normalizes to identical internal types inside its own module:
 `Transcript` is byte-for-byte the same shape regardless of where inference ran.
 
-## 7. Optional dependencies policy
+## 7. Zero heavy ML dependencies & whisper.cpp execution
 
-whisperx/torch live behind the `[local]` extra. Import them lazily inside functions,
-never at module top level; raise actionable errors naming the extra when missing.
+SubForge executes transcription natively using `whisper.cpp` (`whisper-cli` or `main`
+binary). Input audio is converted if needed to 16kHz mono WAV using `ffmpeg` and passed
+to `whisper-cli` with `--output-json-full`. Segment timestamps are parsed directly from
+the resulting JSON offsets.
 
-## 8. Model lifecycle (local ASR)
+## 8. Model lifecycle (local GGML models)
 
-`LocalModelManager` probes the HF cache for installed models, downloads on demand via
-faster-whisper utilities, and reports profile/VRAM metadata (PRD §8).
+`LocalModelManager` manages GGML Whisper model files (`ggml-*.bin`) stored in the app's
+local data directory (`~/.local/share/subforge/models/` or `%LOCALAPPDATA%\subforge\models\`),
+downloads models on demand from HuggingFace repositories, and attaches hardware-aware
+`[RECOMMENDED]` metadata (PRD §8).
 
 ## 9. Capability discovery
 
@@ -110,12 +114,11 @@ Per-model reasoning vocabularies come from the models.dev catalog at request tim
 values are passed through verbatim or omitted (PRD §15). Catalog fetch failure degrades
 to "unsupported", hiding the control — never a crash.
 
-## 10. Remote STT contract
+## 10. Native STT contract
 
-OpenAI-style `POST {base_url}/transcriptions`, multipart file upload,
-`model: subforge-remote`; responses normalize into `Transcript` via the same
-`{id,start,end,text}` shape as the OpenAI Audio API. Models without
-segment timestamps degrade to a single `[0, duration]` segment rather than failing.
+`WhisperCppProvider` invokes `whisper-cli -m <model_path> -f <wav_path> --output-json-full -of <prefix>`
+and normalizes the output JSON into canonical `Transcript` and `TranscriptSegment` objects with
+millisecond-accurate start/end floating-point seconds.
 
 ## 11. Translation request shape
 
@@ -232,17 +235,17 @@ a real `.env`.
 `REGISTRY` singleton; factories registered at module bottom via
 `register_transcription/register_translation(name, factory)`.
 Resolution failures raise `ProviderNotFound`. Built-ins: transcription
-`local-whisperx`, `remote`, `openai`; translation `openai-compatible`.
+`local-whisper-cpp`, `local`; translation `openai-compatible`.
 
-## 27. Lazy heavy imports
+## 27. Native subprocess execution
 
-All heavy/optional imports sit inside functions (`import whisperx` within
-`transcribe()`) so core installs stay light and import fast.
+Audio transcription runs out-of-process via `whisper-cli`, ensuring core Python
+imports remain instant and memory is immediately reclaimed upon stage completion.
 
 ## 28. Preset URLs
 
 Cloud preset URLs live ONLY in `src/subforge/config/providers.py`
-(`TRANSLATION_PRESETS`, `OPENAI_TRANSCRIPTION_BASE_URL`). User keys/models live ONLY in
+(`TRANSLATION_PRESETS`). User keys/models live ONLY in
 AppConfig. Never hardcode either elsewhere.
 
 ## 29. Security & privacy
@@ -253,11 +256,11 @@ covers these. AppConfig holds plaintext keys by design — written atomically
 (`os.replace`) with mode `0600` to `~/.config/subforge/config.json` (env override
 `SUBFORGE_CONFIG`). Keys are never echoed in logs, errors, or tests.
 
-## 30. Hardware profiles (model guidance)
+## 30. Hardware profiles (model recommendation)
 
-`app/model_manager.py` ships the shipped VRAM-guidance table (PRD §8) as known
-Whisper profiles (`large-v3` … `base`) with install-on-demand via faster-whisper.
-Runtime GPU inspection/auto-detection is not implemented.
+`app/device.py` (`DeviceDetector`) automatically inspects host RAM and CPU cores to
+dynamically compute and recommend the best-fitting GGML Whisper model
+(e.g., `large-v3-turbo` for >= 16 GB RAM).
 
 ## 31. Concurrency model
 
