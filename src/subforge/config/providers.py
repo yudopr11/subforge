@@ -19,4 +19,3 @@ TRANSLATION_PRESETS: dict[str, ProviderPreset] = {
     "opencode-go": ProviderPreset(name="OpenCode Go", base_url="https://opencode.ai/zen/go/v1"),
 }
 
-OPENAI_TRANSCRIPTION_BASE_URL = "https://api.openai.com/v1"

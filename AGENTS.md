@@ -17,7 +17,7 @@ SubForge is a **local-first subtitle generation and translation tool** for conte
 These come from ARCHITECTURE.md §37. Violating any of them is a bug even if tests pass:
 
 1. **Provider independence.** The application core depends only on the protocols in `src/subforge/providers/base.py`. Never import a concrete provider (`whisperx`, `openai_compatible`, …) outside its own module. New providers are registered in `src/subforge/providers/registry.py`.
-2. **Local first, not local only.** Heavy ML deps (whisperx, torch) are optional extras `[local]`. Import them lazily inside functions; never at module top level.
+2. **Local first, zero-bloat.** Transcription uses native standalone `whisper.cpp` executables with GGML models without heavy PyTorch, TorchAudio, or CUDA packages. Dependencies stay lightweight (<50 MB).
 3. **AI does not own metadata.** LLMs generate text only. Segment IDs, timestamps, project state, file paths are application-owned and validated on merge. Translation output missing/duplicating IDs or empty text must fail that batch — never silently corrupt the project.
 4. **Human review.** All AI output is editable; review screens are part of the core workflow, not an afterthought.
 5. **Resumable pipeline.** Every expensive stage records explicit state (`PENDING/RUNNING/COMPLETED/FAILED/SKIPPED`) in `project.json`. Retrying a stage must never rerun completed upstream stages.
@@ -93,7 +93,7 @@ User-facing failures follow PRD §21: explicit, prefixed messages (e.g., `[ERROR
 
 Preset URLs live ONLY in `src/subforge/config/providers.py`; user keys/models live ONLY in AppConfig:
 
-- Transcription: `local-whisperx` (default) · `openai` → `https://api.openai.com/v1/audio/transcriptions`
+- Transcription: `local-whisper-cpp` / `local` (default, always local via whisper.cpp CLI)
 - Translation: local OpenAI-compatible URL (LM Studio/Ollama) · `openai` → `https://api.openai.com/v1` · `opencode-zen` → `https://opencode.ai/zen/v1` · `opencode-go` → `https://opencode.ai/zen/go/v1`
 
 Model IDs are discovered live via `GET {base_url}/models` — never hardcode model lists. **Reasoning parameters are metadata-driven**: allowed effort values come from the models.dev catalog (`providers/capabilities.py`) and vary per model (`glm-5.2`=[high,max], `kimi-k3`=[max], some use toggles, non-reasoning models have none). Pass them through verbatim; validate stored choices against the current model's spec and reset stale ones.

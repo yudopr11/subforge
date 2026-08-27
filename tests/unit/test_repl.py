@@ -500,8 +500,6 @@ async def test_settings_session_reloads_config_once(tmp_path, monkeypatch):
         assert isinstance(app.screen, ChoiceScreen)
         _pick(app.screen, "Transcribe  —  model + source language")
         await pilot.pause()
-        _pick(app.screen, "Local (WhisperX)")
-        await pilot.pause()
         _pick(app.screen, "1 · Select model — Whisper sizes for your machine")
         await pilot.pause()
         _pick(app.screen, "small · Lightweight")

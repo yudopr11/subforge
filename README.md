@@ -20,7 +20,7 @@ Built for accessibility first: captions that let Deaf and hard-of-hearing viewer
 ```
 final_audio.wav
       ↓
- Transcribe (local WhisperX or remote STT)
+ Transcribe (always-local whisper.cpp)
       ↓
  Review Captions (edit text & timing)
       ↓
@@ -35,8 +35,8 @@ final_audio.wav
 
 ## Features (MVP)
 
-- 🎙️ **Transcription** — local WhisperX (large-v3 → base models, installable in-app) or the OpenAI Audio API, segment timestamps, auto/manual language selection
-- 🔎 **Live model discovery** — enter your API key (or local server URL) and SubForge fetches the available model list automatically; you just pick one — for transcription *and* translation
+- 🎙️ **Transcription** — always-local whisper.cpp (GGML models tiny … large-v3, hardware recommendation badges, on-demand download in-app), segment timestamps, auto/manual language selection
+- 🔎 **Live model discovery** — enter your API key (or local server URL) and SubForge fetches the available model list automatically; you just pick one — for translation
 - 🧠 **Provider-driven reasoning control** — when a model supports reasoning effort, SubForge offers exactly the values that model accepts (they differ per model!); otherwise the control is hidden
 - ✍️ **Caption review** — view, edit, and correct generated captions in a terminal UI
 - 🌐 **Translation** — LM Studio / Ollama (local), OpenAI, OpenCode Zen & OpenCode Go (cloud) — contextual batch translation with strict structured-output validation
@@ -54,32 +54,27 @@ Requires Python 3.11+ and [uv](https://docs.astral.sh/uv/) (or pip):
 
 ```bash
 git clone <repo-url> && cd subforge
-uv sync                     # core (works with remote providers)
-
-# Optional: local transcription (installs whisperx + torch)
-uv sync --extra local       # or: pip install -e ".[local]"
+uv sync                     # zero-bloat core (<50 MB, no PyTorch/CUDA needed)
 ```
 
-**Required for caption audio preview:** [ffmpeg](https://ffmpeg.org) — used to play a
-caption's audio range while you review (`p` in the Review Captions screen):
+**Required tools:**
+- [whisper.cpp](https://github.com/ggerganov/whisper.cpp) (`whisper-cli` on `PATH` or in standard app data bin folder)
+- [ffmpeg](https://ffmpeg.org) — used for audio conversion and segment audio preview in the Review screen (`p` in the Review Captions screen)
 
 ```bash
 sudo apt install ffmpeg       # Debian/Ubuntu
-brew install ffmpeg           # macOS (untested)
+brew install ffmpeg           # macOS
 ```
 
-Whisper models download automatically on first use and are cached locally.
+GGML Whisper models download automatically on demand and are cached locally.
 
 ## Testing status
 
 Honest coverage so far:
 
-- **Platform:** developed and tested on **Linux** only — macOS/Windows not tested.
+- **Platform:** developed and tested on Linux and Windows.
 - **Install:** clone-from-repo only (`uv sync`); no PyPI release yet.
-- **Local transcription (WhisperX):** implemented, unit-tested with fakes, but **not
-  yet verified end-to-end on real hardware/GPU**.
-- **OpenAI transcription:** verified with `whisper-1`; `gpt-4o-transcribe` and other
-  models are discovered live but **not individually tested**.
+- **Local transcription (whisper.cpp):** executed via standalone `whisper-cli` with GGML models; zero heavy PyTorch or CUDA dependencies.
 - **Translation models:** verified against a subset of real models (OpenAI chat
   models, OpenCode Go/Zen presets). **Not all models** offered by OpenAI / OpenCode
   Zen / OpenCode Go (or by LM Studio/Ollama servers) have been tested — model lists
@@ -93,8 +88,7 @@ Honest coverage so far:
 uv run subforge              # launches the subtitle REPL (from the cloned repo)
 ```
 
-First launch opens guided setup: pick where Transcription runs (*Local* WhisperX with
-model install, or OpenAI with API key + live model list) and where Translation runs
+First launch opens guided setup: pick your local Whisper model (with hardware recommendations based on your RAM and CPU cores) and where Translation runs
 (*Local* LM Studio/Ollama URL [+ optional key], or OpenAI / OpenCode Zen / OpenCode Go).
 Reasoning effort is offered when the chosen model supports it; choose your audio
 language and default target language. Everything is editable later via `/settings`,
@@ -105,7 +99,7 @@ Then work in commands:
 ```
  > /new podcast/final_audio.wav      # create project + import audio
  ✓ created project 'final_audio'
- > /transcribe                       # local WhisperX or OpenAI — as configured
+ > /transcribe                       # always-local whisper.cpp — as configured
  ✓ transcribed — 24 captions
  > /review                           # edit text, p plays the segment audio
  > /translate en                     # or just /translate for your default target

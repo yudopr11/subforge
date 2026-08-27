@@ -14,7 +14,8 @@ from subforge.app.model_manager import LocalModelInfo, LocalModelManager
 
 class ModelManagerScreen(ModalScreen[None]):
     BINDINGS: ClassVar[list[Binding | tuple[str, str] | tuple[str, str, str]]] = [
-        ("escape", "cancel", "Cancel")
+        ("escape", "cancel", "Cancel"),
+        ("i", "install_selected_action", "Install"),
     ]
 
     def __init__(
