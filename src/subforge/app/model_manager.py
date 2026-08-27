@@ -72,10 +72,12 @@ class LocalModelManager:
         models_dir: Path | None = None,
         cache_checker: Callable[[str], bool] | None = None,
         downloader: Callable[[str], Any] | None = None,
+        deleter: Callable[[str], bool] | None = None,
     ) -> None:
         self.models_dir = models_dir or default_models_dir()
         self._cache_checker = cache_checker
         self._downloader = downloader
+        self._deleter = deleter
 
     def get_models_dir(self) -> Path:
         self.models_dir.mkdir(parents=True, exist_ok=True)
@@ -120,6 +122,21 @@ class LocalModelManager:
                 )
             )
         return infos
+
+    def delete_model(self, model_id: str) -> bool:
+        """Delete an installed model file from disk. Returns True if deleted, False if not found."""
+        if model_id not in GGML_WHISPER_MODELS:
+            return False
+        if self._deleter is not None:
+            return self._deleter(model_id)
+        try:
+            path = self.get_model_path(model_id)
+            if path.exists() and path.is_file():
+                path.unlink()
+                return True
+        except Exception:  # noqa: BLE001
+            return False
+        return False
 
     def install(
         self,

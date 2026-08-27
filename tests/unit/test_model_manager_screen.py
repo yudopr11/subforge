@@ -9,14 +9,30 @@ def cached(models: set[str]):
     return lambda repo_id: any(m in repo_id for m in models)
 
 
-def make_manager(installed: set[str], downloads: list[str] | None = None) -> LocalModelManager:
+def make_manager(
+    installed: set[str],
+    downloads: list[str] | None = None,
+    deletions: list[str] | None = None,
+) -> LocalModelManager:
     def downloader(model_id):
         if downloads is not None:
             downloads.append(model_id)
         installed.add(model_id)
         return f"/cache/{model_id}"
 
-    return LocalModelManager(cache_checker=cached(set(installed)), downloader=downloader)
+    def deleter(model_id):
+        if deletions is not None:
+            deletions.append(model_id)
+        if model_id in installed:
+            installed.remove(model_id)
+            return True
+        return False
+
+    return LocalModelManager(
+        cache_checker=cached(installed),
+        downloader=downloader,
+        deleter=deleter,
+    )
 
 
 async def test_table_lists_profiles_and_install_status():
@@ -72,3 +88,48 @@ def test_unknown_model_surfaces_error_message():
     manager = make_manager(set())
     with pytest.raises(ValueError, match="unknown local model"):
         manager.install("nonexistent")
+
+
+async def test_delete_model_screen_action():
+    deletions: list[str] = []
+    installed = {"small"}
+    app = SubForgeApp()
+    async with app.run_test() as pilot:
+        manager = make_manager(installed, deletions=deletions)
+        screen = ModelManagerScreen(manager=manager)
+        await app.push_screen(screen)
+        await pilot.pause()
+
+        status = screen.delete("small")
+        await pilot.pause()
+
+        assert "small" in deletions
+        assert "deleted" in status.lower()
+        assert screen.list_models()[2].installed is False
+
+
+async def test_delete_selected_via_dialog():
+    deletions: list[str] = []
+    # Index 0 in KNOWN_WHISPER_MODELS is 'tiny'
+    installed = {"tiny"}
+    app = SubForgeApp()
+    async with app.run_test() as pilot:
+        manager = make_manager(installed, deletions=deletions)
+        screen = ModelManagerScreen(manager=manager)
+        await app.push_screen(screen)
+        await pilot.pause()
+
+        from subforge.tui.screens.confirm_dialog import ConfirmDialogScreen
+
+        # Press 'd' to trigger delete modal
+        await pilot.press("d")
+        await pilot.pause()
+
+        assert isinstance(app.screen, ConfirmDialogScreen)
+        # Confirm with 'y'
+        await pilot.press("y")
+        await pilot.pause()
+
+        assert "tiny" in deletions
+        assert "tiny" not in installed
+

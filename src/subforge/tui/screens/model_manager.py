@@ -5,7 +5,7 @@ from typing import ClassVar
 
 from textual.app import ComposeResult
 from textual.binding import Binding
-from textual.containers import Vertical
+from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Button, DataTable, Label
 
@@ -18,6 +18,8 @@ class ModelManagerScreen(ModalScreen[None]):
         ("escape", "cancel", "Cancel"),
         ("enter", "install_selected_action", "Install"),
         ("i", "install_selected_action", "Install"),
+        ("d", "delete_selected_action", "Delete"),
+        ("delete", "delete_selected_action", "Delete"),
     ]
 
     def __init__(
@@ -33,8 +35,10 @@ class ModelManagerScreen(ModalScreen[None]):
         with Vertical():
             yield Label("[b]Local Whisper Models (whisper.cpp)[/b]")
             yield DataTable(id="models", cursor_type="row")
-            yield Button("Install selected  [i / Enter]", id="btn-install")
-            yield Label("[dim]Enter / i: install · ↑↓: select · Esc: back[/dim]", id="mm-hints")
+            with Horizontal(id="mm-buttons"):
+                yield Button("Install selected  [i / Enter]", id="btn-install")
+                yield Button("Delete selected  [d / Del]", id="btn-delete", variant="error")
+            yield Label("[dim]Enter / i: install · d / Del: delete · ↑↓: select · Esc: back[/dim]", id="mm-hints")
             yield Label("", id="mm-status")
 
     def on_mount(self) -> None:
@@ -116,6 +120,56 @@ class ModelManagerScreen(ModalScreen[None]):
         selected_model = self._rows[row].id
         return self.install(selected_model)
 
+    def delete(self, model_id: str) -> str:
+        deleted = self.manager.delete_model(model_id)
+        if not deleted:
+            msg = f"[ERROR] Failed to delete model {model_id} (not found or in use)."
+            self._set_status(msg)
+            return msg
+
+        try:
+            self.app.call_from_thread(self.refresh_rows)
+        except Exception:  # noqa: BLE001
+            self.refresh_rows()
+
+        message = f"✓ {model_id} deleted successfully."
+        try:
+            self.app.call_from_thread(self._set_status, message)
+        except Exception:  # noqa: BLE001
+            self._set_status(message)
+
+        if self.on_done:
+            try:
+                self.app.call_from_thread(self.on_done)
+            except Exception:  # noqa: BLE001
+                self.on_done()
+        return message
+
+    def delete_selected(self) -> None:
+        table = self.query_one(DataTable)
+        row = table.cursor_row
+        if row is None or not (0 <= row < len(self._rows)):
+            self._set_status("[ERROR] Select a model row first.")
+            return
+        selected_info = self._rows[row]
+        if not selected_info.installed:
+            self._set_status(f"[WARN] Model '{selected_info.id}' is not installed.")
+            return
+
+        from subforge.tui.screens.confirm_dialog import ConfirmDialogScreen
+
+        def on_confirm(confirmed: bool | None) -> None:
+            if confirmed:
+                self.delete(selected_info.id)
+
+        self.app.push_screen(
+            ConfirmDialogScreen(
+                title="Delete Local Model",
+                message=f"Permanently delete GGML model '{selected_info.id}' ({selected_info.size}) from disk?",
+            ),
+            on_confirm,
+        )
+
     def _set_status(self, message: str) -> None:
         try:
             label = self.query_one("#mm-status", Label)
@@ -128,6 +182,8 @@ class ModelManagerScreen(ModalScreen[None]):
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "btn-install":
             self.run_worker(self.install_selected, thread=True, exclusive=True, group="install")
+        elif event.button.id == "btn-delete":
+            self.delete_selected()
 
     def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
         self.run_worker(self.install_selected, thread=True, exclusive=True, group="install")
@@ -137,4 +193,7 @@ class ModelManagerScreen(ModalScreen[None]):
 
     def action_install_selected_action(self) -> None:
         self.run_worker(self.install_selected, thread=True, exclusive=True, group="install")
+
+    def action_delete_selected_action(self) -> None:
+        self.delete_selected()
 

@@ -96,3 +96,21 @@ def test_install_http_download_mocked(tmp_path: Path):
     assert res_path.read_bytes() == content
     assert len(progress_records) > 0
     assert progress_records[-1] == (len(content), len(content))
+
+
+def test_delete_model_removes_file(tmp_path: Path):
+    mgr = LocalModelManager(models_dir=tmp_path)
+    model_file = tmp_path / "ggml-small.bin"
+    model_file.write_text("dummy model content")
+    assert mgr.is_installed("small") is True
+
+    deleted = mgr.delete_model("small")
+    assert deleted is True
+    assert model_file.exists() is False
+    assert mgr.is_installed("small") is False
+
+
+def test_delete_nonexistent_model_returns_false(tmp_path: Path):
+    mgr = LocalModelManager(models_dir=tmp_path)
+    assert mgr.delete_model("tiny") is False
+
