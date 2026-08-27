@@ -34,6 +34,11 @@ class OpenAICompatibleProvider:
         # demand max_completion_tokens (ARCH §14). None = not probed yet.
         self._use_max_completion_tokens: bool | None = None
 
+    def _auth_headers(self) -> dict[str, str]:
+        if self.api_key:
+            return {"Authorization": f"Bearer {self.api_key}"}
+        return {}
+
     def translate(
         self,
         segments: list[TranslationInput],
@@ -49,6 +54,7 @@ class OpenAICompatibleProvider:
             "model": self.model,
             "response_format": {"type": "json_object"},
             "max_tokens": 2048,
+            "temperature": 0.1,
             "messages": [
                 {
                     "role": "system",
@@ -91,42 +97,55 @@ class OpenAICompatibleProvider:
         return self._parse(content)
 
     def _chat_completions(self, payload: dict[str, object]) -> httpx.Response:
-        """POST /chat/completions with a one-shot token-parameter fallback.
+        """POST /chat/completions with token-parameter and response-format fallbacks.
 
         Newer OpenAI reasoning models reject ``max_tokens`` and demand
         ``max_completion_tokens``; LM Studio / Ollama and older models expect the
-        former. We can't know without probing, so when the server's error says so
-        we retry ONCE with the other parameter and remember the preference for
-        the rest of this provider session — later batches skip the rejected call.
+        former. We probe and remember the preference for the rest of this session.
         """
+        headers = self._auth_headers()
+        current_payload = dict(payload)
         if self._use_max_completion_tokens:
-            payload = dict(payload)
-            payload["max_completion_tokens"] = payload.pop("max_tokens")
+            current_payload["max_completion_tokens"] = current_payload.pop("max_tokens", 2048)
+
         response = self.client.post(
             f"{self.base_url}/chat/completions",
-            json=payload,
-            headers={"Authorization": f"Bearer {self.api_key}"},
+            json=current_payload,
+            headers=headers,
         )
+
+        # Fallback 1: max_tokens -> max_completion_tokens
         if (
             self._use_max_completion_tokens is not True
             and response.status_code == 400
             and _wants_max_completion_tokens(response)
         ):
             self._use_max_completion_tokens = True
-            payload = dict(payload)
-            payload["max_completion_tokens"] = payload.pop("max_tokens")
+            current_payload["max_completion_tokens"] = current_payload.pop("max_tokens", 2048)
             response = self.client.post(
                 f"{self.base_url}/chat/completions",
-                json=payload,
-                headers={"Authorization": f"Bearer {self.api_key}"},
+                json=current_payload,
+                headers=headers,
             )
+
+        # Fallback 2: response_format not supported
+        if response.status_code == 400 and "response_format" in current_payload:
+            err_msg = _error_detail(response).lower()
+            if "response_format" in err_msg or "json_object" in err_msg or "schema" in err_msg:
+                current_payload.pop("response_format", None)
+                response = self.client.post(
+                    f"{self.base_url}/chat/completions",
+                    json=current_payload,
+                    headers=headers,
+                )
+
         return response
 
     def list_models(self) -> list[str]:
         """Fetch available model IDs from GET /models — live discovery for the TUI picker."""
         response = self.client.get(
             f"{self.base_url}/models",
-            headers={"Authorization": f"Bearer {self.api_key}"},
+            headers=self._auth_headers(),
         )
         try:
             response.raise_for_status()
@@ -139,12 +158,50 @@ class OpenAICompatibleProvider:
 
     @staticmethod
     def _parse(content: str) -> list[TranslationOutput]:
-        cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", content.strip())
+        text = content.strip()
+        # Remove markdown code fences if wrapped
+        if text.startswith("```"):
+            text = re.sub(r"^```(?:json)?\s*", "", text)
+            text = re.sub(r"\s*```$", "", text)
+            text = text.strip()
+
+        # Attempt direct JSON decode first
+        data = None
         try:
-            data = json.loads(cleaned)
-        except json.JSONDecodeError as exc:
-            raise ValueError(f"translation provider did not return valid JSON: {exc}") from exc
-        return [TranslationOutput(id=item["id"], text=str(item["text"])) for item in data["translations"]]
+            data = json.loads(text)
+        except json.JSONDecodeError:
+            # Look for outermost JSON object {...} or array [...]
+            match = re.search(r"(\{.*\}|\[.*\])", text, re.DOTALL)
+            if match:
+                try:
+                    data = json.loads(match.group(1))
+                except json.JSONDecodeError:
+                    pass
+
+        if data is None:
+            raise ValueError(f"translation provider did not return valid JSON: {content[:100]}")
+
+        # Extract items
+        items = []
+        if isinstance(data, list):
+            items = data
+        elif isinstance(data, dict):
+            if "translations" in data and isinstance(data["translations"], list):
+                items = data["translations"]
+            elif "segments" in data and isinstance(data["segments"], list):
+                items = data["segments"]
+            else:
+                for k, v in data.items():
+                    if isinstance(v, dict) and "text" in v:
+                        item_id = v.get("id", k)
+                        items.append({"id": item_id, "text": v["text"]})
+                    elif str(k).isdigit() or (isinstance(k, str) and k.strip().isdigit()):
+                        items.append({"id": int(k), "text": str(v)})
+
+        if not items:
+            raise ValueError("translation JSON missing 'translations' list")
+
+        return [TranslationOutput(id=int(item["id"]), text=str(item["text"])) for item in items]
 
 
 def _wants_max_completion_tokens(response: httpx.Response) -> bool:

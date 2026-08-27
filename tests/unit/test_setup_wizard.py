@@ -107,9 +107,6 @@ async def test_happy_path_local_transcription_local_translation(first_run_env):
         assert isinstance(app.screen, UrlInputScreen)
         _pick(app.screen, "http://localhost:1234/v1")
         await pilot.pause()
-        assert isinstance(app.screen, ApiKeyInputScreen)  # optional local key
-        _pick(app.screen, "")                              # Enter on empty skips
-        await pilot.pause()
         assert isinstance(app.screen, ModelPickerScreen)
         _pick(app.screen, "qwen3-14b")
         await pilot.pause()
@@ -285,8 +282,6 @@ async def test_after_setup_menu_status_refreshes(first_run_env):
         _pick(app.screen, "Local server (LM Studio / Ollama)")
         await pilot.pause()
         _pick(app.screen, "http://localhost:1234/v1")
-        await pilot.pause()
-        _pick(app.screen, "")
         await pilot.pause()
         _pick(app.screen, "m1")
         await pilot.pause()

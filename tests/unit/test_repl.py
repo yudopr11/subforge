@@ -518,8 +518,6 @@ async def test_settings_session_reloads_config_once(tmp_path, monkeypatch):
         await pilot.pause()
         _pick(app.screen, "http://localhost:1234/v1")
         await pilot.pause()
-        _pick(app.screen, "")
-        await pilot.pause()
         _pick(app.screen, "qwen3-14b")
         await pilot.pause()
         _pick(app.screen, "2 · Default target language")

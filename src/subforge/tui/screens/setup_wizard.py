@@ -184,9 +184,10 @@ class FirstRunSetupScreen(ModalScreen[None]):
 
     def _tl_url(self, url: str) -> None:
         self.cfg.translation.local_base_url = url
+        self.cfg.translation.local_api_key = ""
         self._push(
-            ApiKeyInputScreen("Local server API key (optional — Enter to skip)"),
-            lambda key: self._tl_local_key(key or ""),
+            ModelPickerScreen("Choose local translation model", self._loader(f"local:{url}:")),
+            lambda model: self.apply_tl_model(str(model)) if model else None,
         )
 
     def _tl_local_key(self, key: str) -> None:

@@ -95,12 +95,60 @@ def test_http_400_surfaces_server_reason():
 
 def test_http_400_surfaces_plain_body_when_not_json():
     def handler(request):
-        return httpx.Response(400, text="model does not support response_format json_object")
+        return httpx.Response(400, text="model does not support prompt feature XYZ")
 
     provider = OpenAICompatibleProvider("http://t.local/v1", "k", "m", client=transport_handler(handler))
     with pytest.raises(ValueError) as exc:
         provider.translate([TranslationInput(1, "x")], "id", "en")
-    assert "json_object" in str(exc.value)
+    assert "XYZ" in str(exc.value)
+
+
+def test_empty_api_key_omits_authorization_header():
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["auth"] = request.headers.get("Authorization")
+        return chat_response(VALID)
+
+    provider = OpenAICompatibleProvider("http://localhost:1234/v1", "", "qwen", client=transport_handler(handler))
+    provider.translate([TranslationInput(1, "x")], "id", "en")
+    assert captured["auth"] is None
+
+
+def test_response_format_unsupported_retries_without_response_format():
+    bodies: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.read())
+        bodies.append(body)
+        if len(bodies) == 1:
+            return httpx.Response(400, json={"error": {"message": "response_format json_object is not supported"}})
+        return chat_response(VALID)
+
+    provider = OpenAICompatibleProvider("http://localhost:1234/v1", "", "local-model", client=transport_handler(handler))
+    outs = provider.translate([TranslationInput(1, "x")], "id", "en")
+    assert len(outs) == 2
+    assert "response_format" in bodies[0]
+    assert "response_format" not in bodies[1]
+
+
+def test_extracts_json_from_conversational_preambles_and_varied_formats():
+    conversational = (
+        "Sure, here is your subtitle translation:\n\n"
+        "```json\n"
+        '{"segments": [{"id": 1, "text": "Halo dunia"}]}\n'
+        "```\n"
+        "I hope this helps your video!"
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return chat_response(conversational)
+
+    provider = OpenAICompatibleProvider("http://localhost:1234/v1", "", "local-model", client=transport_handler(handler))
+    outs = provider.translate([TranslationInput(1, "Hello world")], "en", "id")
+    assert len(outs) == 1
+    assert outs[0].id == 1
+    assert outs[0].text == "Halo dunia"
 
 
 def test_max_tokens_400_retries_with_max_completion_tokens():

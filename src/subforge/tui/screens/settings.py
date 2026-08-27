@@ -413,13 +413,8 @@ class SettingsScreen(ModalScreen[None]):
             self.show_tl_steps()
             return
         self.apply_tl_url(url)
-        if self.cfg.translation.local_api_key:
-            self._pick_tl_model()
-            return
-        self._push(
-            ApiKeyInputScreen("Local server API key (optional — Enter to skip)"),
-            lambda k: self.tl_local_key(str(k) if k else ""),
-        )
+        self.apply_tl_local_key("")
+        self._pick_tl_model()
 
     def tl_local_key(self, key: str) -> None:
         self.apply_tl_local_key(key)
