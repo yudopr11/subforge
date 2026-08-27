@@ -180,7 +180,7 @@ class ProjectPickerScreen(ModalScreen[object]):
         self._applied_query = query
         try:
             self.query_one("#picker-hints", Label).update(
-                f"{len(matches)}/{len(self._entries)} · type filter · ↑↓ move · Enter open · Esc cancel"
+                f"{len(matches)}/{len(self._entries)} · type filter · ↑↓ move · Enter open · d delete · Esc cancel"
             )
         except NoMatches:
             pass  # pre-mount unit seam
@@ -250,8 +250,9 @@ class ProjectPickerScreen(ModalScreen[object]):
                     host = self._host
                     if host is not None and host.project_dir == project_path:
                         host.project_dir = None
-                        if hasattr(host, "screen") and hasattr(host.screen, "refresh_status"):
-                            host.screen.refresh_status()
+                        for s in getattr(host, "screen_stack", []):
+                            if hasattr(s, "refresh_status"):
+                                s.refresh_status()
 
         self.app.push_screen(
             ConfirmDialogScreen(

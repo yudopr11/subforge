@@ -743,3 +743,28 @@ async def test_review_with_lang_opens_translation_review(tmp_path):
         await pilot.pause()
         assert isinstance(app.screen, ReviewTranslateScreen)
         assert app.screen.language == "jv"
+
+
+async def test_delete_command_removes_project(tmp_path, monkeypatch):
+    from subforge.tui.screens.confirm_dialog import ConfirmDialogScreen
+
+    monkeypatch.setenv("SUBFORGE_PROJECTS_DIR", str(tmp_path / "projects"))
+    proj_dir = create_project(
+        tmp_path / "projects" / "test-delete-proj",
+        ProjectMeta(name="test-delete-proj", source_language="id"),
+    )
+
+    app = SubForgeApp(project_dir=proj_dir)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        assert app.project_dir == proj_dir
+
+        app.repl.run_command("/delete test-delete-proj")
+        await pilot.pause()
+
+        assert isinstance(app.screen, ConfirmDialogScreen)
+        app.screen.action_confirm()
+        await pilot.pause()
+
+        assert not proj_dir.exists()
+        assert app.project_dir is None

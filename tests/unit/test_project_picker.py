@@ -111,6 +111,7 @@ async def test_delete_project_in_picker(tmp_path):
     app = SubForgeApp()
     async with app.run_test() as pilot:
         projects = make_projects(tmp_path)
+        app.project_dir = projects[0]  # episode-two is active
         picker = ProjectPickerScreen(projects)
         await app.push_screen(picker)
         await pilot.pause()
@@ -132,3 +133,4 @@ async def test_delete_project_in_picker(tmp_path):
         assert not (tmp_path / "episode-two").exists()
         assert len(picker.projects) == 1
         assert picker.projects[0].name == "episode-one"
+        assert app.project_dir is None
