@@ -6,7 +6,7 @@ Pure presentation + input validation; all filesystem orchestration lives in
 
 import re
 from pathlib import Path
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
 from textual import events
 from textual.app import ComposeResult
@@ -17,6 +17,9 @@ from textual.screen import ModalScreen
 from textual.widgets import Input, Label, OptionList
 
 from subforge.app.projects import is_audio_file
+
+if TYPE_CHECKING:
+    from subforge.tui.app import SubForgeApp
 
 _LANG_RE = re.compile(r"^[a-z]{2,3}$")
 
@@ -127,7 +130,9 @@ class ProjectPickerScreen(ModalScreen[object]):
     """
 
     BINDINGS: ClassVar[list[Binding | tuple[str, str] | tuple[str, str, str]]] = [
-        ("escape", "cancel", "Cancel")
+        ("escape", "cancel", "Cancel"),
+        Binding("d", "delete_selected", "Delete", show=True),
+        Binding("delete", "delete_selected", "Delete", show=False),
     ]
 
     AUTO_FOCUS = "Input"
@@ -148,7 +153,7 @@ class ProjectPickerScreen(ModalScreen[object]):
             yield Label("[b]Open project[/b]  —  recent projects, or create new")
             yield Input(placeholder="type to search project…", id="project-search")
             yield OptionList(id="projects")
-            yield Label("[dim]type filter · ↑↓ move · Enter open · Esc cancel[/dim]", id="picker-hints")
+            yield Label("[dim]type filter · ↑↓ move · Enter open · d delete · Esc cancel[/dim]", id="picker-hints")
 
     # ---- filtering ---------------------------------------------------------
 
@@ -210,10 +215,51 @@ class ProjectPickerScreen(ModalScreen[object]):
         else:
             option_list.highlighted = min(count - 1, max(0, current + delta))
 
+    @property
+    def _host(self) -> "SubForgeApp | None":
+        from subforge.tui.app import SubForgeApp
+
+        if isinstance(self.app, SubForgeApp):
+            return self.app
+        return None
+
     def _select(self) -> None:
         entry = self._selected_entry()
         if entry is not None:
             self._dismiss_entry(entry)
+
+    def action_delete_selected(self) -> None:
+        entry = self._selected_entry()
+        if entry is None or entry[1] is None:
+            return
+        project_path = entry[1]
+        project_name = project_path.name
+
+        from subforge.tui.screens.confirm_dialog import ConfirmDialogScreen
+
+        def on_confirmed(confirmed: bool | None) -> None:
+            if confirmed:
+                from subforge.app.projects import delete_project
+
+                if delete_project(project_path):
+                    self.projects = [p for p in self.projects if p != project_path]
+                    self._entries = [(self._NEW_LABEL, None)] + [
+                        (f"{p.name}   ·   {p}", p) for p in self.projects
+                    ]
+                    self._refresh(self._applied_query)
+                    host = self._host
+                    if host is not None and host.project_dir == project_path:
+                        host.project_dir = None
+                        if hasattr(host, "screen") and hasattr(host.screen, "refresh_status"):
+                            host.screen.refresh_status()
+
+        self.app.push_screen(
+            ConfirmDialogScreen(
+                title="Delete Project",
+                message=f"Permanently delete project '{project_name}' and all associated files?",
+            ),
+            on_confirmed,
+        )
 
     # ---- key routing -------------------------------------------------------
 

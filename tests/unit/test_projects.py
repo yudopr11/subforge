@@ -5,6 +5,7 @@ import pytest
 
 from subforge.app.projects import (
     create_project_from_audio,
+    delete_project,
     find_audio_file,
     is_audio_file,
     unique_project_dir,
@@ -89,3 +90,20 @@ def test_discover_projects_missing_root_is_empty(tmp_path):
     from subforge.app.projects import discover_projects
 
     assert discover_projects(tmp_path / "does-not-exist") == []
+
+
+def test_delete_project_removes_directory(tmp_path: Path):
+    proj_dir = tmp_path / "TestProject"
+    proj_dir.mkdir()
+    (proj_dir / "project.json").write_text("{}")
+    (proj_dir / "audio.wav").write_text("wav")
+
+    assert proj_dir.exists() is True
+    deleted = delete_project(proj_dir)
+    assert deleted is True
+    assert proj_dir.exists() is False
+
+
+def test_delete_invalid_project_returns_false(tmp_path: Path):
+    assert delete_project(tmp_path / "Nonexistent") is False
+

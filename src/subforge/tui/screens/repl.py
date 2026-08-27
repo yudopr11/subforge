@@ -71,6 +71,9 @@ class ReplScreen(Screen[None]):
     SLASH_COMMANDS: ClassVar[list[tuple[str, str]]] = [
         ("/new", "create project + import audio"),
         ("/open", "list/open recent projects"),
+        ("/projects", "manage/open projects"),
+        ("/delete", "delete a project"),
+        ("/models", "manage local GGML models"),
         ("/transcribe", "run transcription"),
         ("/review", "searchable picker: captions or translated languages"),
         ("/translate", "translate (default target remembered)"),
@@ -646,6 +649,64 @@ class ReplScreen(Screen[None]):
             return
         names = ", ".join(p.name for p in paths) or "(nothing to export yet)"
         self.log_line(f"▸ exported: {names}")
+
+    def _cmd_projects(self, arg: str) -> None:
+        self._cmd_open(arg)
+
+    def _cmd_models(self, arg: str) -> None:
+        from subforge.tui.screens.model_manager import ModelManagerScreen
+
+        self._host.push_screen(ModelManagerScreen())
+
+    def _cmd_delete(self, arg: str) -> None:
+        projects = discover_projects()
+        if not projects:
+            self.log_line("No projects found.")
+            return
+        if not arg:
+            self.log_line("Usage: /delete <project-name-or-index> or press [d] in /projects picker")
+            return
+        target: Path | None = None
+        if arg.isdigit():
+            idx = int(arg) - 1
+            if 0 <= idx < len(projects):
+                target = projects[idx]
+        if target is None:
+            by_name = sorted(projects, key=lambda p: p.name)
+            matches = (
+                [p for p in by_name if p.name == arg]
+                or [p for p in by_name if p.name.startswith(arg)]
+                or [p for p in by_name if arg in p.name]
+            )
+            target = matches[0] if matches else None
+        if target is None:
+            self.log_line(f"[red]✗[/red] no project matching '{arg}'")
+            return
+
+        from subforge.tui.screens.confirm_dialog import ConfirmDialogScreen
+
+        target_dir = target
+
+        def on_confirmed(confirmed: bool | None) -> None:
+            if confirmed:
+                from subforge.app.projects import delete_project
+
+                name = target_dir.name
+                if delete_project(target_dir):
+                    self.log_line(f"✓ Deleted project '[b]{name}[/b]'")
+                    if self._host.project_dir == target_dir:
+                        self._host.project_dir = None
+                        self.refresh_status()
+                else:
+                    self.log_line(f"[red]✗[/red] failed to delete project '{name}'")
+
+        self._host.push_screen(
+            ConfirmDialogScreen(
+                title="Delete Project",
+                message=f"Permanently delete project '{target_dir.name}' and all associated files?",
+            ),
+            on_confirmed,
+        )
 
     def _cmd_settings(self, arg: str) -> None:
         # Load FRESH from disk: manual edits to config.json are honored instead

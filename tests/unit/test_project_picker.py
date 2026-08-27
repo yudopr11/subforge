@@ -103,3 +103,32 @@ async def test_escape_cancels_without_selecting(tmp_path):
         await pilot.press("escape")
         await pilot.pause()
         assert picker.result is None
+
+
+async def test_delete_project_in_picker(tmp_path):
+    from subforge.tui.screens.confirm_dialog import ConfirmDialogScreen
+
+    app = SubForgeApp()
+    async with app.run_test() as pilot:
+        projects = make_projects(tmp_path)
+        picker = ProjectPickerScreen(projects)
+        await app.push_screen(picker)
+        await pilot.pause()
+
+        # Focus project episode-two (index 1)
+        picker.query_one("#projects").highlighted = 1
+        await pilot.pause()
+
+        # Trigger delete action
+        picker.action_delete_selected()
+        await pilot.pause()
+
+        assert isinstance(app.screen, ConfirmDialogScreen)
+        # Confirm deletion
+        app.screen.action_confirm()
+        await pilot.pause()
+
+        # episode-two directory should no longer exist
+        assert not (tmp_path / "episode-two").exists()
+        assert len(picker.projects) == 1
+        assert picker.projects[0].name == "episode-one"

@@ -62,6 +62,17 @@ def find_audio_file(project_dir: Path) -> Path | None:
     return None
 
 
+def delete_project(project_dir: Path) -> bool:
+    """Permanently delete a project directory and its contents from disk."""
+    if not project_dir.exists() or not project_dir.is_dir():
+        return False
+    try:
+        shutil.rmtree(project_dir)
+        return True
+    except OSError:
+        return False
+
+
 def discover_projects(root: Path | None = None) -> list[Path]:
     """Existing projects under ``root`` (default: :func:`projects_root`).
 
