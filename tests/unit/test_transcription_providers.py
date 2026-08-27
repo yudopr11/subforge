@@ -7,6 +7,7 @@ import pytest
 
 from subforge.providers.registry import REGISTRY
 from subforge.providers.transcription.remote import RemoteTranscriptionProvider
+from subforge.providers.transcription.whisper_cpp import WhisperCppProvider
 
 API_RESPONSE = {
     "language": "id",
@@ -17,13 +18,13 @@ API_RESPONSE = {
 }
 
 
-def make_audio(tmp_path) -> Path:
+def make_audio(tmp_path: Path) -> Path:
     audio = tmp_path / "a.wav"
     audio.write_bytes(b"RIFF-fake")
     return audio
 
 
-def test_remote_transcription_normalizes_segments(tmp_path):
+def test_remote_transcription_normalizes_segments(tmp_path: Path) -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.url.path.endswith("/transcriptions")
         assert "multipart/form-data" in request.headers["Content-Type"]
@@ -40,8 +41,8 @@ def test_remote_transcription_normalizes_segments(tmp_path):
     assert transcript.segments[0].text == "Halo semuanya!"  # stripped
 
 
-def test_remote_error_raises(tmp_path):
-    def handler(request):
+def test_remote_error_raises(tmp_path: Path) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(503, json={"error": "unavailable"})
 
     provider = RemoteTranscriptionProvider(
@@ -51,33 +52,16 @@ def test_remote_error_raises(tmp_path):
         provider.transcribe(make_audio(tmp_path))
 
 
-def test_whisperx_missing_dependency_message():
-    from subforge.providers.transcription.whisperx import WhisperXProvider
-
-    provider = WhisperXProvider(model="tiny")
-    # Force whisperx import failure regardless of environment.
-    import sys
-
-    monkey_mod = sys.modules.get("whisperx")
-    sys.modules["whisperx"] = None  # makes `import whisperx` raise ImportError
-    try:
-        with pytest.raises(RuntimeError, match=r"subforge\[local\]"):
-            provider.transcribe(Path("a.wav"))
-    finally:
-        if monkey_mod is None:
-            del sys.modules["whisperx"]
-        else:
-            sys.modules["whisperx"] = monkey_mod
+def test_whisper_cpp_missing_model_message(tmp_path: Path) -> None:
+    provider = WhisperCppProvider(model="base", models_dir=tmp_path)
+    with pytest.raises(RuntimeError, match="Model file not found"):
+        provider.transcribe(Path("a.wav"))
 
 
-def test_registered_names():
-    import subforge
-
+def test_registered_names() -> None:
     assert REGISTRY.resolve_transcription("remote") is RemoteTranscriptionProvider
-    assert (
-        REGISTRY.resolve_transcription("local-whisperx")
-        is subforge.providers.transcription.whisperx.WhisperXProvider
-    )
+    assert REGISTRY.resolve_transcription("local-whisper-cpp") is WhisperCppProvider
+    assert REGISTRY.resolve_transcription("local") is WhisperCppProvider
 
 
 def _unused_io() -> None:  # keep io import meaningful for linters

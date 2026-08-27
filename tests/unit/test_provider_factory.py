@@ -11,42 +11,21 @@ from subforge.app.provider_factory import (
 )
 from subforge.config.app_config import AppConfig
 from subforge.providers.capabilities import ReasoningSpec
-from subforge.providers.transcription.whisperx import WhisperXProvider
+from subforge.providers.transcription.whisper_cpp import WhisperCppProvider
 from subforge.providers.translation.openai_compatible import OpenAICompatibleProvider
 
 
 def test_local_transcription_needs_model():
     with pytest.raises(ValueError, match="no local transcription model"):
-        build_transcription_provider(AppConfig())  # provider=local, model=""
+        build_transcription_provider(AppConfig(transcription={"model": ""}))
 
 
-def test_local_transcription_builds_whisperx():
-    cfg = AppConfig(transcription={"provider": "local", "model": "small"})
+def test_local_transcription_builds_whisper_cpp():
+    cfg = AppConfig(transcription={"provider": "local", "model": "small", "binary_path": "whisper-cli"})
     provider = build_transcription_provider(cfg)
-    assert isinstance(provider, WhisperXProvider)
+    assert isinstance(provider, WhisperCppProvider)
     assert provider.model_name == "small"
-
-
-def test_openai_transcription_requires_key_and_model():
-    cfg = AppConfig(transcription={"provider": "openai", "model": "", "api_key": "sk"})
-    with pytest.raises(ValueError, match="model"):
-        build_transcription_provider(cfg)
-    cfg2 = AppConfig(transcription={"provider": "openai", "model": "whisper-1", "api_key": ""})
-    with pytest.raises(ValueError, match="API key"):
-        build_transcription_provider(cfg2)
-
-
-def test_openai_transcription_built_with_key_and_model():
-    cfg = AppConfig(transcription={"provider": "openai", "model": "gpt-4o-transcribe", "api_key": "sk-x"})
-    p = build_transcription_provider(cfg)
-    assert p.api_key == "sk-x" and p.model_name == "gpt-4o-transcribe"
-
-
-def test_unknown_transcription_provider_rejected():
-    cfg = AppConfig()  # literal typing rejects unknowns at the config boundary;
-    cfg.transcription.provider = "deepgram"  # this tests the factory's defensive branch
-    with pytest.raises(ValueError, match="unknown transcription provider"):
-        build_transcription_provider(cfg)
+    assert provider.binary_path == "whisper-cli"
 
 
 def test_local_translation_uses_custom_url_and_optional_key():
@@ -169,10 +148,11 @@ def test_build_pipeline_wires_providers_or_leaves_unset(tmp_path):
     )
     pipe = build_pipeline(tmp_path / "p", full_cfg)
     assert isinstance(pipe, Pipeline)
-    assert isinstance(pipe.transcription, WhisperXProvider)
+    assert isinstance(pipe.transcription, WhisperCppProvider)
     assert isinstance(pipe.translation_service.provider, OpenAICompatibleProvider)
 
-    empty = build_pipeline(tmp_path / "q", AppConfig())  # nothing configured yet
+    empty_cfg = AppConfig(transcription={"model": ""})
+    empty = build_pipeline(tmp_path / "q", empty_cfg)  # nothing configured yet
     assert empty.transcription is None  # run_transcription will raise StageError
     # translation_service falls back to the pipeline's unconfigured placeholder
 
@@ -180,7 +160,7 @@ def test_build_pipeline_wires_providers_or_leaves_unset(tmp_path):
 def test_readiness_checks():
     from subforge.app.provider_factory import transcription_configured, translation_configured
 
-    empty = AppConfig()
+    empty = AppConfig(transcription={"model": ""})
     assert transcription_configured(empty) is False
     assert translation_configured(empty) is False
 
@@ -190,6 +170,3 @@ def test_readiness_checks():
     )
     assert transcription_configured(ready) is True
     assert translation_configured(ready) is True
-
-    half = AppConfig(transcription={"provider": "openai"})  # no key/model yet
-    assert transcription_configured(half) is False

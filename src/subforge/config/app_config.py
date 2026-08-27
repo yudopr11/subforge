@@ -14,10 +14,11 @@ from pydantic import BaseModel
 
 
 class TranscriptionConfig(BaseModel):
-    provider: Literal["local", "openai"] = "local"
-    model: str = ""  # local: large-v3|medium|small|base ; openai: picked from live /models
-    api_key: str = ""  # only meaningful when provider == "openai"
+    provider: Literal["local"] = "local"
+    model: str = "large-v3-turbo"
     language: str = ""  # audio source language ("": auto-detect)
+    binary_path: str = ""  # optional custom path to whisper-cli
+    models_dir: str = ""  # optional custom models directory
 
 
 class TranslationConfig(BaseModel):

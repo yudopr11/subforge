@@ -184,9 +184,7 @@ class SettingsScreen(ModalScreen[None]):
         if kind == "whisper":
             return lambda: [f"{mid} · {meta['profile']}" for mid, meta in KNOWN_WHISPER_MODELS.items()]
         if kind.startswith("openai:"):
-            from subforge.providers.transcription.openai import OpenAITranscriptionProvider
-
-            return OpenAITranscriptionProvider(api_key=kind.split(":", 1)[1]).list_models
+            raise ValueError(f"OpenAI transcription is no longer supported: {kind}")
         if kind.startswith("local:"):
             from subforge.providers.translation.openai_compatible import (
                 OpenAICompatibleProvider,
@@ -305,51 +303,23 @@ class SettingsScreen(ModalScreen[None]):
             self.ask_tc_language()
 
     def tc_connect(self) -> None:
-        self._set_status("Transcribe · connect — paste your OpenAI API key")
-        self._push(
-            ApiKeyInputScreen("OpenAI API key", initial=self.cfg.transcription.api_key),
-            lambda k: self.tc_connect_key(str(k) if k else ""),
-        )
+        self._set_status("Transcribe · local whisper.cpp engine")
+        self.show_tc_steps()
 
     def tc_connect_key(self, key: str) -> None:
-        if not key:
-            self._set_status("[ERROR] OpenAI API key required.")
-            self.tc_connect()
-            return
-        self.apply_tc_key(key)
-        self.save_config()  # step done -> back to the step menu
         self.show_tc_steps()
 
     def _pick_transcription_model(self) -> None:
-        if self.cfg.transcription.provider == "local":
-            self._push(
-                ModelPickerScreen("Choose local Whisper model", self._loader("whisper")),
-                lambda m: self.tc_model(str(m) if m else ""),
-            )
-        elif not self.cfg.transcription.api_key:
-            self._push(
-                ApiKeyInputScreen("OpenAI API key"),
-                lambda k: self.tc_key(str(k) if k else ""),
-            )
-        else:
-            self._pick_tc_model_openai()
-
-    def tc_key(self, key: str) -> None:
-        """API key prompted from the model step before the live list loads."""
-        if not key:
-            self._set_status("[ERROR] OpenAI API key required.")
-            self._pick_transcription_model()
-            return
-        self.apply_tc_key(key)
-        self._pick_tc_model_openai()
-
-    def _pick_tc_model_openai(self) -> None:
         self._push(
-            ModelPickerScreen(
-                "Choose transcription model", self._loader(f"openai:{self.cfg.transcription.api_key or '-'}")
-            ),
+            ModelPickerScreen("Choose local Whisper model", self._loader("whisper")),
             lambda m: self.tc_model(str(m) if m else ""),
         )
+
+    def tc_key(self, key: str) -> None:
+        self._pick_transcription_model()
+
+    def _pick_tc_model_openai(self) -> None:
+        self._pick_transcription_model()
 
     def tc_model(self, model: str) -> None:
         if model:
@@ -545,13 +515,13 @@ class SettingsScreen(ModalScreen[None]):
     # ---- public mutation seam (tested; used by the flow above) ------------------
 
     def set_transcription_source(self, source: str) -> None:
-        self.cfg.transcription.provider = "openai" if source == "openai" else "local"
+        self.cfg.transcription.provider = "local"
 
     def set_translation_source(self, source: str) -> None:
         self.cfg.translation.source = "provider" if source == "provider" else "local"
 
     def apply_tc_key(self, key: str) -> None:
-        self.cfg.transcription.api_key = key
+        pass
 
     def apply_tc_language(self, language: str) -> None:
         self.cfg.transcription.language = language.strip().lower()

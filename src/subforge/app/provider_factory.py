@@ -11,24 +11,20 @@ from subforge.config.app_config import AppConfig
 from subforge.config.providers import TRANSLATION_PRESETS
 from subforge.config.settings import Settings
 from subforge.providers.capabilities import PROVIDER_TO_CATALOG, CapabilityClient, ReasoningSpec
-from subforge.providers.transcription.openai import OpenAITranscriptionProvider
-from subforge.providers.transcription.whisperx import WhisperXProvider
+from subforge.providers.transcription.whisper_cpp import WhisperCppProvider
 from subforge.providers.translation.openai_compatible import OpenAICompatibleProvider
 
 
-def build_transcription_provider(cfg: AppConfig) -> WhisperXProvider | OpenAITranscriptionProvider:
+def build_transcription_provider(cfg: AppConfig) -> WhisperCppProvider:
     tc = cfg.transcription
-    if tc.provider == "local":
-        if not tc.model:
-            raise ValueError("[ERROR] no local transcription model selected — pick one in Settings")
-        return WhisperXProvider(model=tc.model)
-    if tc.provider == "openai":
-        if not tc.model:
-            raise ValueError("[ERROR] no transcription model selected — pick one from the model list")
-        if not tc.api_key:
-            raise ValueError("[ERROR] Missing API key: enter your OPENAI_API_KEY in Settings")
-        return OpenAITranscriptionProvider(api_key=tc.api_key, model=tc.model)
-    raise ValueError(f"[ERROR] unknown transcription provider: {tc.provider}")
+    if not tc.model:
+        raise ValueError("[ERROR] no local transcription model selected — pick one in Settings")
+    models_dir = Path(tc.models_dir) if tc.models_dir else None
+    return WhisperCppProvider(
+        model=tc.model,
+        binary_path=tc.binary_path,
+        models_dir=models_dir,
+    )
 
 
 def build_translation_provider(cfg: AppConfig) -> OpenAICompatibleProvider:

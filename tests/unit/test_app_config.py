@@ -1,4 +1,7 @@
+import os
 import stat
+
+import pytest
 
 from subforge.config.app_config import (
     AppConfig,
@@ -11,7 +14,10 @@ from subforge.config.app_config import (
 def test_defaults_are_local_and_empty_secrets():
     cfg = AppConfig()
     assert cfg.transcription.provider == "local"
-    assert cfg.transcription.api_key == ""
+    assert cfg.transcription.model == "large-v3-turbo"
+    assert cfg.transcription.language == ""
+    assert cfg.transcription.binary_path == ""
+    assert cfg.transcription.models_dir == ""
     assert cfg.translation.source == "local"
     assert cfg.translation.local_base_url == "http://localhost:1234/v1"
     assert cfg.translation.api_key == ""
@@ -21,7 +27,7 @@ def test_defaults_are_local_and_empty_secrets():
 def test_save_load_roundtrip(tmp_path):
     path = tmp_path / "subforge" / "config.json"
     cfg = AppConfig(
-        transcription={"provider": "openai", "model": "whisper-1", "api_key": "sk-t"},
+        transcription={"provider": "local", "model": "small", "language": "en", "binary_path": "whisper-cli"},
         translation={
             "source": "provider",
             "provider": "opencode-go",
@@ -33,6 +39,7 @@ def test_save_load_roundtrip(tmp_path):
     save_app_config(cfg, path)
     loaded = load_app_config(path)
     assert loaded == cfg
+    assert loaded.transcription.model == "small"
     assert loaded.translation.model == "glm-5.2"
 
 
@@ -46,6 +53,7 @@ def test_corrupt_file_returns_defaults(tmp_path):
     assert load_app_config(bad) == AppConfig()
 
 
+@pytest.mark.skipif(os.name != "posix", reason="POSIX permissions only")
 def test_saved_file_is_user_only_on_posix(tmp_path):
     path = tmp_path / "config.json"
     save_app_config(AppConfig(), path)

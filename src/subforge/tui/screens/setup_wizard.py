@@ -96,11 +96,7 @@ class FirstRunSetupScreen(ModalScreen[None]):
         if kind == "whisper":
             return _whisper_entries
         if kind.startswith("openai"):
-            from subforge.providers.transcription.openai import (
-                OpenAITranscriptionProvider,
-            )
-
-            return OpenAITranscriptionProvider(api_key=kind.split(":", 1)[1]).list_models
+            raise ValueError(f"OpenAI transcription is no longer supported: {kind}")
         if kind.startswith("local"):
             from subforge.providers.translation.openai_compatible import (
                 OpenAICompatibleProvider,
@@ -131,28 +127,13 @@ class FirstRunSetupScreen(ModalScreen[None]):
     def _tc_source(self, choice: str) -> None:
         if not choice:
             return  # cancelled — remain on the wizard
-        if choice.startswith("Local"):
-            self._push(
-                ModelPickerScreen("Choose Whisper model", self._loader("whisper")),
-                lambda model: self.apply_tc_model(str(model)) if model else None,
-            )
-        else:
-            self.cfg.transcription.provider = "openai"
-            self._push(
-                ApiKeyInputScreen("OpenAI API key"),
-                lambda key: self._tc_key(key or ""),
-            )
-
-    def _tc_key(self, key: str) -> None:
-        if not key:
-            self._set_status("[ERROR] API key required for OpenAI transcription.")
-            self.begin_transcription_choice()
-            return
-        self.cfg.transcription.api_key = key
         self._push(
-            ModelPickerScreen("Choose transcription model", self._loader(f"openai:{key}")),
+            ModelPickerScreen("Choose Whisper model", self._loader("whisper")),
             lambda model: self.apply_tc_model(str(model)) if model else None,
         )
+
+    def _tc_key(self, key: str) -> None:
+        pass
 
     def apply_tc_model(self, entry: str) -> None:
         """Accept a raw id ('small') or a picker entry ('small · Lightweight …')."""
