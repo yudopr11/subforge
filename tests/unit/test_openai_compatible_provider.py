@@ -174,7 +174,7 @@ def test_max_tokens_400_retries_with_max_completion_tokens():
 
     assert [o.id for o in outs] == [1, 2]
     assert "max_tokens" in bodies[0]
-    assert bodies[1]["max_completion_tokens"] == 2048
+    assert bodies[1]["max_completion_tokens"] == 8192
     assert "max_tokens" not in bodies[1]
     assert provider._use_max_completion_tokens is True
 

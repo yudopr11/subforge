@@ -14,7 +14,8 @@ _SYSTEM_PROMPT = (
     "Preserve meaning, tone, and terminology. Keep translations concise like natural subtitles. "
     "Respond ONLY with valid JSON of the form: "
     '{{"translations": [{{"id": <int>, "text": "<string>"}}]}} '
-    "with exactly one entry per input id. Never modify ids."
+    "with exactly one entry per input id. Never modify ids. "
+    "Do not include any conversational commentary or extra keys."
 )
 
 
@@ -96,7 +97,7 @@ class OpenAICompatibleProvider:
         payload = {
             "model": self.model,
             "response_format": {"type": "json_object"},
-            "max_tokens": 2048,
+            "max_tokens": 8192,
             "temperature": 0.1,
             "messages": [
                 {
@@ -128,14 +129,25 @@ class OpenAICompatibleProvider:
                 f"{_error_detail(exc.response)}"
             ) from exc
 
-        choice = response.json()["choices"][0]["message"]
+        choice_obj = response.json()["choices"][0]
+        choice = choice_obj["message"]
         content = choice.get("content")
-        if content is None:
-            # Reasoning models (MiMo, Nemotron, ...) sometimes answer with reasoning
-            # fields only. Fail loudly here; batch validation is NOT the right place.
+        finish_reason = choice_obj.get("finish_reason")
+
+        if content is None or not content.strip():
+            if finish_reason == "length":
+                raise ValueError(
+                    "translation model ran out of tokens (finish_reason='length'); "
+                    "increase token limit or pick a faster model"
+                )
+            reasoning = choice.get("reasoning_content") or choice.get("reasoning") or ""
+            if reasoning:
+                try:
+                    return self._parse(reasoning)
+                except Exception:  # noqa: BLE001, S110
+                    pass
             raise ValueError(
-                "translation model returned no content (reasoning-only response); "
-                "pick a chat-completions-capable model"
+                "translation model returned no content; pick a chat-completions-capable model"
             )
         return self._parse(content)
 
@@ -149,7 +161,7 @@ class OpenAICompatibleProvider:
         headers = self._auth_headers()
         current_payload = dict(payload)
         if self._use_max_completion_tokens:
-            current_payload["max_completion_tokens"] = current_payload.pop("max_tokens", 2048)
+            current_payload["max_completion_tokens"] = current_payload.pop("max_tokens", 8192)
 
         response = self.client.post(
             f"{self.base_url}/chat/completions",
@@ -164,7 +176,7 @@ class OpenAICompatibleProvider:
             and _wants_max_completion_tokens(response)
         ):
             self._use_max_completion_tokens = True
-            current_payload["max_completion_tokens"] = current_payload.pop("max_tokens", 2048)
+            current_payload["max_completion_tokens"] = current_payload.pop("max_tokens", 8192)
             response = self.client.post(
                 f"{self.base_url}/chat/completions",
                 json=current_payload,
@@ -224,6 +236,14 @@ class OpenAICompatibleProvider:
                     pass
 
         if data is None:
+            # Fallback for partial/truncated JSON or embedded objects:
+            # Match individual {"id": 1, "text": "..."} blocks
+            obj_matches = re.findall(r'\{\s*"id"\s*:\s*(\d+)\s*,\s*"text"\s*:\s*"((?:\\.|[^"\\])*)"\s*\}', text)
+            if obj_matches:
+                return [
+                    TranslationOutput(id=int(m[0]), text=json.loads(f'"{m[1]}"'))
+                    for m in obj_matches
+                ]
             raise ValueError(f"translation provider did not return valid JSON: {content[:100]}")
 
         # Extract items
