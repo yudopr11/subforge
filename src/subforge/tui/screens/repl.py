@@ -368,7 +368,7 @@ class ReplScreen(Screen[None]):
     # ---- slash command autocomplete (Pi-style) -----------------------------
 
     def on_input_changed(self, event: Input.Changed) -> None:
-        """Show/hide the slash-command picker as the prompt content changes."""
+        """Show/hide the slash-command picker as the prompt content changes or trigger direct hotkey."""
         if event.input.id != "prompt":
             return
         if self.locate_mode is not None or self._history_index is not None:
@@ -379,6 +379,23 @@ class ReplScreen(Screen[None]):
             self._show_autocomplete(value[1:])
         else:
             self._hide_autocomplete()
+            if len(value) == 1:
+                ch = value.lower()
+                hotkey_actions = {
+                    "n": self.action_hotkey_new,
+                    "t": self.action_hotkey_transcribe,
+                    "r": self.action_hotkey_review,
+                    "l": self.action_hotkey_translate,
+                    "v": self.action_hotkey_view_tl,
+                    "e": self.action_hotkey_export,
+                    "p": self.action_hotkey_projects,
+                    "m": self.action_hotkey_models,
+                    "s": self.action_hotkey_settings,
+                    "?": self.action_hotkey_help,
+                }
+                if ch in hotkey_actions:
+                    event.input.value = ""
+                    hotkey_actions[ch]()
 
     def _show_autocomplete(self, query: str) -> None:
         """Filter commands by prefix and display the picker."""
@@ -451,7 +468,7 @@ class ReplScreen(Screen[None]):
 
         if self.locate_mode is None:
             prompt = self.query_one("#prompt", Input)
-            if not prompt.value and event.character:
+            if event.character and prompt.value in ("", event.character):
                 ch = event.character.lower()
                 actions = {
                     "n": self.action_hotkey_new,
@@ -466,6 +483,7 @@ class ReplScreen(Screen[None]):
                     "?": self.action_hotkey_help,
                 }
                 if ch in actions:
+                    prompt.value = ""
                     event.stop()
                     event.prevent_default()
                     actions[ch]()
@@ -821,6 +839,7 @@ class ReplScreen(Screen[None]):
             return
         names = ", ".join(p.name for p in paths) or "(nothing to export yet)"
         self.log_line(f"▸ exported: {names}")
+        self.refresh_status()
 
     def _cmd_projects(self, arg: str) -> None:
         self._cmd_open(arg)
