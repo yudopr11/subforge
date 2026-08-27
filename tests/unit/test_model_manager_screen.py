@@ -51,6 +51,23 @@ async def test_install_downloads_then_marks_installed():
         assert screen.query_one("#mm-status").render()
 
 
+async def test_install_selected_via_row_selection():
+    downloads: list[str] = []
+    app = SubForgeApp()
+    async with app.run_test() as pilot:
+        manager = make_manager(set(), downloads)
+        screen = ModelManagerScreen(manager=manager)
+        await app.push_screen(screen)
+        await pilot.pause()
+
+        # Pressing Enter triggers install_selected on the cursor row
+        await pilot.press("enter")
+        await pilot.pause()
+
+        assert len(downloads) == 1
+        assert "installed" in str(screen.query_one("#mm-status").render())
+
+
 def test_unknown_model_surfaces_error_message():
     manager = make_manager(set())
     with pytest.raises(ValueError, match="unknown local model"):
