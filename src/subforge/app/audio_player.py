@@ -24,6 +24,7 @@ _SPECS: dict[str, dict[str, str]] = {
     "ffplay": {"lead": "-nodisp -autoexit -loglevel quiet", "start": "-ss", "length": "-t"},
     "mpv": {"lead": "--really-quiet --no-video", "start": "--start=", "length": "--length="},
     "cvlc": {"lead": "--intf dummy --play-and-exit", "start": "--start-time=", "length": "--stop-time="},
+    "powershell": {"lead": "powershell-native", "start": "", "length": ""},
 }
 
 
@@ -42,6 +43,22 @@ def build_command(
     spec: dict[str, str],
 ) -> list[str]:
     """CLI args playing [start, start+duration) of the audio file."""
+    if player_binary == "powershell":
+        abs_uri = audio_path.resolve().as_uri()
+        ms_wait = max(100, int(duration * 1000))
+        ps_code = (
+            f"Add-Type -AssemblyName presentationCore;"
+            f"$p = New-Object System.Windows.Media.MediaPlayer;"
+            f"$p.Open([System.Uri]'{abs_uri}');"
+            f"Start-Sleep -Milliseconds 300;"
+            f"$p.Position = [System.TimeSpan]::FromSeconds({start:.3f});"
+            f"$p.Play();"
+            f"Start-Sleep -Milliseconds {ms_wait};"
+            f"$p.Stop();"
+            f"$p.Close();"
+        )
+        return ["powershell", "-NoProfile", "-NonInteractive", "-Command", ps_code]
+
     start_flag, length_flag = spec["start"], spec["length"]
     eq_start = start_flag.endswith("=")
     eq_len = length_flag.endswith("=")
@@ -81,8 +98,8 @@ class SegmentPlayer:
         """Start playback; returns a user-facing status message."""
         if not self.available:
             return (
-                "[ERROR] No audio player found — preview requires ffmpeg.\n"
-                "Install it once, then retry:  sudo apt install ffmpeg"
+                "[ERROR] No audio player found — preview requires ffmpeg or PowerShell.\n"
+                "Install ffmpeg: https://ffmpeg.org"
             )
         self.stop()
         duration = max(0.0, end - start)

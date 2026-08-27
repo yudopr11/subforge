@@ -12,7 +12,15 @@ def test_detect_player_prefers_ffplay_first():
 def test_detect_player_falls_back_to_mpv_then_none():
     spec = detect_player(which=lambda b: "/usr/bin/mpv" if b == "mpv" else None)
     assert spec is not None and spec[0] == "mpv"
+    spec_ps = detect_player(which=lambda b: "powershell" if b == "powershell" else None)
+    assert spec_ps is not None and spec_ps[0] == "powershell"
     assert detect_player(which=lambda b: None) is None
+
+
+def test_build_command_powershell_style():
+    cmd = build_command("powershell", Path("/a/b.mp3"), 1.0, 3.5, {})
+    assert cmd[0] == "powershell"
+    assert "System.Windows.Media.MediaPlayer" in cmd[-1]
 
 
 def test_build_command_ffplay_style():

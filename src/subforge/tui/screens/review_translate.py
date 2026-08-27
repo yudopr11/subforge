@@ -25,6 +25,7 @@ from subforge.tui.widgets import EditHistory
 
 
 class ReviewTranslateScreen(ModalScreen[None]):
+    AUTO_FOCUS = "#review"
     BINDINGS: ClassVar[list[Binding | tuple[str, str] | tuple[str, str, str]]] = [
         Binding("ctrl+s", "save", "Save"),
         Binding("ctrl+z", "undo", "Undo"),
@@ -52,19 +53,26 @@ class ReviewTranslateScreen(ModalScreen[None]):
     def compose(self) -> ComposeResult:
         with Vertical():
             yield Label(f"[b]Translation Review[/b]  —  {self.language} · {self.project.project.name}")
-            yield DataTable(id="review")
+            yield DataTable(id="review", cursor_type="row")
             yield Label("", id="status")
             yield Input(placeholder=f"Fix {self.language} translation; Enter to apply", id="fix")
             yield Label(
-                "[dim]Ctrl+S Save · Ctrl+Z Undo · Ctrl+Y Redo · Esc Back[/dim]", id="hints"
+                "[dim]Enter: edit selected · Ctrl+S: save · Ctrl+Z: undo · Esc: back[/dim]", id="hints"
             )
             yield Label("", id="export-status")
 
     def on_mount(self) -> None:
         table = self.query_one(DataTable)
         self._column_keys = table.add_columns("ID", "Source", f"Translation ({self.language})")
-        for seg in sorted(self.project.segments, key=lambda s: s.start):
+        sorted_segs = sorted(self.project.segments, key=lambda s: s.start)
+        for seg in sorted_segs:
             table.add_row(str(seg.id), seg.source, seg.translations.get(self.language, "—"), key=str(seg.id))
+        if sorted_segs:
+            table.move_cursor(row=0)
+            try:
+                self.query_one("#fix", Input).value = sorted_segs[0].translations.get(self.language, "")
+            except NoMatches:
+                pass
         self._refresh_status()
 
     # ---- helpers ---------------------------------------------------------------
@@ -107,7 +115,29 @@ class ReviewTranslateScreen(ModalScreen[None]):
         seg = next((self.project.segments[i] for i in (row,) if 0 <= row < len(self.project.segments)), None)
         if seg is not None:
             self.apply_edit(seg.id, self.language, event.input.value)
-            event.input.clear()
+        table.focus()
+
+    def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
+        """When Enter/click selects a table row, focus the fix input with text selected."""
+        fix = self.query_one("#fix", Input)
+        table = self.query_one(DataTable)
+        row = table.cursor_row
+        seg = next((self.project.segments[i] for i in (row,) if 0 <= row < len(self.project.segments)), None)
+        if seg is not None:
+            fix.value = seg.translations.get(self.language, "")
+        fix.focus()
+        fix.select_all()
+
+    def on_data_table_row_highlighted(self, event: DataTable.RowHighlighted) -> None:
+        """Prefill the fix box with the highlighted row's translation (if not typing)."""
+        fix = self.query_one("#fix", Input)
+        if fix.has_focus:
+            return
+        table = self.query_one(DataTable)
+        row = table.cursor_row
+        seg = next((self.project.segments[i] for i in (row,) if 0 <= row < len(self.project.segments)), None)
+        if seg is not None:
+            fix.value = seg.translations.get(self.language, "")
 
     def apply_edit(self, segment_id: int, language: str, text: str) -> None:
         """Apply an edit to the in-memory project + table; NOT saved yet."""

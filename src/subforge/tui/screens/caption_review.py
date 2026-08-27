@@ -25,6 +25,7 @@ from subforge.tui.widgets import EditHistory
 
 
 class CaptionReviewScreen(ModalScreen[None]):
+    AUTO_FOCUS = "#segments"
     BINDINGS: ClassVar[list[Binding | tuple[str, str] | tuple[str, str, str]]] = [
         Binding("ctrl+s", "save", "Save"),
         Binding("ctrl+z", "undo", "Undo"),
@@ -48,7 +49,7 @@ class CaptionReviewScreen(ModalScreen[None]):
     def compose(self) -> ComposeResult:
         with Vertical():
             yield Label(f"[b]Caption Review[/b]  —  {self.project.project.name}")
-            yield DataTable(id="segments")
+            yield DataTable(id="segments", cursor_type="row")
             with Horizontal(id="playback"):
                 yield Button("▶ Play (p)", id="btn-play")
                 yield Button("■ Stop (x)", id="btn-stop")
@@ -56,7 +57,7 @@ class CaptionReviewScreen(ModalScreen[None]):
             yield Label("", id="status")
             yield Input(placeholder="Edit text; Enter to apply", id="edit")
             yield Label(
-                "[dim]Ctrl+S Save · Ctrl+Z Undo · Ctrl+Y Redo · p Play · x Stop · Esc Back[/dim]",
+                "[dim]Enter: edit selected · Ctrl+S: save · Ctrl+Z: undo · p: play · x: stop · Esc: back[/dim]",
                 id="hints",
             )
 
@@ -66,6 +67,13 @@ class CaptionReviewScreen(ModalScreen[None]):
         for seg in sorted(self.project.segments, key=lambda s: s.start):
             table.add_row(str(seg.id), format_srt(seg.start)[:11], seg.source, key=str(seg.id))
             self._row_ids.append(seg.id)
+        if self._row_ids:
+            table.move_cursor(row=0)
+            first_seg = self.project.segments[0]
+            try:
+                self.query_one("#edit", Input).value = first_seg.source
+            except NoMatches:
+                pass
         audio = self.project_dir / "audio"
         candidates = [p for p in sorted(audio.iterdir()) if p.is_file()] if audio.is_dir() else []
         if candidates:
@@ -148,7 +156,16 @@ class CaptionReviewScreen(ModalScreen[None]):
         row = table.cursor_row
         if 0 <= row < len(self._row_ids):
             self.apply_edit(self._row_ids[row], event.input.value)
-            event.input.clear()
+        table.focus()
+
+    def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
+        """When Enter/click selects a table row, focus the edit input with text selected."""
+        edit = self.query_one("#edit", Input)
+        seg = self._selected_segment()
+        if seg is not None:
+            edit.value = seg.source
+        edit.focus()
+        edit.select_all()
 
     def on_data_table_row_highlighted(self, event: DataTable.RowHighlighted) -> None:
         """Prefill the edit box with the highlighted row's text (if not typing)."""
