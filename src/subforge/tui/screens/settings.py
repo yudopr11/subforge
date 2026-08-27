@@ -287,31 +287,16 @@ class SettingsScreen(ModalScreen[None]):
             self.show_menu()  # Esc on the step menu -> top menu
             return
         lowered = choice.lower()
-        if "connect" in lowered:
-            self.tc_connect()
-        elif "model" in lowered:
+        if "model" in lowered:
             self._pick_transcription_model()
         else:
             self.ask_tc_language()
-
-    def tc_connect(self) -> None:
-        self._set_status("Transcribe · local whisper.cpp engine")
-        self.show_tc_steps()
-
-    def tc_connect_key(self, key: str) -> None:
-        self.show_tc_steps()
 
     def _pick_transcription_model(self) -> None:
         self._push(
             ModelPickerScreen("Choose local Whisper model", self._loader("whisper")),
             lambda m: self.tc_model(str(m) if m else ""),
         )
-
-    def tc_key(self, key: str) -> None:
-        self._pick_transcription_model()
-
-    def _pick_tc_model_openai(self) -> None:
-        self._pick_transcription_model()
 
     def tc_model(self, model: str) -> None:
         if model:

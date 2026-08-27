@@ -129,6 +129,38 @@ async def test_happy_path_local_transcription_local_translation(first_run_env):
         assert app.needs_setup is False
 
 
+async def test_wizard_install_now_opens_model_manager(first_run_env):
+    """Picking 'Install now' opens ModelManagerScreen and returns to Translation on dismiss."""
+    app = SubForgeApp()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        wizard = _wizard(app)
+        wizard._loader_factory = fake_loaders({"whisper": ["small · Balanced"]})
+
+        # Step 1: Model -> Language -> Install offer
+        assert isinstance(app.screen, ModelPickerScreen)
+        _pick(app.screen, "small · Balanced")
+        await pilot.pause()
+
+        from subforge.tui.screens.language_picker import LanguagePickerScreen
+
+        assert isinstance(app.screen, LanguagePickerScreen)
+        _pick(app.screen, "en")
+        await pilot.pause()
+
+        assert isinstance(app.screen, ChoiceScreen)
+        _pick(app.screen, "Install now")
+        await pilot.pause()
+
+        assert isinstance(app.screen, ModelManagerScreen)
+        await pilot.press("escape")  # Close model manager
+        await pilot.pause()
+
+        # Transitions to Step 2: Translation choice
+        assert isinstance(app.screen, ChoiceScreen)
+        assert any("Local server" in str(opt.prompt) for opt in app.screen.query_one("OptionList").options)
+
+
 async def test_happy_path_cloud_translation(first_run_env):
     loaders = fake_loaders({"whisper": ["large-v3-turbo"], "cloud": ["glm-5.2"]})
     app = SubForgeApp()

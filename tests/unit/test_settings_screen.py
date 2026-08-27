@@ -223,10 +223,8 @@ async def test_settings_menu_drives_each_stage_then_saves(tmp_path, monkeypatch)
         # menu appears first
         assert isinstance(app.screen, ChoiceScreen)
 
-        # -> Transcribe: Local -> step menu -> model -> language
+        # -> Transcribe: step menu -> model -> language
         _pick(app.screen, "Transcribe  —  model + source language")
-        await pilot.pause()
-        _pick(app.screen, "Local (WhisperX)")
         await pilot.pause()
         lbls = [str(l.render()) for l in app.screen.query("Label")]
         assert any("pick a step" in s for s in lbls)
@@ -299,27 +297,7 @@ async def test_settings_guided_flow_cloud_offers_reasoning(tmp_path, monkeypatch
         await app.push_screen(screen)
         await pilot.pause()
 
-        # menu -> Transcribe (OpenAI): step menu = connect, model, language
-        _pick(app.screen, "Transcribe  —  model + source language")
-        await pilot.pause()
-        _pick(app.screen, "OpenAI provider")
-        await pilot.pause()
-        _pick(app.screen, "1 · Connect — OpenAI API key")
-        await pilot.pause()
-        _pick(app.screen, "sk-test")  # API key
-        await pilot.pause()
-        _pick(app.screen, "2 · Select model — live list")
-        await pilot.pause()
-        _pick(app.screen, "whisper-1")
-        await pilot.pause()
-        _pick(app.screen, "3 · Source language — or auto-detect")
-        await pilot.pause()
-        _pick(app.screen, "")
-        await pilot.pause()  # source language: auto-detect
-
-        # step menu -> top menu -> Translation (cloud): connect, model, reasoning
-        await pilot.press("escape")
-        await pilot.pause()
+        # Translation (cloud): connect, model, reasoning
         _pick(app.screen, "Translation  —  model + target language")
         await pilot.pause()
         _pick(app.screen, "Cloud provider")

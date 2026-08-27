@@ -130,12 +130,6 @@ class FirstRunSetupScreen(ModalScreen[None]):
             lambda model: self.apply_tc_model(str(model)) if model else None,
         )
 
-    def _tc_source(self, choice: str) -> None:
-        self.begin_transcription_choice()
-
-    def _tc_key(self, key: str) -> None:
-        pass
-
     def apply_tc_model(self, entry: str) -> None:
         """Accept a raw id ('small') or a picker entry ('small · Lightweight …')."""
         self.cfg.transcription.model = entry.split(" · ")[0]
