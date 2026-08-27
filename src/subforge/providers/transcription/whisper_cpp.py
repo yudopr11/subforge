@@ -1,12 +1,16 @@
 """Local whisper.cpp transcription provider (PRD §8, ARCH §7)."""
 
 import json
-import os
 import shutil
 import subprocess
 import tempfile
 from pathlib import Path
 
+from subforge.app.binaries import (
+    ensure_ffmpeg_binary,
+    ensure_whisper_binary,
+    find_in_path_or_bin,
+)
 from subforge.app.model_manager import LocalModelManager
 from subforge.app.storage import get_bin_dir
 from subforge.models.transcript import Transcript, TranscriptSegment
@@ -18,67 +22,24 @@ def default_bin_dir() -> Path:
 
 
 def install_whisper_cli_binaries(target_dir: Path | None = None) -> Path:
-    """Download and install official pre-built whisper.cpp binaries (Windows x64)."""
-    import io
-    import zipfile
-
-    import httpx
-
-    dest_dir = target_dir or default_bin_dir()
-    dest_dir.mkdir(parents=True, exist_ok=True)
-
-    if os.name == "nt":
-        url = "https://github.com/ggml-org/whisper.cpp/releases/latest/download/whisper-bin-x64.zip"
-        res = httpx.get(url, follow_redirects=True, timeout=60.0)
-        res.raise_for_status()
-        with zipfile.ZipFile(io.BytesIO(res.content)) as z:
-            for member in z.infolist():
-                fn = member.filename.removeprefix("Release/")
-                if fn and not fn.endswith("/"):
-                    target_file = dest_dir / fn
-                    target_file.write_bytes(z.read(member))
-        cli_exe = dest_dir / "whisper-cli.exe"
-        if cli_exe.exists():
-            return cli_exe
-    raise RuntimeError(
-        "Auto-installation of whisper-cli is not supported on this platform. "
-        "Please install whisper.cpp manually and add whisper-cli to your PATH."
-    )
+    """Download and install official pre-built whisper.cpp binaries."""
+    return ensure_whisper_binary(dest_dir=target_dir)
 
 
 def find_whisper_cli(custom_path: str = "", auto_install: bool = True) -> str:
     if custom_path and (Path(custom_path).exists() or shutil.which(custom_path)):
         return custom_path
 
-    # Standard app bin directories
-    candidates: list[Path] = []
     bin_dir = default_bin_dir()
-    if os.name == "nt":
-        candidates.append(bin_dir / "whisper-cli.exe")
-        candidates.append(bin_dir / "main.exe")
-    else:
-        candidates.append(bin_dir / "whisper-cli")
-        candidates.append(bin_dir / "main")
-
-    for c in candidates:
-        if c.exists():
-            return str(c)
-
-    # PATH checks (avoid bare 'main' on Windows matching system32/main.cpl)
-    names = (
-        ["whisper-cli.exe", "whisper-cli", "whisper-cpp.exe", "whisper-cpp"]
-        if os.name == "nt"
-        else ["whisper-cli", "whisper-cpp", "whisper.cpp", "main"]
+    found = find_in_path_or_bin("whisper-cli", bin_dir=bin_dir) or find_in_path_or_bin(
+        "main", bin_dir=bin_dir
     )
-    for name in names:
-        which_path = shutil.which(name)
-        if which_path and not which_path.lower().endswith((".cpl", ".dll")):
-            return which_path
+    if found:
+        return str(found)
 
-    # If missing on Windows, attempt auto-install if enabled
-    if auto_install and os.name == "nt":
+    if auto_install:
         try:
-            return str(install_whisper_cli_binaries(bin_dir))
+            return str(ensure_whisper_binary(dest_dir=bin_dir))
         except Exception:  # noqa: BLE001, S110
             pass
 
@@ -88,7 +49,11 @@ def find_whisper_cli(custom_path: str = "", auto_install: bool = True) -> str:
 def ensure_16khz_wav(audio_path: Path, temp_dir: Path) -> Path:
     """Convert audio to 16kHz 16-bit mono WAV using ffmpeg if needed."""
     out_wav = temp_dir / f"conv_{audio_path.stem}.wav"
-    ffmpeg_bin = shutil.which("ffmpeg") or "ffmpeg"
+    try:
+        ffmpeg_bin = str(find_in_path_or_bin("ffmpeg") or ensure_ffmpeg_binary())
+    except Exception:  # noqa: BLE001
+        ffmpeg_bin = shutil.which("ffmpeg") or "ffmpeg"
+
     cmd = [
         ffmpeg_bin,
         "-y",

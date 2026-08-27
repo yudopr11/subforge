@@ -32,7 +32,7 @@ def test_find_whisper_cli_fallback() -> None:
         patch("subforge.providers.transcription.whisper_cpp.default_bin_dir", return_value=Path("/nonexistent/bin")),
         patch("shutil.which", return_value="/usr/local/bin/whisper-cli"),
     ):
-        assert find_whisper_cli(auto_install=False) == "/usr/local/bin/whisper-cli"
+        assert Path(find_whisper_cli(auto_install=False)) == Path("/usr/local/bin/whisper-cli")
 
     with (
         patch("subforge.providers.transcription.whisper_cpp.default_bin_dir", return_value=Path("/nonexistent/bin")),
