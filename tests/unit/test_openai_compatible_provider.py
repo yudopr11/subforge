@@ -254,3 +254,46 @@ def test_reasoning_effort_sent_only_when_provided():
 
     assert "reasoning_effort" not in bodies[0]
     assert bodies[1]["reasoning_effort"] == "max"  # passed through untouched — UI validated it already
+
+
+def test_is_chat_model_filters_embedding_models():
+    from subforge.providers.translation.openai_compatible import is_chat_model
+
+    assert is_chat_model("prism-ml/bonsai-27b") is True
+    assert is_chat_model("qwen2.5-coder-7b-instruct") is True
+    assert is_chat_model("text-embedding-nomic-embed-text-v1.5") is False
+    assert is_chat_model("bge-large-en-v1.5") is False
+    assert is_chat_model("whisper-large-v3") is False
+
+
+def test_list_models_filters_out_embeddings():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "data": [
+                    {"id": "text-embedding-nomic-embed-text-v1.5"},
+                    {"id": "prism-ml/bonsai-27b"},
+                    {"id": "bge-reranker-v2-m3"},
+                ]
+            },
+        )
+
+    provider = OpenAICompatibleProvider("http://localhost:1234/v1", "", "discovery", client=transport_handler(handler))
+    assert provider.list_models() == ["prism-ml/bonsai-27b"]
+
+
+def test_detect_local_server_probes_candidates():
+    from subforge.providers.translation.openai_compatible import detect_local_server
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if "1234" in str(request.url):
+            return httpx.Response(200, json={"data": [{"id": "prism-ml/bonsai-27b"}]})
+        return httpx.Response(500)
+
+    client = transport_handler(handler)
+    res = detect_local_server(client=client, candidates=["http://localhost:1234/v1", "http://localhost:11434/v1"])
+    assert res is not None
+    assert res[0] == "http://localhost:1234/v1"
+    assert res[1] == ["prism-ml/bonsai-27b"]
+

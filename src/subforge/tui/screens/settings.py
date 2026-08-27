@@ -430,10 +430,17 @@ class SettingsScreen(ModalScreen[None]):
         )
 
     def _pick_translation_model(self) -> None:
-        """Model step entry: local asks server URL first (then key if missing),
-        cloud goes straight to the live model list."""
+        """Model step entry: local asks server URL first, cloud goes straight to live model list."""
         t = self.cfg.translation
         if t.source == "local":
+            if self._loader_factory is None:
+                from subforge.providers.translation.openai_compatible import detect_local_server
+
+                detected = detect_local_server()
+                if detected:
+                    self.apply_tl_url(detected[0])
+                    self._pick_tl_model()
+                    return
             self._push(
                 UrlInputScreen(t.local_base_url),
                 lambda u: self.tl_url(str(u) if u else ""),

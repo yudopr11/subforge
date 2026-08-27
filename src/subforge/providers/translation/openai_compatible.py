@@ -18,6 +18,49 @@ _SYSTEM_PROMPT = (
 )
 
 
+NON_CHAT_KEYWORDS = (
+    "embed",
+    "embedding",
+    "nomic-embed",
+    "bge-",
+    "bert-",
+    "minilm",
+    "rerank",
+    "whisper",
+)
+
+LOCAL_SERVER_CANDIDATES = [
+    "http://localhost:1234/v1",
+    "http://localhost:11434/v1",
+    "http://127.0.0.1:1234/v1",
+    "http://127.0.0.1:11434/v1",
+]
+
+
+def is_chat_model(model_id: str) -> bool:
+    """True if model ID looks like a generative LLM rather than an embedding model."""
+    lowered = model_id.lower()
+    return not any(kw in lowered for kw in NON_CHAT_KEYWORDS)
+
+
+def detect_local_server(
+    client: httpx.Client | None = None,
+    candidates: list[str] | None = None,
+) -> tuple[str, list[str]] | None:
+    """Probe running local LLM endpoints (LM Studio, Ollama). Returns (base_url, chat_models)."""
+    http_client = client or httpx.Client(timeout=2.0)
+    urls = candidates or LOCAL_SERVER_CANDIDATES
+    for url in urls:
+        try:
+            prov = OpenAICompatibleProvider(base_url=url, api_key="", model="discovery", client=http_client)
+            models = prov.list_models()
+            if models:
+                return url, models
+        except Exception:  # noqa: BLE001, S112
+            continue
+    return None
+
+
 class OpenAICompatibleProvider:
     def __init__(
         self,
@@ -154,7 +197,9 @@ class OpenAICompatibleProvider:
                 f"model discovery failed (HTTP {exc.response.status_code}): "
                 f"{_error_detail(exc.response)}"
             ) from exc
-        return sorted(str(item["id"]) for item in response.json().get("data", []) if item.get("id"))
+        raw_ids = [str(item["id"]) for item in response.json().get("data", []) if item.get("id")]
+        filtered = [mid for mid in raw_ids if is_chat_model(mid)]
+        return sorted(filtered if filtered else raw_ids)
 
     @staticmethod
     def _parse(content: str) -> list[TranslationOutput]:

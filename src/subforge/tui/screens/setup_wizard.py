@@ -176,6 +176,20 @@ class FirstRunSetupScreen(ModalScreen[None]):
             return  # cancelled — remain on the wizard
         if choice.startswith("Local"):
             self.cfg.translation.source = "local"
+            if self._loader_factory is None:
+                from subforge.providers.translation.openai_compatible import detect_local_server
+
+                detected = detect_local_server()
+                if detected:
+                    detected_url, detected_models = detected
+                    self.cfg.translation.local_base_url = detected_url
+                    self.cfg.translation.local_api_key = ""
+                    self._set_status(f"Translation · detected {detected_url} ({len(detected_models)} model{'s' if len(detected_models) != 1 else ''})")
+                    self._push(
+                        ModelPickerScreen("Choose local translation model", self._loader(f"local:{detected_url}:")),
+                        lambda model: self.apply_tl_model(str(model)) if model else None,
+                    )
+                    return
             self._push(UrlInputScreen(self.cfg.translation.local_base_url), lambda url: self._tl_url(str(url)) if url else None)
         else:
             self.cfg.translation.source = "provider"
