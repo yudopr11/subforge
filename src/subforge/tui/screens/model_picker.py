@@ -42,9 +42,9 @@ class ModelPickerScreen(ModalScreen[str]):
     def on_mount(self) -> None:
         try:
             models = list(self.loader())
-        except Exception:  # noqa: BLE001 — bad key/offline must not crash the picker
+        except Exception as exc:  # noqa: BLE001 — bad key/offline must not crash the picker
             self.query_one("#picker-status", Label).update(
-                "[ERROR] Couldn't load models — check your API key / server URL · Esc cancel"
+                f"[ERROR] Couldn't load models ({exc}) · Esc cancel"
             )
             return
         self._all_models = models or []

@@ -108,7 +108,9 @@ class FirstRunSetupScreen(ModalScreen[None]):
                 OpenAICompatibleProvider,
             )
 
-            _, url, key = kind.split(":", 2)
+            remainder = kind.removeprefix("local:").removeprefix("local")
+            remainder = remainder.removeprefix(":")
+            url, _, key = remainder.partition("|")
             return OpenAICompatibleProvider(base_url=url, api_key=key, model="discovery").list_models
         if kind.startswith("cloud"):
             preset = TRANSLATION_PRESETS[kind.split(":", 1)[1]]
@@ -186,7 +188,7 @@ class FirstRunSetupScreen(ModalScreen[None]):
                     self.cfg.translation.local_api_key = ""
                     self._set_status(f"Translation · detected {detected_url} ({len(detected_models)} model{'s' if len(detected_models) != 1 else ''})")
                     self._push(
-                        ModelPickerScreen("Choose local translation model", self._loader(f"local:{detected_url}:")),
+                        ModelPickerScreen("Choose local translation model", self._loader(f"local:{detected_url}")),
                         lambda model: self.apply_tl_model(str(model)) if model else None,
                     )
                     return
@@ -200,7 +202,7 @@ class FirstRunSetupScreen(ModalScreen[None]):
         self.cfg.translation.local_base_url = url
         self.cfg.translation.local_api_key = ""
         self._push(
-            ModelPickerScreen("Choose local translation model", self._loader(f"local:{url}:")),
+            ModelPickerScreen("Choose local translation model", self._loader(f"local:{url}")),
             lambda model: self.apply_tl_model(str(model)) if model else None,
         )
 
@@ -208,7 +210,7 @@ class FirstRunSetupScreen(ModalScreen[None]):
         self.cfg.translation.local_api_key = key
         url = self.cfg.translation.local_base_url
         self._push(
-            ModelPickerScreen("Choose local translation model", self._loader(f"local:{url}:{key}")),
+            ModelPickerScreen("Choose local translation model", self._loader(f"local:{url}|{key}")),
             lambda model: self.apply_tl_model(str(model)) if model else None,
         )
 

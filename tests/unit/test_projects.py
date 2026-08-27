@@ -61,11 +61,19 @@ def _unused(p: Path) -> bool:  # keep shutil referenced if linters change scope
 
 
 def test_discover_projects_lists_recent_first(tmp_path, audio):
+    import os
+    import time
+
     from subforge.app.projects import discover_projects
 
     root = tmp_path / "p"
     d1 = create_project_from_audio(audio, root)
     d2 = create_project_from_audio(audio, root)
+    # ensure d2 directory has a newer mtime deterministically
+    now = time.time()
+    os.utime(d1, (now - 10, now - 10))
+    os.utime(d2, (now + 10, now + 10))
+
     # a directory without project.json must be ignored
     stray = root / "not-a-project"
     stray.mkdir()

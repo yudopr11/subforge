@@ -192,12 +192,14 @@ class SettingsScreen(ModalScreen[None]):
             return lambda: entries
         if kind.startswith("openai:"):
             raise ValueError(f"OpenAI transcription is no longer supported: {kind}")
-        if kind.startswith("local:"):
+        if kind.startswith("local"):
             from subforge.providers.translation.openai_compatible import (
                 OpenAICompatibleProvider,
             )
 
-            _, url, key = kind.split(":", 2)
+            remainder = kind.removeprefix("local:").removeprefix("local")
+            remainder = remainder.removeprefix(":")
+            url, _, key = remainder.partition("|")
             return OpenAICompatibleProvider(base_url=url, api_key=key, model="discovery").list_models
         preset_id = kind.split(":", 1)[1]
         preset = TRANSLATION_PRESETS[preset_id]
@@ -423,7 +425,8 @@ class SettingsScreen(ModalScreen[None]):
     def _pick_tl_model(self) -> None:
         """Local model list after the server URL (+ optional key) is known."""
         t = self.cfg.translation
-        loader = self._loader(f"local:{t.local_base_url}:{t.local_api_key or ''}")
+        key_part = f"|{t.local_api_key}" if t.local_api_key else ""
+        loader = self._loader(f"local:{t.local_base_url}{key_part}")
         self._push(
             ModelPickerScreen("Choose translation model", loader),
             lambda m: self.tl_model(str(m) if m else ""),
