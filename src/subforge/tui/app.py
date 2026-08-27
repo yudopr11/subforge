@@ -40,6 +40,37 @@ class SubForgeApp(App[None]):
         background: $pi-bg;
     }
 
+    /* ---- studio dashboard header (top) ---- */
+    #studio-header {
+        background: $pi-bg-elevated;
+        border-bottom: solid $pi-border;
+        height: auto;
+        padding: 0 1;
+    }
+    #project-banner {
+        color: $text;
+        height: 1;
+        content-align: left middle;
+    }
+    #pipeline-stepper {
+        color: $pi-accent;
+        height: 1;
+        content-align: left middle;
+    }
+    #next-action-banner {
+        color: $pi-warning;
+        height: 1;
+        content-align: left middle;
+    }
+    #hotkey-bar {
+        color: $pi-muted;
+        background: $pi-bg-panel;
+        border-bottom: solid $pi-border;
+        height: 1;
+        padding: 0 1;
+        content-align: left middle;
+    }
+
     /* ---- header / status bar (top) ---- */
     #status-bar {
         color: $pi-muted;

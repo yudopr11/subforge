@@ -45,6 +45,15 @@ class ReplScreen(Screen[None]):
     BINDINGS: ClassVar[list[Binding | tuple[str, str] | tuple[str, str, str]]] = [
         Binding("ctrl+c", "quit", "Quit", priority=True),
         Binding("escape", "cancel_or_prompt", "Back"),
+        Binding("ctrl+n", "hotkey_new", "New Project", show=False),
+        Binding("ctrl+t", "hotkey_transcribe", "Transcribe", show=False),
+        Binding("ctrl+r", "hotkey_review", "Review Captions", show=False),
+        Binding("ctrl+l", "hotkey_translate", "Translate", show=False),
+        Binding("ctrl+v", "hotkey_view_tl", "View Translation", show=False),
+        Binding("ctrl+e", "hotkey_export", "Export", show=False),
+        Binding("ctrl+p", "hotkey_projects", "Projects", show=False),
+        Binding("ctrl+m", "hotkey_models", "Models", show=False),
+        Binding("ctrl+s", "hotkey_settings", "Settings", show=False),
     ]
 
     AUTO_FOCUS = "#prompt"
@@ -85,7 +94,15 @@ class ReplScreen(Screen[None]):
     ]
 
     def compose(self) -> ComposeResult:
-        yield Label("", id="status-bar")
+        with Vertical(id="studio-header"):
+            yield Label("", id="project-banner")
+            yield Label("", id="pipeline-stepper")
+            yield Label("", id="next-action-banner")
+            yield Label("", id="status-bar")
+        yield Label(
+            "[b cyan]N[/b cyan] New  [b cyan]T[/b cyan] Transcribe  [b cyan]R[/b cyan] Review  [b cyan]L[/b cyan] Translate  [b cyan]V[/b cyan] View TL  [b cyan]E[/b cyan] Export  [b cyan]P[/b cyan] Projects  [b cyan]M[/b cyan] Models  [b cyan]S[/b cyan] Settings  [b cyan]?[/b cyan] Help",
+            id="hotkey-bar",
+        )
         with Vertical():
             yield SelectableRichLog(
                 id="transcript", markup=True, wrap=True, highlight=False
@@ -93,10 +110,10 @@ class ReplScreen(Screen[None]):
         with Vertical(id="autocomplete-container"):
             yield OptionList(id="autocomplete-list")
         yield Static(
-            "/new /open /transcribe /review /translate /export /settings /wizard /status ? q quit",
+            "/new /open /projects /delete /models /transcribe /review /translate /export /settings /wizard /status ? quit",
             id="command-legend",
         )
-        yield Input(placeholder="Type a command… (? for help)", id="prompt")
+        yield Input(placeholder="Type a command or press hotkey (N, T, R, L, E, P, M, S)...", id="prompt")
         yield Label("", id="footer-bar")
 
     def on_mount(self) -> None:
@@ -117,7 +134,8 @@ class ReplScreen(Screen[None]):
         self.query_one("#transcript", RichLog).write(text)
 
     def _set_status(self, message: str) -> None:
-        self.query_one("#status-bar", Label).update(message)
+        if self.query("#status-bar"):
+            self.query_one("#status-bar", Label).update(message)
 
     def _refresh_footer(self) -> None:
         """Pi-style footer: project · model info · shortcuts."""
@@ -137,8 +155,89 @@ class ReplScreen(Screen[None]):
         footer = " · ".join(parts)
         self.query_one("#footer-bar", Label).update(footer)
 
+    def _render_project_banner(self) -> str:
+        project_dir = self._host.project_dir
+        if project_dir is None:
+            return "[b cyan]SUBFORGE STUDIO[/b cyan] · [dim]No project loaded (press [N] to create, [P] to open)[/dim]"
+        try:
+            project = load_project(project_dir)
+            p_meta = project.project
+            src = p_meta.source_language or "auto"
+            tgts = ", ".join(p_meta.target_languages) or self._host.app_config.translation.default_target or "en"
+            audio = find_audio_file(project_dir)
+            audio_name = audio.name if audio else "no audio"
+            seg_count = len(project.segments)
+            return (
+                f"[b cyan]SUBFORGE STUDIO[/b cyan] · Project: [b white]{p_meta.name}[/b white]  │  "
+                f"Lang: [cyan]{src}[/cyan] → [green]{tgts}[/green]  │  "
+                f"Audio: [yellow]{audio_name}[/yellow] ({seg_count} segments)"
+            )
+        except Exception:  # noqa: BLE001
+            return f"[b cyan]SUBFORGE STUDIO[/b cyan] · Project: [b white]{project_dir.name}[/b white]"
+
+    def _render_pipeline_stepper(self) -> str:
+        project_dir = self._host.project_dir
+        if project_dir is None:
+            return "[dim]Pipeline: [1. New] ──▶ [2. Transcribe] ──▶ [3. Review] ──▶ [4. Translate] ──▶ [5. Export][/dim]"
+        try:
+            project = load_project(project_dir)
+        except Exception:  # noqa: BLE001
+            return "[dim]Pipeline: [1. New] ──▶ [2. Transcribe] ──▶ [3. Review] ──▶ [4. Translate] ──▶ [5. Export][/dim]"
+
+        t_stage = project.get_stage("transcription")
+        has_captions = len(project.segments) > 0
+        tl_stages = [project.get_stage(k) for k in project.stages if k.startswith("translation_")]
+        tl_state = StageState.PENDING
+        if any(s == StageState.RUNNING for s in tl_stages):
+            tl_state = StageState.RUNNING
+        elif any(s == StageState.COMPLETED for s in tl_stages) or any(
+            any(s.translations.values()) for s in project.segments
+        ):
+            tl_state = StageState.COMPLETED
+        elif any(s == StageState.FAILED for s in tl_stages):
+            tl_state = StageState.FAILED
+
+        export_stage = project.get_stage("export")
+
+        pills = [
+            f"[b cyan]\\[[/b cyan]{_glyph(t_stage)} Transcribe[b cyan]\\][/b cyan]",
+            f"[b cyan]\\[[/b cyan]{'[green]✓[/green]' if has_captions else '○'} Review[b cyan]\\][/b cyan]",
+            f"[b cyan]\\[[/b cyan]{_glyph(tl_state)} Translate[b cyan]\\][/b cyan]",
+            f"[b cyan]\\[[/b cyan]{_glyph(export_stage)} Export[b cyan]\\][/b cyan]",
+        ]
+        return "Pipeline: " + " [dim]──▶[/dim] ".join(pills)
+
+    def _render_next_step(self) -> str:
+        project_dir = self._host.project_dir
+        if project_dir is None:
+            return "[b yellow]▶ Suggested Next Step:[/b yellow] Press [b cyan][N][/b cyan] to create a New project or [b cyan][P][/b cyan] to Open an existing project."
+        try:
+            project = load_project(project_dir)
+        except Exception:  # noqa: BLE001
+            return "[b yellow]▶ Suggested Next Step:[/b yellow] Press [b cyan][N][/b cyan] to create a New project or [b cyan][P][/b cyan] to Open an existing project."
+
+        t_stage = project.get_stage("transcription")
+        if t_stage in (StageState.PENDING, StageState.FAILED):
+            return "[b yellow]▶ Suggested Next Step:[/b yellow] Press [b cyan][T][/b cyan] to Transcribe audio with whisper.cpp."
+        if t_stage == StageState.RUNNING:
+            return "[b yellow]▶ Suggested Next Step:[/b yellow] ⏳ Transcription in progress… please wait."
+
+        tl_stages = {k: project.get_stage(k) for k in project.stages if k.startswith("translation_")}
+        has_any_tl = any(s == StageState.COMPLETED for s in tl_stages.values()) or any(
+            any(s.translations.values()) for s in project.segments
+        )
+        export_stage = project.get_stage("export")
+
+        if export_stage == StageState.COMPLETED:
+            return "[b yellow]▶ Suggested Next Step:[/b yellow] Subtitles exported! Press [b cyan][E][/b cyan] to re-export, [b cyan][R][/b cyan] to edit captions, or [b cyan][V][/b cyan] to edit translations."
+
+        if has_any_tl:
+            return "[b yellow]▶ Suggested Next Step:[/b yellow] Press [b cyan][E][/b cyan] to Export Subtitles (SRT / ASS) or [b cyan][V][/b cyan] to View Translations."
+
+        return "[b yellow]▶ Suggested Next Step:[/b yellow] Press [b cyan][R][/b cyan] to Review Captions or [b cyan][L][/b cyan] to Translate."
+
     def refresh_status(self) -> None:
-        """Header status line: project · stage glyphs · active models."""
+        """Header status line: project banner, pipeline stepper, next action, footer."""
         host = self._host
         parts: list[str] = []
         project_dir = host.project_dir
@@ -155,17 +254,28 @@ class ReplScreen(Screen[None]):
             parts.append("no project")
         else:
             parts.append(f"{project_dir.name}")
-            project = load_project(project_dir)
-            shown: dict[str, StageState] = {s: project.get_stage(s) for s in ALL_STAGES}
-            for key in sorted(project.stages):
-                if key.startswith("translation_"):
-                    shown[key.replace("translation_", "tl:")] = project.get_stage(key)
-            for label in sorted(shown):
-                if shown[label] is not StageState.PENDING or label == "transcription":
-                    parts.append(f"{label} {_glyph(shown[label])}")
+            try:
+                project = load_project(project_dir)
+                shown: dict[str, StageState] = {s: project.get_stage(s) for s in ALL_STAGES}
+                for key in sorted(project.stages):
+                    if key.startswith("translation_"):
+                        shown[key.replace("translation_", "tl:")] = project.get_stage(key)
+                for label in sorted(shown):
+                    if shown[label] is not StageState.PENDING or label == "transcription":
+                        parts.append(f"{label} {_glyph(shown[label])}")
+            except Exception:  # noqa: BLE001, S110
+                pass
         if model_bits:
             parts.append(" · ".join(model_bits))
         busy = f" · ⏳ {'/'.join(sorted(self._running_stages))}" if self._running_stages else ""
+
+        if self.query("#project-banner"):
+            self.query_one("#project-banner", Label).update(self._render_project_banner())
+        if self.query("#pipeline-stepper"):
+            self.query_one("#pipeline-stepper", Label).update(self._render_pipeline_stepper())
+        if self.query("#next-action-banner"):
+            self.query_one("#next-action-banner", Label).update(self._render_next_step())
+
         self._set_status(" · ".join(parts) + busy)
         self._refresh_footer()
         self._update_prompt_border()
@@ -323,7 +433,7 @@ class ReplScreen(Screen[None]):
         prompt.focus()
 
     def on_key(self, event: events.Key) -> None:
-        """Route arrows/Tab/Escape: autocomplete picker, else prompt history."""
+        """Route arrows/Tab/Escape: autocomplete picker, else prompt history / direct hotkeys."""
         if self._autocomplete_visible():
             if event.key in ("up", "down"):
                 event.stop()
@@ -338,8 +448,70 @@ class ReplScreen(Screen[None]):
                 event.stop()
                 self._hide_autocomplete()
             return
+
+        if self.locate_mode is None:
+            prompt = self.query_one("#prompt", Input)
+            if not prompt.value and event.character:
+                ch = event.character.lower()
+                actions = {
+                    "n": self.action_hotkey_new,
+                    "t": self.action_hotkey_transcribe,
+                    "r": self.action_hotkey_review,
+                    "l": self.action_hotkey_translate,
+                    "v": self.action_hotkey_view_tl,
+                    "e": self.action_hotkey_export,
+                    "p": self.action_hotkey_projects,
+                    "m": self.action_hotkey_models,
+                    "s": self.action_hotkey_settings,
+                    "?": self.action_hotkey_help,
+                }
+                if ch in actions:
+                    event.stop()
+                    event.prevent_default()
+                    actions[ch]()
+                    return
+
         if event.key in ("up", "down") and self._recall_history(up=event.key == "up"):
             event.stop()
+
+    def action_hotkey_new(self) -> None:
+        self._cmd_new("")
+
+    def action_hotkey_transcribe(self) -> None:
+        self._cmd_transcribe("")
+
+    def action_hotkey_review(self) -> None:
+        self._cmd_review("")
+
+    def action_hotkey_translate(self) -> None:
+        self._cmd_translate("")
+
+    def action_hotkey_view_tl(self) -> None:
+        project_dir = self._host.project_dir
+        if project_dir is not None:
+            try:
+                p = load_project(project_dir)
+                if p.project.target_languages:
+                    self._cmd_review(p.project.target_languages[0])
+                    return
+            except Exception:  # noqa: BLE001, S110
+                pass
+        self._cmd_review("")
+
+    def action_hotkey_export(self) -> None:
+        self._cmd_export("")
+
+    def action_hotkey_projects(self) -> None:
+        self._cmd_open("")
+
+    def action_hotkey_models(self) -> None:
+        self._cmd_models("")
+
+    def action_hotkey_settings(self) -> None:
+        self._cmd_settings("")
+
+    def action_hotkey_help(self) -> None:
+        self._cmd_help("")
 
     def _remember(self, raw: str) -> None:
         """Record a submitted prompt value; dedupe consecutive repeats, cap 100."""
