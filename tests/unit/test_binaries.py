@@ -106,7 +106,7 @@ def test_ensure_whisper_binary_picks_gpu_backend_url(tmp_path: Path, monkeypatch
 
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w") as z:
-        z.writestr("Release/whisper-cli.exe" if sys.platform == "win32" else "Release/whisper-cli", b"vulkan-whisper")
+        z.writestr("Release/whisper-cli.exe", b"vulkan-whisper")
     zip_bytes = buf.getvalue()
 
     downloaded_urls: list[str] = []
@@ -117,13 +117,38 @@ def test_ensure_whisper_binary_picks_gpu_backend_url(tmp_path: Path, monkeypatch
 
     client = httpx.Client(transport=httpx.MockTransport(handle))
 
-    with patch("shutil.which", return_value=None):
+    with patch("shutil.which", return_value=None), patch("sys.platform", "win32"):
         path = ensure_whisper_binary(dest_dir=bin_dir, http_client=client, backend="vulkan")
         assert path.exists()
         assert any("vulkan" in u for u in downloaded_urls)
 
 
-def test_ensure_binaries_progress_callback(tmp_path: Path, monkeypatch):
+def test_ensure_whisper_binary_download_tar_gz(tmp_path: Path, monkeypatch):
+    import io
+    import tarfile
+
+    import httpx
+
+    bin_dir = tmp_path / "download_whisper_tar_bin"
+    monkeypatch.setenv("SUBFORGE_BIN_DIR", str(bin_dir))
+
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode="w:gz") as tar:
+        data = b"fake-whisper-tar-binary"
+        ti = tarfile.TarInfo(name="whisper-bin-ubuntu-x64/whisper-cli")
+        ti.size = len(data)
+        tar.addfile(ti, io.BytesIO(data))
+    tar_bytes = buf.getvalue()
+
+    transport = httpx.MockTransport(lambda req: httpx.Response(200, content=tar_bytes))
+    client = httpx.Client(transport=transport)
+
+    with patch("shutil.which", return_value=None), patch("sys.platform", "linux"):
+        path = ensure_whisper_binary(dest_dir=bin_dir, http_client=client)
+        assert path.exists()
+        assert path.name == "whisper-cli"
+        assert path.read_bytes() == b"fake-whisper-tar-binary"
+
     import io
     import zipfile
 

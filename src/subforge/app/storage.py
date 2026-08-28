@@ -6,6 +6,7 @@ and subtitle project directories across Windows and POSIX (Linux/macOS) platform
 
 import os
 import shutil
+import sys
 from pathlib import Path
 
 
@@ -14,9 +15,11 @@ def get_subforge_dir() -> Path:
     env = os.environ.get("SUBFORGE_HOME")
     if env:
         return Path(env)
-    if os.name == "nt":
-        app_data = os.environ.get("LOCALAPPDATA", str(Path.home() / "AppData" / "Local"))
-        return Path(app_data) / "subforge"
+    if sys.platform == "win32":
+        app_data = os.environ.get("LOCALAPPDATA")
+        if app_data:
+            return Path(app_data) / "subforge"
+        return Path.home() / "AppData" / "Local" / "subforge"
     return Path.home() / ".local" / "share" / "subforge"
 
 
@@ -28,7 +31,7 @@ def get_config_path() -> Path:
     home_env = os.environ.get("SUBFORGE_HOME")
     if home_env:
         return Path(home_env) / "config.json"
-    if os.name == "nt":
+    if sys.platform == "win32":
         return get_subforge_dir() / "config.json"
     return Path.home() / ".config" / "subforge" / "config.json"
 

@@ -34,14 +34,15 @@ def test_storage_paths_windows_default(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("SUBFORGE_PROJECTS_DIR", raising=False)
     monkeypatch.delenv("SUBFORGE_BIN_DIR", raising=False)
     monkeypatch.delenv("SUBFORGE_MODELS_DIR", raising=False)
-    monkeypatch.setenv("LOCALAPPDATA", "C:\\Users\\test\\AppData\\Local")
+    fake_localappdata = "/tmp/fake_localappdata"
+    monkeypatch.setenv("LOCALAPPDATA", fake_localappdata)
 
-    with patch("os.name", "nt"):
-        assert get_subforge_dir() == Path("C:\\Users\\test\\AppData\\Local\\subforge")
-        assert get_config_path() == Path("C:\\Users\\test\\AppData\\Local\\subforge\\config.json")
-        assert get_projects_dir() == Path("C:\\Users\\test\\AppData\\Local\\subforge\\projects")
-        assert get_bin_dir() == Path("C:\\Users\\test\\AppData\\Local\\subforge\\bin")
-        assert get_models_dir() == Path("C:\\Users\\test\\AppData\\Local\\subforge\\models")
+    with patch("sys.platform", "win32"):
+        assert get_subforge_dir() == Path(fake_localappdata) / "subforge"
+        assert get_config_path() == Path(fake_localappdata) / "subforge" / "config.json"
+        assert get_projects_dir() == Path(fake_localappdata) / "subforge" / "projects"
+        assert get_bin_dir() == Path(fake_localappdata) / "subforge" / "bin"
+        assert get_models_dir() == Path(fake_localappdata) / "subforge" / "models"
 
 
 def test_storage_paths_posix_default(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -52,7 +53,7 @@ def test_storage_paths_posix_default(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("SUBFORGE_MODELS_DIR", raising=False)
     fake_home = Path("/home/testuser")
 
-    with patch("os.name", "posix"), patch("pathlib.Path.home", return_value=fake_home):
+    with patch("sys.platform", "linux"), patch("pathlib.Path.home", return_value=fake_home):
         assert get_subforge_dir() == fake_home / ".local" / "share" / "subforge"
         assert get_config_path() == fake_home / ".config" / "subforge" / "config.json"
         assert get_projects_dir() == fake_home / ".local" / "share" / "subforge" / "projects"
