@@ -50,7 +50,6 @@ class ReplScreen(Screen[None]):
         Binding("ctrl+e", "hotkey_export", "Export", show=False),
         Binding("ctrl+p", "hotkey_projects", "Projects", show=False),
         Binding("ctrl+m", "hotkey_models", "Models", show=False),
-        Binding("ctrl+s", "hotkey_settings", "Settings", show=False),
     ]
 
     AUTO_FOCUS = "#prompt"
@@ -91,12 +90,13 @@ class ReplScreen(Screen[None]):
 
     def compose(self) -> ComposeResult:
         with Vertical(id="studio-header"):
+            yield Static(self._render_logo(), id="logo-banner")
             yield Label("", id="project-banner")
             yield Label("", id="pipeline-stepper")
             yield Label("", id="next-action-banner")
             yield Label("", id="status-bar")
         yield Label(
-            "[b]N[/b] New  │  [b]T[/b] Transcribe  │  [b]R[/b] Review  │  [b]E[/b] Export  │  [b]P[/b] Projects  │  [b]M[/b] Models  │  [b]S[/b] Settings  │  [b]?[/b] Help",
+            "[b]N[/b] New  │  [b]T[/b] Transcribe  │  [b]R[/b] Review  │  [b]E[/b] Export  │  [b]P[/b] Projects  │  [b]M[/b] Models  │  [b]?[/b] Help",
             id="hotkey-bar",
         )
         with Vertical():
@@ -109,19 +109,33 @@ class ReplScreen(Screen[None]):
             "/new /open /projects /delete /models /language /transcribe /review /export /wizard /status ? quit",
             id="command-legend",
         )
-        yield Input(placeholder="Type a command or press hotkey (N, T, R, E, P, M, S)...", id="prompt")
+        yield Input(placeholder="Type a command or press hotkey (N, T, R, E, P, M)...", id="prompt")
         yield Label("", id="footer-bar")
 
-    def on_mount(self) -> None:
+    def _render_logo(self) -> str:
         from subforge import __version__
 
-        self.log_line(f"[b]subforge[/b] v{__version__}  —  local-first subtitles")
-        self.log_line("[dim]Type /new to start, ? for help, /quit to exit[/dim]")
+        return (
+            "  [bold cyan]▄████▄[/bold cyan]  [bold white]████████[/bold white]\n"
+            "  [bold cyan]██[/bold cyan]      [bold white]██[/bold white]\n"
+            f"  [bold cyan]▀████▄[/bold cyan]  [bold white]█████[/bold white]     [bold]SUBFORGE STUDIO[/bold] [dim]v{__version__}[/dim]  —  [dim]local-first subtitles[/dim]\n"
+            "      [bold cyan]██[/bold cyan]  [bold white]██[/bold white]\n"
+            "  [bold cyan]▀████▀[/bold cyan]  [bold white]██[/bold white]"
+        )
+
+    def on_mount(self) -> None:
+        self.log_line("[b]subforge[/b]  —  Quick Guide & Workflow:")
+        self.log_line("  • [b]N[/b] (or [b]/new <audio>[/b])  — Create project and import audio file")
+        self.log_line("  • [b]T[/b] (or [b]/transcribe[/b])   — Run local whisper.cpp speech-to-text")
+        self.log_line("  • [b]R[/b] (or [b]/review[/b])       — Edit captions & listen to audio preview")
+        self.log_line("  • [b]E[/b] (or [b]/export[/b])       — Export clean .srt and .ass subtitles")
+        self.log_line("  • [b]M[/b] (or [b]/models[/b])       — Manage, download & switch Whisper models")
+        self.log_line("  • [b]?[/b] (or [b]/help[/b])         — Show all available commands")
         self.log_line("")
         if self._host.project_dir is not None:
-            self.log_line(f"▸ opened '[b]{self._host.project_dir.name}[/b]'")
+            self.log_line(f"▸ Opened active project '[b]{self._host.project_dir.name}[/b]'")
         else:
-            self.log_line("[dim]No project open — start with /new <audio> or /open[/dim]")
+            self.log_line("[dim]▸ Ready. Start by pressing [b]N[/b] to create a project or [b]P[/b] to open one.[/dim]")
             self._hint_setup_if_needed()
         self.refresh_status()
         self._refresh_footer()
@@ -151,22 +165,25 @@ class ReplScreen(Screen[None]):
 
     def _render_project_banner(self) -> str:
         project_dir = self._host.project_dir
+        tc = self._host.app_config.transcription
+        model_str = f"asr:{tc.provider}:{tc.model}" if tc.model else "no model"
         if project_dir is None:
-            return "┌─ [b]SUBFORGE STUDIO[/b] · [dim]No project loaded (press [N] to create, [P] to open)[/dim]"
+            return f"┌─ [b]PROJECT:[/b] [dim](no project open)[/dim]  │  [b]MODEL:[/b] {model_str}  │  [b]LANG:[/b] {tc.language or 'auto'}"
         try:
             project = load_project(project_dir)
             p_meta = project.project
-            src = p_meta.source_language or "auto"
+            src = p_meta.source_language or tc.language or "auto"
             audio = find_audio_file(project_dir)
             audio_name = audio.name if audio else "no audio"
             seg_count = len(project.segments)
             return (
-                f"┌─ [b]PROJECT:[/b] {p_meta.name}  │  "
-                f"[b]LANG:[/b] {src}  │  "
-                f"[b]AUDIO:[/b] {audio_name} ({seg_count} segments)"
+                f"┌─ [b]PROJECT:[/b] {p_meta.name} ({seg_count} captions)  │  "
+                f"[b]MODEL:[/b] {model_str}  │  "
+                f"[b]AUDIO:[/b] {audio_name}  │  "
+                f"[b]LANG:[/b] {src}"
             )
         except Exception:  # noqa: BLE001
-            return f"┌─ [b]PROJECT:[/b] {project_dir.name}"
+            return f"┌─ [b]PROJECT:[/b] {project_dir.name}  │  [b]MODEL:[/b] {model_str}"
 
     def _render_pipeline_stepper(self) -> str:
         project_dir = self._host.project_dir
@@ -265,7 +282,7 @@ class ReplScreen(Screen[None]):
             prompt.add_class("completed")
 
     def reload_config(self) -> None:
-        """Reload AppConfig after settings/wizard changes."""
+        """Reload AppConfig after config/wizard changes."""
         from subforge.config.app_config import load_app_config
 
         self._host.app_config = load_app_config()
@@ -354,7 +371,6 @@ class ReplScreen(Screen[None]):
                     "e": self.action_hotkey_export,
                     "p": self.action_hotkey_projects,
                     "m": self.action_hotkey_models,
-                    "s": self.action_hotkey_settings,
                     "?": self.action_hotkey_help,
                 }
                 if ch in hotkey_actions:
@@ -441,7 +457,6 @@ class ReplScreen(Screen[None]):
                     "e": self.action_hotkey_export,
                     "p": self.action_hotkey_projects,
                     "m": self.action_hotkey_models,
-                    "s": self.action_hotkey_settings,
                     "?": self.action_hotkey_help,
                 }
                 if ch in actions:
@@ -471,9 +486,6 @@ class ReplScreen(Screen[None]):
 
     def action_hotkey_models(self) -> None:
         self._cmd_models("")
-
-    def action_hotkey_settings(self) -> None:
-        self._cmd_settings("")
 
     def action_hotkey_help(self) -> None:
         self._cmd_help("")
@@ -564,7 +576,7 @@ class ReplScreen(Screen[None]):
     def _hint_setup_if_needed(self) -> None:
         cfg = self._host.app_config
         if not transcription_configured(cfg):
-            self.log_line('[dim]tip: no transcribe provider yet — run /settings or /wizard[/dim]')
+            self.log_line('[dim]tip: no transcribe provider yet — run /models or /wizard[/dim]')
 
     def _finish_stage(self, stage: str) -> None:
         self._running_stages.discard(stage)
@@ -689,13 +701,38 @@ class ReplScreen(Screen[None]):
         seam = self.pipeline_factory is not None  # tests/custom wiring count as configured
         if not seam and not transcription_configured(self._host.app_config):
             self.log_line(
-                "[SETUP] No transcription provider yet — run /settings or /wizard first."
+                "[SETUP] No transcription provider yet — run /models or /wizard first."
             )
             return
+
+        force = arg.strip().lower() in ("force", "--force", "-f", "rerun", "--rerun")
+        project = load_project(project_dir)
+        if not force and project.get_stage("transcription") == StageState.COMPLETED:
+            from subforge.tui.screens.confirm_dialog import ConfirmDialogScreen
+
+            def _on_confirm(confirmed: bool | None) -> None:
+                if confirmed:
+                    self._start_transcribe(project_dir, audio, force=True)
+                else:
+                    self.log_line("[dim]transcription cancelled[/dim]")
+
+            n_segs = len(project.segments)
+            self._host.push_screen(
+                ConfirmDialogScreen(
+                    title="Rerun Transcription",
+                    message=f"Project '{project.project.name}' is already transcribed ({n_segs} captions). Rerun and overwrite captions?",
+                ),
+                _on_confirm,
+            )
+            return
+
+        self._start_transcribe(project_dir, audio, force=force)
+
+    def _start_transcribe(self, project_dir: Path, audio: Path, force: bool = False) -> None:
         pipeline = self._make_pipeline(project_dir)
 
         def work() -> str:
-            pipeline.run_transcription(audio.name)
+            pipeline.run_transcription(audio.name, force=force)
             n = len(pipeline.load().segments)
             return f"transcribed — {n} captions"
 
@@ -844,10 +881,6 @@ class ReplScreen(Screen[None]):
 
     def _cmd_lang(self, arg: str) -> None:
         self._cmd_language(arg)
-
-    def _cmd_settings(self, arg: str) -> None:
-        self.log_line("[dim]Settings is divided into: [b]/models[/b] (Whisper models) and [b]/language[/b] (source language).[/dim]")
-        self._cmd_models("")
 
     def _cmd_wizard(self, arg: str) -> None:
         from subforge.tui.screens.setup_wizard import FirstRunSetupScreen

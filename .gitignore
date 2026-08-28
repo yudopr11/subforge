@@ -43,6 +43,7 @@ build/
 dist/
 wheels/
 pip-wheel-metadata/
+*.spec
 
 # Virtual environments
 .venv/

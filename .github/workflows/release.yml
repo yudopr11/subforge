@@ -47,6 +47,18 @@ jobs:
         shell: bash
         run: |
           uv run pyinstaller --noconfirm --onefile --name "${{ matrix.bin_name }}" \
+            --exclude-module "mypy" \
+            --exclude-module "pytest" \
+            --exclude-module "_pytest" \
+            --exclude-module "unittest" \
+            --exclude-module "tkinter" \
+            --exclude-module "sqlite3" \
+            --exclude-module "setuptools" \
+            --exclude-module "distutils" \
+            --exclude-module "pkg_resources" \
+            --exclude-module "pip" \
+            --exclude-module "pydoc" \
+            --exclude-module "xmlrpc" \
             --collect-all "textual" \
             --collect-all "subforge" \
             src/subforge/cli/main.py

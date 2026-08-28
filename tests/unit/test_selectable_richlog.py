@@ -29,7 +29,8 @@ async def test_render_line_attaches_offset_meta():
     async with app.run_test() as pilot:
         await pilot.pause()
         log = app.repl.query_one("#transcript", SelectableRichLog)
-        log.scroll_home()
+        log.scroll_to(y=0, animate=False)
+        await pilot.pause()
         strip = log.render_line(1)  # second content line
         metas = [
             seg.style.meta.get("offset")
@@ -46,7 +47,8 @@ async def test_selection_highlight_is_rendered():
     async with app.run_test() as pilot:
         await pilot.pause()
         log = app.repl.query_one("#transcript", SelectableRichLog)
-        log.scroll_home()
+        log.scroll_to(y=0, animate=False)
+        await pilot.pause()
         selection_style = log.screen.get_component_rich_style("screen--selection")
         assert selection_style is not None and selection_style.bgcolor is not None
         sel_bg = selection_style.bgcolor

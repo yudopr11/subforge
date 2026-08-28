@@ -44,6 +44,12 @@ class SubForgeApp(App[None]):
         height: auto;
         padding: 0 1;
     }
+    #logo-banner {
+        color: $mono-text;
+        height: auto;
+        padding-top: 1;
+        padding-bottom: 1;
+    }
     #project-banner {
         color: $mono-text;
         height: 1;
@@ -355,29 +361,6 @@ class SubForgeApp(App[None]):
         border: solid $mono-text;
         color: $mono-text;
         text-style: bold;
-    }
-
-    /* ---- settings screen specifics ---- */
-    #settings-title {
-        width: 100%;
-        color: $mono-text;
-        text-style: bold;
-    }
-    #settings-actions {
-        height: auto;
-        align-horizontal: right;
-    }
-    #settings-actions Button {
-        width: auto;
-        margin-left: 1;
-        background: transparent;
-        border: solid $mono-border;
-        color: $mono-text;
-    }
-    #settings-actions Button:focus {
-        background: $mono-selected-bg;
-        border: solid $mono-text;
-        color: $mono-text;
     }
 
     /* ---- caption review specifics ---- */

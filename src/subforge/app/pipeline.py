@@ -57,11 +57,11 @@ class Pipeline:
 
     # ---- stages ----------------------------------------------------------
 
-    def run_transcription(self, audio_filename: str) -> None:
+    def run_transcription(self, audio_filename: str, force: bool = False) -> None:
         if self.transcription is None:
             raise StageError("[ERROR] No transcription provider configured.")
         project = self.project
-        if project.get_stage("transcription") is StageState.COMPLETED:
+        if not force and project.get_stage("transcription") is StageState.COMPLETED:
             return  # ARCH §23: completed stages are never rerun implicitly
         project.set_stage("transcription", StageState.RUNNING)
         self._save(project)

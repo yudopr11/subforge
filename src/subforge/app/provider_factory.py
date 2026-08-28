@@ -14,7 +14,7 @@ from subforge.providers.transcription.whisper_cpp import WhisperCppProvider
 def build_transcription_provider(cfg: AppConfig) -> WhisperCppProvider:
     tc = cfg.transcription
     if not tc.model:
-        raise ValueError("[ERROR] no local transcription model selected — pick one in Settings")
+        raise ValueError("[ERROR] no local transcription model selected — pick one in /models or /wizard")
     models_dir = Path(tc.models_dir) if tc.models_dir else None
     return WhisperCppProvider(
         model=tc.model,

@@ -59,6 +59,19 @@ def test_completed_transcription_not_rerun_by_retry(tmp_path):
     assert asr.calls == calls_before  # resumability: completed stages stay done (ARCH §23)
 
 
+def test_completed_transcription_reruns_when_forced(tmp_path):
+    d, _ = setup_project(tmp_path)
+    asr = FakeASR(TRANSCRIPT)
+    pipe = Pipeline(d, Settings(), transcription=asr)
+    pipe.run_transcription("final_audio.wav")
+    assert asr.calls == 1
+
+    # Rerun with force=True
+    pipe.run_transcription("final_audio.wav", force=True)
+    assert asr.calls == 2
+    assert pipe.load().get_stage("transcription") is StageState.COMPLETED
+
+
 def test_failed_transcription_marks_state_and_raises(tmp_path):
     class BoomASR:
         def transcribe(self, audio_path, language=None):

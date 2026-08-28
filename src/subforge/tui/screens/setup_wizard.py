@@ -21,18 +21,6 @@ from subforge.tui.screens.model_manager import ModelManagerScreen
 if TYPE_CHECKING:
     from subforge.tui.app import SubForgeApp
 
-Loader = Callable[[], list[str]]
-
-
-def _whisper_entries() -> list[str]:
-    manager = LocalModelManager()
-    models = manager.list_models()
-    entries = []
-    for m in models:
-        rec = " [RECOMMENDED]" if m.recommended else ""
-        entries.append(f"{m.id} · {m.profile} ({m.vram}, {m.size}){rec}")
-    return entries
-
 
 class FirstRunSetupScreen(ModalScreen[None]):
     BINDINGS: ClassVar[list[Binding | tuple[str, str] | tuple[str, str, str]]] = [
@@ -42,16 +30,13 @@ class FirstRunSetupScreen(ModalScreen[None]):
     def __init__(
         self,
         on_done: Callable[[], None] | None = None,
-        loader_factory: Callable[[str], Loader] | None = None,
         model_manager_factory: Callable[[], LocalModelManager] | None = None,
-        capability_client: object | None = None,
         initial_config: AppConfig | None = None,
     ) -> None:
         super().__init__()
         # Re-runs prefill with current values; first-run starts from defaults.
         self.cfg = initial_config.model_copy(deep=True) if initial_config else AppConfig()
         self.on_done = on_done
-        self._loader_factory = loader_factory
         self._mm_factory = model_manager_factory or LocalModelManager
 
     # ---- rendering -------------------------------------------------------
@@ -84,13 +69,6 @@ class FirstRunSetupScreen(ModalScreen[None]):
             self._host.screen_query_menu().log_line(f"▸ {message}")
         except LookupError:
             pass  # REPL not yet mounted (unit seam)
-
-    def _loader(self, kind: str) -> Loader:
-        if self._loader_factory is not None:  # test seam
-            return self._loader_factory(kind)
-        if kind == "whisper":
-            return _whisper_entries
-        raise ValueError(f"unknown loader kind: {kind}")
 
     # ---- step 1: transcription ---------------------------------------------
 

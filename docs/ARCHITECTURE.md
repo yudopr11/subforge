@@ -29,7 +29,7 @@ src/subforge/
   app/           services: project_store, pipeline, translation_service,
                  export, model_manager, provider_factory
   providers/     base protocols, registry, concrete providers per family
-  config/        settings (env), app_config (TUI-authored), providers (presets)
+  config/        settings (env), app_config (TUI-authored)
   tui/           Textual app + screens (presentation only)
   cli/           entrypoint
 tests/unit/  tests/integration/  tests/fixtures/
@@ -57,7 +57,7 @@ Screens are keyboard-first by contract (PRD §7):
   by a registry in `repl.py` (`SLASH_COMMANDS`, exposed through a `/`-triggered
   autocomplete picker with `↑`/`↓`/`Tab`/`Enter`) that routes to `app/*` services — the
   screen adds presentation only (rule 7). Review/edit screens are overlays pushed above
-  the REPL; `/settings` and `/wizard` are modal overlays that keep the live transcript
+  the REPL; `/wizard` is a modal overlay that keeps the live transcript
   visible underneath (the wizard mirrors each step into the transcript).
 - The transcript widget is `widgets.SelectableRichLog`: plain `RichLog` renders no
   `offset` style metadata, so the compositor can't compute content offsets and
@@ -65,14 +65,12 @@ Screens are keyboard-first by contract (PRD §7):
   at `render_line` time and extracts selections from its stored lines, making
   **drag-select + Ctrl+C copy** work (OSC 52 clipboard; Ctrl+C quits only when no
   selection is active).
-- `/settings` opens a **two-choice menu** (`settings.py::SettingsScreen`): pick
-  **Transcribe** (select GGML model with `[RECOMMENDED]` badge → source language) or
-  **Translation** (provider → model → reasoning → target language). Language choices use a
-  **searchable ISO 639-1 picker** (`language_picker.py`, catalog in `languages.py`) —
-  searchable with `↑`/`↓`/`Enter` like the slash picker; the ISO table is presentation data,
-  codes stay canonical. Each stage persists immediately (`save_app_config`) then returns to the
-  menu; `Esc` on a step returns to the menu, `Esc` on the menu closes settings.
-  Model-list loaders are injectable (`loader_factory`) so the flow is testable offline.
+- Configuration is divided into dedicated screens:
+  - `/models` opens **Model Manager** (`model_manager.py::ModelManagerScreen`): manage,
+    download, delete, and select local Whisper GGML models with hardware recommendations.
+  - `/language` opens a **searchable ISO 639-1 picker** (`language_picker.py`, catalog in `languages.py`):
+    select source language or auto-detect with `↑`/`↓`/`Enter`.
+  - `/wizard` opens the guided first-run setup wizard (`setup_wizard.py::FirstRunSetupScreen`).
 
 ## 4. Core runtime components
 
@@ -214,8 +212,9 @@ Exactly five states recorded in `project.json`: `PENDING`, `RUNNING`, `COMPLETED
 ## 23. Resumability rules
 
 Persist state around every transition. Retrying must never rerun completed upstream
-stages; `retry(stage)` re-runs only non-completed stages. Failed stages rerun cleanly
-because inputs (canonical segments) are immutable downstream of their owning stage.
+stages implicitly; `retry(stage)` re-runs only non-completed stages. Explicit reruns
+(e.g., `run_transcription(audio, force=True)`) overwrite existing captions upon user confirmation.
+Failed stages rerun cleanly because inputs (canonical segments) are immutable downstream of their owning stage.
 
 ## 24. Layered configuration
 
@@ -235,26 +234,19 @@ a real `.env`.
 `REGISTRY` singleton; factories registered at module bottom via
 `register_transcription/register_translation(name, factory)`.
 Resolution failures raise `ProviderNotFound`. Built-ins: transcription
-`local-whisper-cpp`, `local`; translation `openai-compatible`.
+`local-whisper-cpp`, `local`.
 
 ## 27. Native subprocess execution
 
 Audio transcription runs out-of-process via `whisper-cli`, ensuring core Python
 imports remain instant and memory is immediately reclaimed upon stage completion.
 
-## 28. Preset URLs
-
-Cloud preset URLs live ONLY in `src/subforge/config/providers.py`
-(`TRANSLATION_PRESETS`). User keys/models live ONLY in
-AppConfig. Never hardcode either elsewhere.
-
-## 29. Security & privacy
+## 28. Security & privacy
 
 Never commit: `.env` or any API key; user audio (`*.wav *.mp3 *.flac`); generated
 subtitles (`*.srt *.ass`); model weights/caches; user project data. `.gitignore`
-covers these. AppConfig holds plaintext keys by design — written atomically
-(`os.replace`) with mode `0600` to `~/.config/subforge/config.json` (env override
-`SUBFORGE_CONFIG`). Keys are never echoed in logs, errors, or tests.
+covers these. AppConfig is written atomically (`os.replace`) with mode `0600` on POSIX
+to `~/.config/subforge/config.json` (or OS app storage, env override `SUBFORGE_CONFIG`).
 
 ## 30. Hardware profiles (model recommendation)
 

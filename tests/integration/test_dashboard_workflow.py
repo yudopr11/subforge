@@ -64,16 +64,16 @@ async def test_dashboard_hotkey_actions_dispatch(tmp_path: Path, monkeypatch: py
         called: list[str] = []
         repl._cmd_open = lambda arg: called.append("open")
         repl._cmd_models = lambda arg: called.append("models")
-        repl._cmd_settings = lambda arg: called.append("settings")
+        repl._cmd_transcribe = lambda arg: called.append("transcribe")
         repl._cmd_new = lambda arg: called.append("new")
 
         # Test direct action methods
         repl.action_hotkey_projects()
         repl.action_hotkey_models()
-        repl.action_hotkey_settings()
+        repl.action_hotkey_transcribe()
         repl.action_hotkey_new()
 
-        assert called == ["open", "models", "settings", "new"]
+        assert called == ["open", "models", "transcribe", "new"]
 
         # Test keyboard pilot.press triggers for single-key and ctrl-key hotkeys
         called.clear()
@@ -87,9 +87,9 @@ async def test_dashboard_hotkey_actions_dispatch(tmp_path: Path, monkeypatch: py
         assert "models" in called
 
         called.clear()
-        await pilot.press("ctrl+s")
+        await pilot.press("ctrl+t")
         await pilot.pause()
-        assert "settings" in called
+        assert "transcribe" in called
 
 
 @pytest.mark.asyncio

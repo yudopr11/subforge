@@ -82,8 +82,8 @@ async def test_help_lists_all_commands(tmp_path):
     async for app, repl in open_repl(tmp_path):
         repl.run_command("/help")
         text = transcript_text(app)
-        for cmd in ("/new", "/open", "/transcribe", "/review",
-                    "/export", "/settings", "/wizard", "/status", "/quit"):
+        for cmd in ("/new", "/open", "/models", "/language", "/transcribe", "/review",
+                    "/export", "/wizard", "/status", "/quit"):
             assert cmd in text, cmd
 
 
@@ -130,6 +130,92 @@ async def test_new_transcribe_export_e2e(tmp_path, monkeypatch):
         exports = {p.name for p in (app.project_dir / "exports").iterdir()}
         assert exports == {"source.srt", "source.ass"}
         assert load_project(app.project_dir).get_stage("export") is StageState.COMPLETED
+
+
+async def test_transcribe_rerun_with_confirmation(tmp_path, monkeypatch):
+    from subforge.tui.screens.confirm_dialog import ConfirmDialogScreen
+
+    monkeypatch.setenv("SUBFORGE_PROJECTS_DIR", str(tmp_path / "projects"))
+    audio = tmp_path / "rerun_ep.wav"
+    audio.write_bytes(b"RIFF-fake")
+
+    app = SubForgeApp()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        repl = app.repl
+        repl.pipeline_factory = fake_pipeline_factory(tmp_path)
+
+        repl.run_command(f"/new {audio}")
+        await pilot.pause()
+
+        # Initial transcription
+        repl.run_command("/transcribe")
+        await pilot.pause()
+        assert "transcribed" in transcript_text(app)
+
+        # Triggering /transcribe again opens confirmation dialog
+        repl.run_command("/transcribe")
+        await pilot.pause()
+        assert isinstance(app.screen, ConfirmDialogScreen)
+
+        # Confirm rerun with 'y'
+        await pilot.press("y")
+        await pilot.pause()
+        assert not isinstance(app.screen, ConfirmDialogScreen)
+        assert load_project(app.project_dir).get_stage("transcription") is StageState.COMPLETED
+
+
+async def test_transcribe_rerun_cancelled(tmp_path, monkeypatch):
+    from subforge.tui.screens.confirm_dialog import ConfirmDialogScreen
+
+    monkeypatch.setenv("SUBFORGE_PROJECTS_DIR", str(tmp_path / "projects"))
+    audio = tmp_path / "cancel_ep.wav"
+    audio.write_bytes(b"RIFF-fake")
+
+    app = SubForgeApp()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        repl = app.repl
+        repl.pipeline_factory = fake_pipeline_factory(tmp_path)
+
+        repl.run_command(f"/new {audio}")
+        await pilot.pause()
+        repl.run_command("/transcribe")
+        await pilot.pause()
+
+        # Rerun and cancel with 'n'
+        repl.run_command("/transcribe")
+        await pilot.pause()
+        assert isinstance(app.screen, ConfirmDialogScreen)
+        await pilot.press("n")
+        await pilot.pause()
+        assert not isinstance(app.screen, ConfirmDialogScreen)
+        assert "transcription cancelled" in transcript_text(app)
+
+
+async def test_transcribe_force_flag_bypasses_dialog(tmp_path, monkeypatch):
+    from subforge.tui.screens.confirm_dialog import ConfirmDialogScreen
+
+    monkeypatch.setenv("SUBFORGE_PROJECTS_DIR", str(tmp_path / "projects"))
+    audio = tmp_path / "force_ep.wav"
+    audio.write_bytes(b"RIFF-fake")
+
+    app = SubForgeApp()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        repl = app.repl
+        repl.pipeline_factory = fake_pipeline_factory(tmp_path)
+
+        repl.run_command(f"/new {audio}")
+        await pilot.pause()
+        repl.run_command("/transcribe")
+        await pilot.pause()
+
+        # /transcribe force reruns directly without showing ConfirmDialogScreen
+        repl.run_command("/transcribe --force")
+        await pilot.pause()
+        assert not isinstance(app.screen, ConfirmDialogScreen)
+        assert load_project(app.project_dir).get_stage("transcription") is StageState.COMPLETED
 
 
 async def test_new_seeds_source_language_from_config(tmp_path, monkeypatch):
@@ -433,23 +519,6 @@ async def test_escape_hides_autocomplete_keeps_input(tmp_path):
         await pilot.pause()
         assert not _picker_visible(repl)
         assert prompt.value == "/tr"  # input untouched
-
-
-async def test_settings_notice_and_redirection(tmp_path, monkeypatch):
-    """Running /settings explains the division into /models and /language, and opens ModelManagerScreen."""
-    from subforge.tui.screens.model_manager import ModelManagerScreen
-
-    monkeypatch.setenv("SUBFORGE_CONFIG", str(tmp_path / "config.json"))
-    (tmp_path / "config.json").write_text("{}")
-    app = SubForgeApp(app_config=AppConfig())
-    async with app.run_test() as pilot:
-        await pilot.pause()
-        repl = app.repl
-
-        repl.run_command("/settings")
-        await pilot.pause()
-        assert isinstance(app.screen, ModelManagerScreen)
-        assert "Settings is divided into: /models" in transcript_text(app)
 
 
 async def test_locate_mode_disables_autocomplete(tmp_path):

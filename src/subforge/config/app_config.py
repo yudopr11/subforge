@@ -1,7 +1,7 @@
 """App-level configuration typed by the user in the TUI.
 
-Primary configuration path: NO .env step for creators. Keys are entered in the
-Setup/Settings screens and stored here. File holds PLAINTEXT SECRETS — atomic
+Primary configuration path: NO .env step for creators. Config is managed in the
+Setup Wizard, Model Manager, and Language pickers. File holds configuration — atomic
 writes and 0600 permissions are mandatory. Never commit, never log contents.
 """
 
@@ -17,7 +17,7 @@ from subforge.app.storage import get_config_path
 
 class TranscriptionConfig(BaseModel):
     provider: Literal["local"] = "local"
-    model: str = ""  # empty until selected in Setup Wizard or Settings
+    model: str = ""  # empty until selected in Setup Wizard or /models
     language: str = ""  # audio source language ("": auto-detect)
     binary_path: str = ""  # optional custom path to whisper-cli
     models_dir: str = ""  # optional custom models directory

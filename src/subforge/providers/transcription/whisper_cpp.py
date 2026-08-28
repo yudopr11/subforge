@@ -22,11 +22,6 @@ def default_bin_dir() -> Path:
     return get_bin_dir()
 
 
-def install_whisper_cli_binaries(target_dir: Path | None = None) -> Path:
-    """Download and install official pre-built whisper.cpp binaries."""
-    return ensure_whisper_binary(dest_dir=target_dir)
-
-
 def find_whisper_cli(custom_path: str = "", auto_install: bool = True) -> str:
     if custom_path and (Path(custom_path).exists() or shutil.which(custom_path)):
         return custom_path
@@ -100,7 +95,7 @@ class WhisperCppProvider:
         if not self.model_manager.is_installed(self.model_name):
             raise RuntimeError(
                 f"Model file not found for '{self.model_name}'. "
-                "Download it first in Settings or the Setup Wizard."
+                "Download it first via /models or the Setup Wizard."
             )
 
         model_file = self.model_manager.get_model_path(self.model_name)
@@ -138,7 +133,7 @@ class WhisperCppProvider:
             except FileNotFoundError as exc:
                 raise RuntimeError(
                     f"whisper-cli executable not found at '{cli_bin}'. "
-                    "Install whisper.cpp or set the binary path in Settings."
+                    "Install whisper.cpp or set the binary path in config."
                 ) from exc
 
             json_file = tmp_dir / f"{out_prefix.name}.json"

@@ -73,9 +73,9 @@ footer status line. There is no list menu — commands do the work.
    ▸ translating to 'en'…
    ✓ translated — 24 segments
 
- > /translate ja
+ > /export
  ────────────────────────────────────────────────────────────────────────────
- /new /open /transcribe /review /translate /export /settings ?  q quit
+ /new /open /projects /delete /models /language /transcribe /review /export /wizard /status ? quit
 ```
 
 ### Commands
@@ -89,41 +89,27 @@ footer status line. There is no list menu — commands do the work.
 | `/open [name|n]` | bare `/open` opens a **searchable picker** of recent projects — type
   to filter, `↑`/`↓` to move, `Enter` to open (plus a *create new* row); `/open <name|n>`
   still opens directly by name or list number |
-| `/transcribe` | run the transcription stage (busy-guarded, retryable) |
-| `/review [lang]` | bare `/review` opens a **searchable picker** of what's available to
-  review — captions, plus one entry per translated language (type to filter,
-  `↑`/`↓`, `Enter`); `/review <lang>` goes straight to translation review for that
-  language. Both reviews are explicit-save with undo/redo (§9, §13) |
-| `/translate [lang]` | translate into a language code; defaults to remembered target |
-| `/export [formats]` | export SRT/ASS for source + completed translations |
-| `/settings` | two-stage menu — **Transcribe** or **Translation**; after picking
-  local or cloud, a **step menu** lists the remaining steps (see below); each step
-  saves on completion and returns to the step menu |
+| `/projects` | open the interactive project manager |
+| `/delete [name]` | delete a project and associated files |
+| `/models` | open the **Model Manager** to inspect, download, delete, and select local Whisper GGML models |
+| `/language [lang]` | set default audio source language (or auto-detect) via interactive ISO picker |
+| `/transcribe [force]` | run or rerun transcription; if already completed, opens a confirmation dialog before overwriting captions (or accepts `force` / `--force` to bypass confirmation) |
+| `/review` | open caption review table: edit text, audio playback preview, undo/redo (§9) |
+| `/export [formats]` | export SRT/ASS for source captions |
 | `/wizard` | re-run the setup wizard, prefilled with current values |
 | `/status` | print pipeline stage states |
 | `/help`, `?` | command list |
 | `/quit`, Ctrl+C | exit |
 
 Setup happens inside the TUI: on **first launch** (no config file yet) the wizard
-opens automatically; after that, **Settings** (`/settings`) opens a two-choice menu — pick
-**Transcribe** or **Translation**, then **Local or Cloud**, then a **step menu** of
-what's left to configure; or `/wizard` re-runs full wizard-style setup. Providers
-rebuild without restarting the project:
+opens automatically; after that, **Model Manager** (`/models`) and **Language Picker** (`/language`)
+provide dedicated configuration screens, or `/wizard` re-runs full wizard-style setup.
 
-- **Transcribe — Local (whisper.cpp)**: `[Select model (with [RECOMMENDED] badge), Source language]`
-- **Translate — Local**: `[Select model (server URL + model), Default target language]`
-- **Translate — Cloud**: `[Connect (provider + API key), Select model + reasoning,
-  Default target language]`
+- **Model Management (`/models`)**: `[Select / download GGML model with [RECOMMENDED] badge]`
+- **Source Language (`/language`)**: `[Select audio source language or auto-detect]`
 
-Steps are jumped to directly from the step menu; each completed step **persists
-immediately** and returns to the step menu, so Esc at any depth never loses finished
-work. The **Connect** step always asks for the API key — prefilled and preselected
-with the stored key — so reconnecting replaces it instead of skipping it. `/settings`
-reads `config.json` fresh from disk, so manual edits to the file are honored, never
-overwritten by stale in-memory values. Languages are chosen from a **searchable ISO
-639-1 picker**: type to filter by code or English name, `↑`/`↓` to move, `Enter` to
-select (§16). An empty language selection maps to application defaults — source
-auto-detect, target falls back to the remembered default.
+Languages are chosen from a **searchable ISO 639-1 picker**: type to filter by code or English name,
+`↑`/`↓` to move, `Enter` to select (§16). An empty language selection maps to application defaults (auto-detect).
 
 ### Interaction model — keyboard only
 
@@ -139,21 +125,17 @@ may require the mouse.**
 - Home prompt accepts slash commands (`/transcribe`) and bare aliases (`transcribe`).
 - **Slash autocomplete:** typing `/` in the prompt opens a filtered command picker;
   `↑`/`↓` highlight, `Tab` or `Enter` fills the prompt with the chosen command (then
-  `Enter` runs it), `Esc` dismisses. `q` and `quit` both exit.
+  `Enter` runs it), `Esc` dismisses. `quit` exits.
 - **Command history:** `↑`/`↓` on the prompt recalls previously submitted commands
   (newest first, drafted text preserved and restored when you pass the newest entry;
   consecutive repeats are deduped, max 100 entries). While the slash picker is open,
   arrows steer the picker instead; `Enter` on a recalled command re-submits it.
 - Review/edit/model screens are full-keyboard overlays launched by commands;
   each renders its own key legend on-screen (`p` play, `x` stop, `i` install, …).
-- `/settings` and `/wizard` are **modal overlays** over the live REPL — the transcript
-  stays visible behind them, and the wizard mirrors its current step into the transcript
-  as it runs (Pi-style), so setup reads like a conversation. `/settings` opens a
-  **two-choice menu** (Transcribe / Translation); after the local/cloud choice a
-  **step menu** of the remaining steps (`[model, language]` local, `[connect, model,
-  language]` cloud — see §7 table); `Esc` on a step returns to the step menu,
-  `Esc` on the step menu returns to the two-choice menu, `Esc` there closes settings.
-- **Searchable choices:** every picker (provider, model, reasoning, language) is a
+- `/wizard` is a **modal overlay** over the live REPL — the transcript
+  stays visible behind it, and the wizard mirrors its current step into the transcript
+  as it runs (Pi-style), so setup reads like a conversation.
+- **Searchable choices:** every picker (model, language) is a
   keyboard-driven list — type to filter, `↑`/`↓` move the highlight, `Tab`/`Enter` select.
 - Forms: `Tab` / arrows move focus; `Enter` submits the focused field.
 - Mouse support is incidental convenience, never a requirement.
@@ -165,7 +147,7 @@ discoverable without documentation.
 ## 8. Hardware profiles & local model management
 
 Whisper GGML models are offered as named profiles with memory guidance and hardware-aware
-recommendations. During setup and settings, SubForge detects available RAM and CPU cores to
+recommendations. During setup and model selection, SubForge detects available RAM and CPU cores to
 dynamically tag the optimal model with a `[RECOMMENDED]` badge. Models download on demand
 directly from the official GGML repositories into local app storage:
 

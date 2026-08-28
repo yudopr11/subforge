@@ -79,8 +79,9 @@ Then work with simple slash commands or keyboard shortcuts:
 - `/review` (or press **`R`**) — Open caption review, edit text, and preview audio.
 - `/export` (or press **`E`**) — Export `.srt` and `.ass` to current working directory.
 - `/models` (or press **`M`**) — Install & manage local Whisper GGML models.
-- `/language` — Set audio source language (or auto-detect).
-- `/settings` (or press **`S`**) — Configuration.
+- `/language` — Set default audio source language (or auto-detect).
+- `/wizard` — Re-run the guided first-run setup wizard.
+- `/status` — View pipeline stage states.
 - `?` or `/help` — View all commands.
 
 ---

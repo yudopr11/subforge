@@ -16,7 +16,7 @@ SubForge is a **local-first subtitle generation and translation tool** for conte
 
 These come from ARCHITECTURE.md §37. Violating any of them is a bug even if tests pass:
 
-1. **Provider independence.** The application core depends only on the protocols in `src/subforge/providers/base.py`. Never import a concrete provider (`whisperx`, `openai_compatible`, …) outside its own module. New providers are registered in `src/subforge/providers/registry.py`.
+1. **Provider independence.** The application core depends only on the protocols in `src/subforge/providers/base.py`. Never import a concrete provider (`whisper_cpp`, …) outside its own module. New providers are registered in `src/subforge/providers/registry.py`.
 2. **Local first, zero-bloat.** Transcription uses native standalone `whisper.cpp` executables with GGML models without heavy PyTorch, TorchAudio, or CUDA packages. Dependencies stay lightweight (<50 MB).
 3. **AI does not own metadata.** LLMs generate text only. Segment IDs, timestamps, project state, file paths are application-owned and validated on merge. Translation output missing/duplicating IDs or empty text must fail that batch — never silently corrupt the project.
 4. **Human review.** All AI output is editable; review screens are part of the core workflow, not an afterthought.
@@ -89,25 +89,18 @@ Never commit:
 
 User-facing failures follow PRD §21: explicit, prefixed messages (e.g., `[ERROR] LM Studio is not running.`) raised as `StageError` from pipeline stages, so the TUI can display them and the user can retry just that stage. Fail loudly at validation boundaries; never swallow exceptions in providers.
 
-## Cloud Providers & Model Discovery
+## Providers & Configuration
 
-Preset URLs live ONLY in `src/subforge/config/providers.py`; user keys/models live ONLY in AppConfig:
+User configurations live in AppConfig (`~/.config/subforge/config.json` on Linux/macOS or `%LOCALAPPDATA%/subforge/config.json` on Windows):
 
-- Transcription: `local-whisper-cpp` / `local` (default, always local via whisper.cpp CLI)
-- Translation: local OpenAI-compatible URL (LM Studio/Ollama) · `openai` → `https://api.openai.com/v1` · `opencode-zen` → `https://opencode.ai/zen/v1` · `opencode-go` → `https://opencode.ai/zen/go/v1`
+- Transcription: `local-whisper-cpp` / `local` (default, always local via standalone whisper.cpp CLI)
 
-Model IDs are discovered live via `GET {base_url}/models` — never hardcode model lists. **Reasoning parameters are metadata-driven**: allowed effort values come from the models.dev catalog (`providers/capabilities.py`) and vary per model (`glm-5.2`=[high,max], `kimi-k3`=[max], some use toggles, non-reasoning models have none). Pass them through verbatim; validate stored choices against the current model's spec and reset stale ones.
+Model recommendations are dynamically hardware-aware (inspecting available RAM and CPU cores via `DeviceDetector`). Models are downloaded on demand from official GGML repositories into local app storage.
 
 ## When Adding a Provider
 
-1. Implement the protocol from `providers/base.py` (`TranscriptionProvider`, `DiarizationProvider`, or `TranslationProvider`).
-2. Normalize output to the internal types (`Transcript`, `TranslationOutput`) inside your module.
+1. Implement the protocol from `providers/base.py` (`TranscriptionProvider`).
+2. Normalize output to the internal types (`Transcript`) inside your module.
 3. Register with `REGISTRY.register_*("<name>", Factory)` at module bottom.
 4. Unit-test with mocks (no real network/models).
 5. Core pipeline code stays untouched — if you find yourself editing `pipeline.py` to add a provider, stop and re-read rule 1.
-
-## When Touching Translation
-
-- Batch size default is 5 (contextual batches, PRD §11).
-- Validation rules (ARCH §16): valid JSON, one output per input ID, no unknown IDs, no duplicates, non-empty text. Enforced in `app/translation_service.py::_validate_batch` — extend there, not in providers.
-- The system prompt lives in the OpenAI-compatible provider; keep it language-agnostic and JSON-only.
