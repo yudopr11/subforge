@@ -27,15 +27,27 @@ def _wizard(app: SubForgeApp) -> FirstRunSetupScreen:
 
 def _pick(screen: object, prompt: str) -> None:
     """Drive an OptionList-based modal through its public choose/submit seam."""
+    from textual.coordinate import Coordinate
+    from textual.widgets import DataTable, Input
+
     from subforge.tui.screens.language_picker import LanguagePickerScreen
+    from subforge.tui.screens.model_manager import ModelManagerScreen
     from subforge.tui.screens.settings import ReasoningPickerScreen
 
     if isinstance(screen, ChoiceScreen):
         screen.choose(prompt)
     elif isinstance(screen, (ReasoningPickerScreen, ModelPickerScreen)):
         screen.on_option_list_option_selected(type("Evt", (), {"option": type("O", (), {"prompt": prompt})()})())
+    elif isinstance(screen, ModelManagerScreen):
+        table = screen.query_one(DataTable)
+        target_id = prompt.split(" · ")[0].strip()
+        for idx, row in enumerate(screen._rows):
+            if row.id == target_id:
+                table.cursor_coordinate = Coordinate(idx, 0)
+                break
+        screen.select_or_install()
     elif isinstance(screen, (ApiKeyInputScreen, UrlInputScreen, LanguagePickerScreen)) or type(screen).__name__ == 'TextInputScreen':
-        field = screen.query_one("Input")
+        field = screen.query_one(Input)
         field.value = prompt
         screen.on_input_submitted(type("Evt", (), {"input": field})())
     else:  # pragma: no cover - guards future modal additions
@@ -45,8 +57,18 @@ def _pick(screen: object, prompt: str) -> None:
 @pytest.fixture()
 def first_run_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """Remove the conftest-created config so the app is genuinely first-run."""
-    config_path = Path(monkeypatch.setenv("SUBFORGE_CONFIG", str(tmp_path / "fresh.json")) or tmp_path / "fresh.json")
+    from subforge.app.model_manager import GGML_WHISPER_MODELS
+
+    monkeypatch.setenv("SUBFORGE_HOME", str(tmp_path))
+    config_path = tmp_path / "fresh.json"
+    monkeypatch.setenv("SUBFORGE_CONFIG", str(config_path))
     config_path.unlink(missing_ok=True)
+
+    models_dir = tmp_path / "models"
+    models_dir.mkdir(parents=True, exist_ok=True)
+    for model_meta in GGML_WHISPER_MODELS.values():
+        (models_dir / model_meta["filename"]).write_bytes(b"dummy-model-data")
+
     return config_path
 
 
@@ -71,8 +93,8 @@ async def test_first_run_launches_wizard_over_menu(first_run_env):
     async with app.run_test() as pilot:
         await pilot.pause()
         assert isinstance(_wizard(app), FirstRunSetupScreen)
-        # the first step modal is on top (ModelPickerScreen for local whisper); menu is underneath
-        assert isinstance(app.screen, ModelPickerScreen)
+        # the first step modal is on top (ModelManagerScreen for local whisper); menu is underneath
+        assert isinstance(app.screen, ModelManagerScreen)
         assert any(isinstance(s, ReplScreen) for s in app.screen_stack)
 
 
@@ -84,19 +106,15 @@ async def test_happy_path_local_transcription_local_translation(first_run_env):
         wizard = _wizard(app)
         wizard.on_done = lambda: (saved_flags.append(True), app._setup_finished())
 
-        # -- step 1: transcription = local whisper model picker
-        assert isinstance(app.screen, ModelPickerScreen)
-        _pick(app.screen, "small · Balanced (~2 GB RAM, ~466 MB)")
+        # -- step 1: transcription = local whisper model manager
+        assert isinstance(app.screen, ModelManagerScreen)
+        _pick(app.screen, "small")
         await pilot.pause()
 
         from subforge.tui.screens.language_picker import LanguagePickerScreen
 
         assert isinstance(app.screen, LanguagePickerScreen)  # source language prompt
         _pick(app.screen, "id")
-        await pilot.pause()
-
-        assert isinstance(app.screen, ChoiceScreen)  # install offer
-        _pick(app.screen, "Later (I'll do it in Settings)")
         await pilot.pause()
 
         # -- step 2: translation = local server (offline loader injection)
@@ -126,40 +144,8 @@ async def test_happy_path_local_transcription_local_translation(first_run_env):
         assert app.needs_setup is False
 
 
-async def test_wizard_install_now_opens_model_manager(first_run_env):
-    """Picking 'Install now' opens ModelManagerScreen and returns to Translation on dismiss."""
-    app = SubForgeApp()
-    async with app.run_test() as pilot:
-        await pilot.pause()
-        wizard = _wizard(app)
-        wizard._loader_factory = fake_loaders({"whisper": ["small · Balanced"]})
-
-        # Step 1: Model -> Language -> Install offer
-        assert isinstance(app.screen, ModelPickerScreen)
-        _pick(app.screen, "small · Balanced")
-        await pilot.pause()
-
-        from subforge.tui.screens.language_picker import LanguagePickerScreen
-
-        assert isinstance(app.screen, LanguagePickerScreen)
-        _pick(app.screen, "en")
-        await pilot.pause()
-
-        assert isinstance(app.screen, ChoiceScreen)
-        _pick(app.screen, "Install now")
-        await pilot.pause()
-
-        assert isinstance(app.screen, ModelManagerScreen)
-        await pilot.press("escape")  # Close model manager
-        await pilot.pause()
-
-        # Transitions to Step 2: Translation choice
-        assert isinstance(app.screen, ChoiceScreen)
-        assert any("Local server" in str(opt.prompt) for opt in app.screen.query_one("OptionList").options)
-
-
 async def test_happy_path_cloud_translation(first_run_env):
-    loaders = fake_loaders({"whisper": ["large-v3-turbo"], "cloud": ["glm-5.2"]})
+    loaders = fake_loaders({"cloud": ["glm-5.2"]})
     app = SubForgeApp()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -176,8 +162,8 @@ async def test_happy_path_cloud_translation(first_run_env):
 
         wizard._cap_client = FakeCaps()
 
-        # Step 1: Transcription model picker
-        assert isinstance(app.screen, ModelPickerScreen)
+        # Step 1: Transcription model manager
+        assert isinstance(app.screen, ModelManagerScreen)
         _pick(app.screen, "large-v3-turbo")
         await pilot.pause()
 
@@ -186,11 +172,9 @@ async def test_happy_path_cloud_translation(first_run_env):
         assert isinstance(app.screen, LanguagePickerScreen)
         _pick(app.screen, "ja")  # source language
         await pilot.pause()
-        assert isinstance(app.screen, ChoiceScreen)
-        _pick(app.screen, "Later (I'll do it in Settings)")
-        await pilot.pause()
 
         # Step 2: Translation
+        assert isinstance(app.screen, ChoiceScreen)
         _pick(app.screen, "Cloud provider")
         await pilot.pause()
         _pick(app.screen, "OpenCode Zen (opencode-zen)")
@@ -269,16 +253,15 @@ async def test_after_setup_menu_status_refreshes(first_run_env):
         wizard._loader_factory = fake_loaders({"local": ["m1"]})
 
         # drive the real flow end-to-end so every step modal dismisses itself
-        assert isinstance(app.screen, ModelPickerScreen)
-        _pick(app.screen, "small · Balanced (~2 GB RAM, ~466 MB)")
+        assert isinstance(app.screen, ModelManagerScreen)
+        _pick(app.screen, "small")
         await pilot.pause()
         from subforge.tui.screens.language_picker import LanguagePickerScreen
 
         assert isinstance(app.screen, LanguagePickerScreen)
         _pick(app.screen, "")  # auto-detect
         await pilot.pause()
-        _pick(app.screen, "Later (I'll do it in Settings)")
-        await pilot.pause()
+        assert isinstance(app.screen, ChoiceScreen)
         _pick(app.screen, "Local server (LM Studio / Ollama)")
         await pilot.pause()
         _pick(app.screen, "http://localhost:1234/v1")

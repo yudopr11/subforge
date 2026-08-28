@@ -53,14 +53,14 @@ def test_download_url():
     assert url == "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin"
 
 
-def test_install_custom_downloader():
+def test_install_custom_downloader(tmp_path: Path):
     calls = []
 
     def downloader(model_id):
         calls.append(model_id)
         return f"/cache/{model_id}"
 
-    mgr = LocalModelManager(downloader=downloader)
+    mgr = LocalModelManager(models_dir=tmp_path, downloader=downloader)
     assert mgr.install("small") == "/cache/small"
     assert calls == ["small"]
 
@@ -113,4 +113,24 @@ def test_delete_model_removes_file(tmp_path: Path):
 def test_delete_nonexistent_model_returns_false(tmp_path: Path):
     mgr = LocalModelManager(models_dir=tmp_path)
     assert mgr.delete_model("tiny") is False
+
+
+def test_install_already_installed_skips_download(tmp_path: Path):
+    mgr = LocalModelManager(models_dir=tmp_path)
+    model_file = tmp_path / "ggml-small.bin"
+    model_file.write_bytes(b"existing weights")
+
+    downloader_called = False
+
+    def fake_downloader(model_id: str):
+        nonlocal downloader_called
+        downloader_called = True
+        return model_file
+
+    mgr._downloader = fake_downloader
+    res_path = mgr.install("small")
+
+    assert res_path == model_file
+    assert downloader_called is False
+
 

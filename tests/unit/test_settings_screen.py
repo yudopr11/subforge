@@ -178,7 +178,11 @@ def fake_loaders(models: dict[str, list[str]]) -> object:
 
 
 def _pick(screen: object, prompt: str) -> None:
+    from textual.coordinate import Coordinate
+    from textual.widgets import DataTable
+
     from subforge.tui.screens.language_picker import LanguagePickerScreen
+    from subforge.tui.screens.model_manager import ModelManagerScreen
     from subforge.tui.screens.model_picker import ModelPickerScreen
     from subforge.tui.screens.project import ChoiceScreen
     from subforge.tui.screens.settings import (
@@ -193,6 +197,14 @@ def _pick(screen: object, prompt: str) -> None:
         screen.on_option_list_option_selected(
             type("Evt", (), {"option": type("O", (), {"prompt": prompt})()})()
         )
+    elif isinstance(screen, ModelManagerScreen):
+        table = screen.query_one(DataTable)
+        target_id = prompt.split(" · ")[0].strip()
+        for idx, row in enumerate(screen._rows):
+            if row.id == target_id:
+                table.cursor_coordinate = Coordinate(idx, 0)
+                break
+        screen.select_or_install()
     elif isinstance(screen, (ApiKeyInputScreen, UrlInputScreen, LanguagePickerScreen)):
         field = screen.query_one("Input")
         field.value = prompt
@@ -209,6 +221,14 @@ async def test_settings_menu_drives_each_stage_then_saves(tmp_path, monkeypatch)
     from subforge.tui.screens.settings import SettingsScreen
 
     monkeypatch.setenv("SUBFORGE_CONFIG", str(tmp_path / "config.json"))
+    monkeypatch.setenv("SUBFORGE_HOME", str(tmp_path))
+    from subforge.app.model_manager import GGML_WHISPER_MODELS
+
+    models_dir = tmp_path / "models"
+    models_dir.mkdir(parents=True, exist_ok=True)
+    for model_meta in GGML_WHISPER_MODELS.values():
+        (models_dir / model_meta["filename"]).write_bytes(b"dummy")
+
     loaders = fake_loaders({"whisper": ["small · Lightweight"], "local": ["qwen3-14b"]})
     saved: list[bool] = []
     app = SubForgeApp(app_config=AppConfig())

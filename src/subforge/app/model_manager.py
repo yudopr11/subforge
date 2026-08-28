@@ -142,9 +142,12 @@ class LocalModelManager:
         self,
         model_id: str,
         progress_callback: Callable[[int, int], None] | None = None,
+        force: bool = False,
     ) -> Any:
         if model_id not in GGML_WHISPER_MODELS:
             raise ValueError(f"[ERROR] unknown local model: {model_id}")
+        if not force and self.is_installed(model_id):
+            return self.get_model_path(model_id)
         if self._downloader is not None:
             return self._downloader(model_id)
 

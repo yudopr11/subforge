@@ -127,8 +127,9 @@ class FirstRunSetupScreen(ModalScreen[None]):
 
     def begin_transcription_choice(self) -> None:
         self._set_status("Step 1/2 · Transcription — choose Whisper model (always local)")
+        manager = self._mm_factory()
         self._push(
-            ModelPickerScreen("Choose Whisper model (always local)", self._loader("whisper")),
+            ModelManagerScreen(manager=manager, current_model=self.cfg.transcription.model),
             lambda model: self.apply_tc_model(str(model)) if model else None,
         )
 
@@ -149,20 +150,7 @@ class FirstRunSetupScreen(ModalScreen[None]):
 
     def _source_language_chosen(self, language: str) -> None:
         self.cfg.transcription.language = language.strip().lower()
-        self._offer_local_install()
-
-    def _offer_local_install(self) -> None:
-        self._push(
-            ChoiceScreen("Install model weights now?", ["Install now", "Later (I'll do it in Settings)"]),
-            lambda choice: self._after_install_choice(str(choice) if choice else ""),
-        )
-
-    def _after_install_choice(self, choice: str) -> None:
-        if choice.startswith("Install"):
-            manager = self._mm_factory()
-            self._push(ModelManagerScreen(manager=manager), lambda _: self.begin_translation_choice())
-        else:
-            self.begin_translation_choice()
+        self.begin_translation_choice()
 
     # ---- step 2: translation --------------------------------------------------
 

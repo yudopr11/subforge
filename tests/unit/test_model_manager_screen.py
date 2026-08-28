@@ -76,8 +76,8 @@ async def test_install_selected_via_row_selection():
         await app.push_screen(screen)
         await pilot.pause()
 
-        # Pressing Enter triggers install_selected on the cursor row
-        await pilot.press("enter")
+        # Pressing 'i' triggers install on the cursor row without dismissing
+        await pilot.press("i")
         await pilot.pause()
 
         assert len(downloads) == 1
@@ -132,4 +132,59 @@ async def test_delete_selected_via_dialog():
 
         assert "tiny" in deletions
         assert "tiny" not in installed
+
+
+async def test_enter_on_installed_model_dismisses_with_model_id():
+    selected_result: list[str | None] = []
+    app = SubForgeApp()
+    async with app.run_test() as pilot:
+        # 'tiny' is at index 0 and installed
+        manager = make_manager({"tiny"})
+        screen = ModelManagerScreen(manager=manager)
+        await app.push_screen(screen, callback=lambda res: selected_result.append(res))
+        await pilot.pause()
+
+        # Press Enter on 'tiny'
+        await pilot.press("enter")
+        await pilot.pause()
+
+        assert selected_result == ["tiny"]
+
+
+async def test_enter_on_uninstalled_model_installs_and_dismisses():
+    selected_result: list[str | None] = []
+    downloads: list[str] = []
+    app = SubForgeApp()
+    async with app.run_test() as pilot:
+        manager = make_manager(set(), downloads=downloads)
+        screen = ModelManagerScreen(manager=manager)
+        await app.push_screen(screen, callback=lambda res: selected_result.append(res))
+        await pilot.pause()
+
+        # Press Enter on index 0 ('tiny')
+        await pilot.press("enter")
+        await pilot.pause()
+
+        assert "tiny" in downloads
+        assert selected_result == ["tiny"]
+
+
+async def test_press_i_installs_without_dismissing():
+    selected_result: list[str | None] = []
+    downloads: list[str] = []
+    app = SubForgeApp()
+    async with app.run_test() as pilot:
+        manager = make_manager(set(), downloads=downloads)
+        screen = ModelManagerScreen(manager=manager)
+        await app.push_screen(screen, callback=lambda res: selected_result.append(res))
+        await pilot.pause()
+
+        # Press 'i' on index 0 ('tiny')
+        await pilot.press("i")
+        await pilot.pause()
+
+        assert "tiny" in downloads
+        assert selected_result == []  # Not dismissed
+        assert isinstance(app.screen, ModelManagerScreen)
+
 

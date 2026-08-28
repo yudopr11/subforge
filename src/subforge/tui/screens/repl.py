@@ -845,9 +845,20 @@ class ReplScreen(Screen[None]):
         self._cmd_open(arg)
 
     def _cmd_models(self, arg: str) -> None:
+        from subforge.config.app_config import save_app_config
         from subforge.tui.screens.model_manager import ModelManagerScreen
 
-        self._host.push_screen(ModelManagerScreen())
+        def _on_model_selected(model_id: str | None) -> None:
+            if model_id:
+                self._host.app_config.transcription.model = model_id
+                save_app_config(self._host.app_config)
+                self.log_line(f"✓ Selected transcription model: [b]{model_id}[/b]")
+                self.refresh_status()
+
+        self._host.push_screen(
+            ModelManagerScreen(current_model=self._host.app_config.transcription.model),
+            _on_model_selected,
+        )
 
     def _cmd_delete(self, arg: str) -> None:
         projects = discover_projects()

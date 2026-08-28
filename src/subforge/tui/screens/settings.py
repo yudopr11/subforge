@@ -295,8 +295,12 @@ class SettingsScreen(ModalScreen[None]):
             self.ask_tc_language()
 
     def _pick_transcription_model(self) -> None:
+        from subforge.app.model_manager import LocalModelManager
+        from subforge.tui.screens.model_manager import ModelManagerScreen
+
+        manager = LocalModelManager()
         self._push(
-            ModelPickerScreen("Choose local Whisper model", self._loader("whisper")),
+            ModelManagerScreen(manager=manager, current_model=self.cfg.transcription.model),
             lambda m: self.tc_model(str(m) if m else ""),
         )
 

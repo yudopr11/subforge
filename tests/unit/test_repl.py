@@ -768,3 +768,39 @@ async def test_delete_command_removes_project(tmp_path, monkeypatch):
 
         assert not proj_dir.exists()
         assert app.project_dir is None
+
+
+async def test_cmd_models_selects_and_updates_config(tmp_path, monkeypatch):
+    from textual.coordinate import Coordinate
+
+    from subforge.app.model_manager import GGML_WHISPER_MODELS
+    from subforge.config.app_config import load_app_config
+    from subforge.tui.screens.model_manager import ModelManagerScreen
+
+    config_path = tmp_path / "config.json"
+    monkeypatch.setenv("SUBFORGE_CONFIG", str(config_path))
+    monkeypatch.setenv("SUBFORGE_HOME", str(tmp_path))
+
+    models_dir = tmp_path / "models"
+    models_dir.mkdir(parents=True, exist_ok=True)
+    for meta in GGML_WHISPER_MODELS.values():
+        (models_dir / meta["filename"]).write_bytes(b"dummy")
+
+    app = SubForgeApp()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        app.repl.run_command("/models")
+        await pilot.pause()
+
+        assert isinstance(app.screen, ModelManagerScreen)
+        table = app.screen.query_one("DataTable")
+        for idx, row in enumerate(app.screen._rows):
+            if row.id == "base":
+                table.cursor_coordinate = Coordinate(idx, 0)
+                break
+        app.screen.select_or_install()
+        await pilot.pause()
+
+        assert app.app_config.transcription.model == "base"
+        assert load_app_config(config_path).transcription.model == "base"
+

@@ -1,4 +1,4 @@
-"""Local Whisper model management UI (PRD §8): cache status + on-demand install."""
+"""Local Whisper model management UI (PRD §8): cache status + on-demand install + model selection."""
 
 from collections.abc import Callable
 from typing import ClassVar
@@ -6,18 +6,19 @@ from typing import ClassVar
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
+from textual.coordinate import Coordinate
 from textual.screen import ModalScreen
 from textual.widgets import Button, DataTable, Label
 
 from subforge.app.model_manager import LocalModelInfo, LocalModelManager
 
 
-class ModelManagerScreen(ModalScreen[None]):
+class ModelManagerScreen(ModalScreen[str | None]):
     AUTO_FOCUS = "#models"
     BINDINGS: ClassVar[list[Binding | tuple[str, str] | tuple[str, str, str]]] = [
         ("escape", "cancel", "Cancel"),
-        ("enter", "install_selected_action", "Install"),
-        ("i", "install_selected_action", "Install"),
+        ("enter", "select_or_install_action", "Select / Install"),
+        ("i", "install_selected_action", "Install only"),
         ("d", "delete_selected_action", "Delete"),
         ("delete", "delete_selected_action", "Delete"),
     ]
@@ -25,10 +26,12 @@ class ModelManagerScreen(ModalScreen[None]):
     def __init__(
         self,
         manager: LocalModelManager | None = None,
+        current_model: str | None = None,
         on_done: Callable[[], None] | None = None,
     ) -> None:
         super().__init__()
         self.manager = manager or LocalModelManager()
+        self.current_model = current_model
         self.on_done = on_done
 
     def compose(self) -> ComposeResult:
@@ -36,9 +39,13 @@ class ModelManagerScreen(ModalScreen[None]):
             yield Label("[b]Local Whisper Models (whisper.cpp)[/b]")
             yield DataTable(id="models", cursor_type="row")
             with Horizontal(id="mm-buttons"):
-                yield Button("Install selected  [i / Enter]", id="btn-install")
-                yield Button("Delete selected  [d / Del]", id="btn-delete", variant="error")
-            yield Label("[dim]Enter / i: install · d / Del: delete · ↑↓: select · Esc: back[/dim]", id="mm-hints")
+                yield Button("Select / Install  [Enter]", id="btn-select", variant="primary")
+                yield Button("Install only  [i]", id="btn-install")
+                yield Button("Delete  [d / Del]", id="btn-delete", variant="error")
+            yield Label(
+                "[dim]Enter: select (auto-installs if needed) · i: install · d / Del: delete · ↑↓: move · Esc: cancel[/dim]",
+                id="mm-hints",
+            )
             yield Label("", id="mm-status")
 
     def on_mount(self) -> None:
@@ -46,6 +53,11 @@ class ModelManagerScreen(ModalScreen[None]):
         table.add_columns("Model", "Profile", "VRAM / Size", "Status")
         self._rows: list[LocalModelInfo] = []
         self.refresh_rows()
+        if self.current_model and self._rows:
+            for idx, info in enumerate(self._rows):
+                if info.id == self.current_model:
+                    table.cursor_coordinate = Coordinate(idx, 0)
+                    break
 
     # ---- tested seams ----------------------------------------------------
 
@@ -111,6 +123,37 @@ class ModelManagerScreen(ModalScreen[None]):
                 self.on_done()
         return message
 
+    def _install_worker(self, model_id: str, dismiss_on_success: bool = False) -> str:
+        msg = self.install(model_id)
+        if dismiss_on_success and not msg.startswith("[ERROR]"):
+            try:
+                self.app.call_from_thread(self.dismiss, model_id)
+            except Exception:  # noqa: BLE001
+                self.dismiss(model_id)
+        return msg
+
+    def select_or_install(self) -> None:
+        table = self.query_one(DataTable)
+        row = table.cursor_row
+        if row is None or not (0 <= row < len(self._rows)):
+            self._set_status("[ERROR] Select a model row first.")
+            return
+        selected_info = self._rows[row]
+        if selected_info.installed:
+            if self.on_done:
+                try:
+                    self.app.call_from_thread(self.on_done)
+                except Exception:  # noqa: BLE001
+                    self.on_done()
+            self.dismiss(selected_info.id)
+        else:
+            self.run_worker(
+                lambda: self._install_worker(selected_info.id, dismiss_on_success=True),
+                thread=True,
+                exclusive=True,
+                group="install",
+            )
+
     def install_selected(self) -> str:
         table = self.query_one(DataTable)
         row = table.cursor_row
@@ -118,7 +161,13 @@ class ModelManagerScreen(ModalScreen[None]):
             self._set_status("[ERROR] Select a model row first.")
             return "[ERROR] Select a model row first."
         selected_model = self._rows[row].id
-        return self.install(selected_model)
+        self.run_worker(
+            lambda: self._install_worker(selected_model, dismiss_on_success=False),
+            thread=True,
+            exclusive=True,
+            group="install",
+        )
+        return f"Starting download for {selected_model}..."
 
     def delete(self, model_id: str) -> str:
         deleted = self.manager.delete_model(model_id)
@@ -180,20 +229,26 @@ class ModelManagerScreen(ModalScreen[None]):
     # ---- widget wiring ------------------------------------------------------
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
-        if event.button.id == "btn-install":
-            self.run_worker(self.install_selected, thread=True, exclusive=True, group="install")
+        if event.button.id == "btn-select":
+            self.select_or_install()
+        elif event.button.id == "btn-install":
+            self.install_selected()
         elif event.button.id == "btn-delete":
             self.delete_selected()
 
     def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
-        self.run_worker(self.install_selected, thread=True, exclusive=True, group="install")
+        self.select_or_install()
 
     def action_cancel(self) -> None:
         self.dismiss(None)
 
+    def action_select_or_install_action(self) -> None:
+        self.select_or_install()
+
     def action_install_selected_action(self) -> None:
-        self.run_worker(self.install_selected, thread=True, exclusive=True, group="install")
+        self.install_selected()
 
     def action_delete_selected_action(self) -> None:
         self.delete_selected()
+
 
