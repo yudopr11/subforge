@@ -46,8 +46,7 @@ jobs:
       - name: Build standalone binary
         shell: bash
         run: |
-          PYTHONOPTIMIZE=2 uv run pyinstaller --noconfirm --onefile --clean \
-            --strip \
+          PYTHONOPTIMIZE=1 uv run pyinstaller --noconfirm --onefile --clean \
             --name "${{ matrix.bin_name }}" \
             --exclude-module "mypy" \
             --exclude-module "ruff" \
