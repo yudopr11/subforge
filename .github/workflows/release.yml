@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - "v*.*.*"
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -14,14 +15,14 @@ jobs:
       matrix:
         include:
           - os: windows-latest
-            artifact_name: subforge-windows-x64.exe
-            asset_name: subforge-windows-x64.exe
+            bin_name: subforge-windows-x64
+            artifact_file: dist/subforge-windows-x64.exe
           - os: ubuntu-latest
-            artifact_name: subforge-linux-x64
-            asset_name: subforge-linux-x64
+            bin_name: subforge-linux-x64
+            artifact_file: dist/subforge-linux-x64
           - os: macos-latest
-            artifact_name: subforge-darwin-arm64
-            asset_name: subforge-darwin-arm64
+            bin_name: subforge-darwin-arm64
+            artifact_file: dist/subforge-darwin-arm64
 
     runs-on: ${{ matrix.os }}
 
@@ -45,7 +46,7 @@ jobs:
       - name: Build standalone binary
         shell: bash
         run: |
-          uv run pyinstaller --noconfirm --onefile --name "${{ matrix.artifact_name }}" \
+          uv run pyinstaller --noconfirm --onefile --name "${{ matrix.bin_name }}" \
             --collect-all "textual" \
             --collect-all "subforge" \
             src/subforge/cli/main.py
@@ -54,6 +55,6 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
         with:
-          files: dist/${{ matrix.artifact_name }}
+          files: ${{ matrix.artifact_file }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
