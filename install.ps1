@@ -1,11 +1,11 @@
 #!/usr/bin/env pwsh
 # SubForge Windows One-Line Installer
-# Usage: irm https://raw.githubusercontent.com/yudoppi/subforge/main/install.ps1 | iex
+# Usage: irm https://raw.githubusercontent.com/yudopr11/subforge/master/install.ps1 | iex
 
 $ErrorActionPreference = "Stop"
 
 $AppName = "subforge"
-$Repo = "yudoppi/subforge"
+$Repo = "yudopr11/subforge"
 $InstallDir = Join-Path $env:LOCALAPPDATA "subforge\bin"
 $ExePath = Join-Path $InstallDir "$AppName.exe"
 

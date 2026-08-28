@@ -1,11 +1,11 @@
 #!/usr/bin/env sh
 # SubForge Linux & macOS One-Line Installer
-# Usage: curl -fsSL https://raw.githubusercontent.com/yudoppi/subforge/main/install.sh | sh
+# Usage: curl -fsSL https://raw.githubusercontent.com/yudopr11/subforge/master/install.sh | sh
 
 set -e
 
 APP_NAME="subforge"
-REPO="yudoppi/subforge"
+REPO="yudopr11/subforge"
 INSTALL_DIR="${HOME}/.local/bin"
 TARGET_BIN="${INSTALL_DIR}/${APP_NAME}"
 

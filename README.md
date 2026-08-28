@@ -14,12 +14,12 @@ You can install SubForge with a single terminal command — no manual Python, Py
 
 ### Windows (PowerShell)
 ```powershell
-irm https://raw.githubusercontent.com/yudoppi/subforge/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/yudopr11/subforge/master/install.ps1 | iex
 ```
 
 ### Linux & macOS (Terminal)
 ```bash
-curl -fsSL https://raw.githubusercontent.com/yudoppi/subforge/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/yudopr11/subforge/master/install.sh | sh
 ```
 
 After installation completes, simply open a new terminal window and type:
@@ -76,7 +76,7 @@ Then work with simple slash commands or keyboard shortcuts:
 For developers contributing or building from source:
 
 ```bash
-git clone https://github.com/yudoppi/subforge.git
+git clone https://github.com/yudopr11/subforge.git
 cd subforge
 uv sync
 uv run pytest
