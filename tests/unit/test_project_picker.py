@@ -134,3 +134,21 @@ async def test_delete_project_in_picker(tmp_path):
         assert len(picker.projects) == 1
         assert picker.projects[0].name == "episode-one"
         assert app.project_dir is None
+
+
+async def test_delete_key_in_picker_triggers_confirmation(tmp_path):
+    from subforge.tui.screens.confirm_dialog import ConfirmDialogScreen
+
+    app = SubForgeApp()
+    async with app.run_test() as pilot:
+        projects = make_projects(tmp_path)
+        picker = ProjectPickerScreen(projects)
+        await app.push_screen(picker)
+        await pilot.pause()
+
+        picker.query_one("#projects").highlighted = 1
+        await pilot.press("ctrl+d")
+        await pilot.pause()
+
+        assert isinstance(app.screen, ConfirmDialogScreen)
+

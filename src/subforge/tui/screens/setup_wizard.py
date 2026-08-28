@@ -126,7 +126,7 @@ class FirstRunSetupScreen(ModalScreen[None]):
     # ---- step 1: transcription ---------------------------------------------
 
     def begin_transcription_choice(self) -> None:
-        self._set_status("Step 1/2 · Transcription — choose Whisper model (always local)")
+        self._set_status("Step 1/2 · Choose Whisper model (always local)")
         manager = self._mm_factory()
         self._push(
             ModelManagerScreen(manager=manager, current_model=self.cfg.transcription.model),
@@ -140,6 +140,7 @@ class FirstRunSetupScreen(ModalScreen[None]):
         self._ask_source_language()
 
     def _ask_source_language(self) -> None:
+        self._set_status("Step 2/2 · Audio source language (Enter empty for auto-detect)")
         self._push(
             LanguagePickerScreen(
                 "Audio source language (Enter empty for auto-detect)",
@@ -150,7 +151,8 @@ class FirstRunSetupScreen(ModalScreen[None]):
 
     def _source_language_chosen(self, language: str) -> None:
         self.cfg.transcription.language = language.strip().lower()
-        self.begin_translation_choice()
+        self.cfg.translation.default_target = "en"
+        self.finish()
 
     # ---- step 2: translation --------------------------------------------------
 
@@ -292,15 +294,9 @@ class FirstRunSetupScreen(ModalScreen[None]):
 
     def validation_errors(self) -> list[str]:
         errors: list[str] = []
-        t, tr = self.cfg.translation, self.cfg.transcription
+        tr = self.cfg.transcription
         if not tr.model:
-            errors.append("transcription model not chosen")
-        if not t.model:
-            errors.append("translation model not chosen")
-        if t.source == "local" and not t.local_base_url:
-            errors.append("local translation URL missing")
-        if t.source == "provider" and not t.api_key:
-            errors.append("translation API key missing")
+            errors.append("Whisper model not chosen")
         return errors
 
     def finish(self) -> None:

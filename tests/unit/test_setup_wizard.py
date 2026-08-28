@@ -98,7 +98,7 @@ async def test_first_run_launches_wizard_over_menu(first_run_env):
         assert any(isinstance(s, ReplScreen) for s in app.screen_stack)
 
 
-async def test_happy_path_local_transcription_local_translation(first_run_env):
+async def test_happy_path_wizard_setup(first_run_env):
     saved_flags: list[bool] = []
     app = SubForgeApp()
     async with app.run_test() as pilot:
@@ -113,56 +113,28 @@ async def test_happy_path_local_transcription_local_translation(first_run_env):
 
         from subforge.tui.screens.language_picker import LanguagePickerScreen
 
-        assert isinstance(app.screen, LanguagePickerScreen)  # source language prompt
+        # -- step 2: source language
+        assert isinstance(app.screen, LanguagePickerScreen)
         _pick(app.screen, "id")
         await pilot.pause()
 
-        # -- step 2: translation = local server (offline loader injection)
-        wizard._loader_factory = fake_loaders({"local": ["qwen3-14b"]})
-        assert isinstance(app.screen, ChoiceScreen)
-        _pick(app.screen, "Local server (LM Studio / Ollama)")
-        await pilot.pause()
-        assert isinstance(app.screen, UrlInputScreen)
-        _pick(app.screen, "http://localhost:1234/v1")
-        await pilot.pause()
-        assert isinstance(app.screen, ModelPickerScreen)
-        _pick(app.screen, "qwen3-14b")
-        await pilot.pause()
-        assert isinstance(app.screen, LanguagePickerScreen)  # default target prompt
-        _pick(app.screen, "en")
-
-        await pilot.pause()
         cfg = load_app_config(first_run_env)
         assert cfg.transcription.provider == "local"
         assert cfg.transcription.model == "small"
         assert cfg.transcription.language == "id"
-        assert cfg.translation.source == "local"
         assert cfg.translation.default_target == "en"
-        assert cfg.translation.local_base_url == "http://localhost:1234/v1"
-        assert cfg.translation.model == "qwen3-14b"
         assert saved_flags == [True]
         assert app.needs_setup is False
 
 
-async def test_happy_path_cloud_translation(first_run_env):
-    loaders = fake_loaders({"cloud": ["glm-5.2"]})
+async def test_wizard_sets_auto_detect_when_language_empty(first_run_env):
+    saved_flags: list[bool] = []
     app = SubForgeApp()
     async with app.run_test() as pilot:
         await pilot.pause()
         wizard = _wizard(app)
-        wizard._loader_factory = loaders
+        wizard.on_done = lambda: (saved_flags.append(True), app._setup_finished())
 
-        class FakeCaps:
-            def reasoning_spec(self, provider_preset, model_id):
-                from subforge.providers.capabilities import ReasoningSpec
-
-                if model_id == "glm-5.2":
-                    return ReasoningSpec("effort", ("high", "max"))
-                return ReasoningSpec("unsupported", ())
-
-        wizard._cap_client = FakeCaps()
-
-        # Step 1: Transcription model manager
         assert isinstance(app.screen, ModelManagerScreen)
         _pick(app.screen, "large-v3-turbo")
         await pilot.pause()
@@ -170,43 +142,14 @@ async def test_happy_path_cloud_translation(first_run_env):
         from subforge.tui.screens.language_picker import LanguagePickerScreen
 
         assert isinstance(app.screen, LanguagePickerScreen)
-        _pick(app.screen, "ja")  # source language
-        await pilot.pause()
-
-        # Step 2: Translation
-        assert isinstance(app.screen, ChoiceScreen)
-        _pick(app.screen, "Cloud provider")
-        await pilot.pause()
-        _pick(app.screen, "OpenCode Zen (opencode-zen)")
-        await pilot.pause()
-        _pick(app.screen, "oc-key")
-        await pilot.pause()
-        _pick(app.screen, "glm-5.2")
-        await pilot.pause()
-        from subforge.tui.screens.language_picker import LanguagePickerScreen as TIS
-        from subforge.tui.screens.settings import ReasoningPickerScreen
-
-        # PRD §15: exactly this model's discovered vocabulary is offered
-        assert isinstance(app.screen, ReasoningPickerScreen)
-        options = [str(o.prompt) for o in app.screen.query_one("OptionList").options]
-        assert options == ["high", "max"]
-        _pick(app.screen, "max")
-        await pilot.pause()
-
-        assert isinstance(app.screen, TIS)
-        _pick(app.screen, "es")  # default target
+        _pick(app.screen, "")  # empty = auto-detect
         await pilot.pause()
 
         cfg = load_app_config(first_run_env)
-        assert cfg.transcription.provider == "local"
-        assert cfg.transcription.language == "ja"
         assert cfg.transcription.model == "large-v3-turbo"
-        assert cfg.translation.default_target == "es"
-        assert cfg.translation.source == "provider"
-        assert cfg.translation.provider == "opencode-zen"
-        assert cfg.translation.api_key == "oc-key"
-        assert cfg.translation.model == "glm-5.2"
-        assert cfg.translation.reasoning_effort == "max"
+        assert cfg.transcription.language == ""
+        assert cfg.translation.default_target == "en"
+        assert saved_flags == [True]
 
 
 async def test_incomplete_setup_does_not_save(first_run_env):
@@ -215,7 +158,7 @@ async def test_incomplete_setup_does_not_save(first_run_env):
         await pilot.pause()
         wizard = _wizard(app)
 
-        wizard.apply_tc_model("small")   # translation never configured
+        wizard.cfg.transcription.model = ""  # transcription model not chosen
         wizard.finish()
 
         assert not first_run_env.exists()  # nothing persisted
@@ -249,8 +192,7 @@ async def test_after_setup_menu_status_refreshes(first_run_env):
     app = SubForgeApp()
     async with app.run_test() as pilot:
         await pilot.pause()
-        wizard = _wizard(app)
-        wizard._loader_factory = fake_loaders({"local": ["m1"]})
+        assert isinstance(_wizard(app), FirstRunSetupScreen)
 
         # drive the real flow end-to-end so every step modal dismisses itself
         assert isinstance(app.screen, ModelManagerScreen)
@@ -261,21 +203,11 @@ async def test_after_setup_menu_status_refreshes(first_run_env):
         assert isinstance(app.screen, LanguagePickerScreen)
         _pick(app.screen, "")  # auto-detect
         await pilot.pause()
-        assert isinstance(app.screen, ChoiceScreen)
-        _pick(app.screen, "Local server (LM Studio / Ollama)")
-        await pilot.pause()
-        _pick(app.screen, "http://localhost:1234/v1")
-        await pilot.pause()
-        _pick(app.screen, "m1")
-        await pilot.pause()
-        assert isinstance(app.screen, LanguagePickerScreen)
-        _pick(app.screen, "en")  # default target
-        await pilot.pause()
 
         assert isinstance(app.screen, ReplScreen)
         assert app.needs_setup is False
         # completion is announced in the transcript and config reloaded
-        assert app.app_config.translation.model == "m1"
+        assert app.app_config.transcription.model == "small"
         from subforge.tui.screens.repl import ReplScreen as _Repl
 
         repl = next(s for s in app.screen_stack if isinstance(s, _Repl))

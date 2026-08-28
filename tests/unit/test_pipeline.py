@@ -12,12 +12,15 @@ from subforge.providers.base import TranslationOutput
 
 
 class FakeASR:
-    def __init__(self, transcript: Transcript):
+    def __init__(self, transcript: Transcript, translate_transcript: Transcript | None = None):
         self.transcript = transcript
+        self.translate_transcript = translate_transcript
         self.calls = 0
 
-    def transcribe(self, audio_path, language=None):
+    def transcribe(self, audio_path, language=None, translate=False):
         self.calls += 1
+        if translate and self.translate_transcript:
+            return self.translate_transcript
         return self.transcript
 
 
@@ -140,9 +143,28 @@ def test_translation_writes_per_language_artifact(tmp_path):
     assert json.loads(en.read_text())["language"] == "en"
 
 
+def test_translation_via_whisper_native(tmp_path):
+    d, _ = setup_project(tmp_path)
+    en_transcript = Transcript(
+        language="en",
+        segments=[
+            TranscriptSegment(id=1, start=1.2, end=3.4, text="Hello everyone!"),
+        ],
+    )
+    asr = FakeASR(TRANSCRIPT, translate_transcript=en_transcript)
+    pipe = Pipeline(d, Settings(), transcription=asr)
+    pipe.run_transcription("final_audio.wav")
+    pipe.run_translation("en")
+
+    project = pipe.load()
+    assert project.segments[0].translations["en"] == "Hello everyone!"
+    assert project.get_stage("translation_en") is StageState.COMPLETED
+
+
 def test_status_reports_all_stages(tmp_path):
     d, _ = setup_project(tmp_path)
     pipe = Pipeline(d, Settings(), transcription=FakeASR(TRANSCRIPT))
     status = pipe.status()
     assert status["transcription"] is StageState.PENDING
     assert status["export"] is StageState.PENDING
+    assert "caption_review" not in status

@@ -131,8 +131,8 @@ class ProjectPickerScreen(ModalScreen[object]):
 
     BINDINGS: ClassVar[list[Binding | tuple[str, str] | tuple[str, str, str]]] = [
         ("escape", "cancel", "Cancel"),
-        Binding("d", "delete_selected", "Delete", show=True),
-        Binding("delete", "delete_selected", "Delete", show=False),
+        Binding("ctrl+d", "delete_selected", "Delete", show=True),
+        Binding("delete", "delete_selected", "Delete", show=True),
     ]
 
     AUTO_FOCUS = "Input"
@@ -153,7 +153,7 @@ class ProjectPickerScreen(ModalScreen[object]):
             yield Label("[b]Open project[/b]  —  recent projects, or create new")
             yield Input(placeholder="type to search project…", id="project-search")
             yield OptionList(id="projects")
-            yield Label("[dim]type filter · ↑↓ move · Enter open · d delete · Esc cancel[/dim]", id="picker-hints")
+            yield Label("[dim]type filter · ↑↓ move · Enter open · Del / Ctrl+D delete · Esc cancel[/dim]", id="picker-hints")
 
     # ---- filtering ---------------------------------------------------------
 
@@ -271,6 +271,9 @@ class ProjectPickerScreen(ModalScreen[object]):
         elif event.key == "tab":
             event.stop()
             self._select()
+        elif event.key in ("delete", "ctrl+d"):
+            event.stop()
+            self.action_delete_selected()
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         if event.input.id != "project-search":

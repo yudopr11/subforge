@@ -20,10 +20,15 @@ class StageError(RuntimeError):
 
 
 class _Transcribes(Protocol):
-    def transcribe(self, audio_path: Path, language: str | None = None) -> Transcript: ...
+    def transcribe(
+        self,
+        audio_path: Path,
+        language: str | None = None,
+        translate: bool = False,
+    ) -> Transcript: ...
 
 
-ALL_STAGES = ("transcription", "caption_review", "export")
+ALL_STAGES = ("transcription", "export")
 
 
 class _Unconfigured:
@@ -113,6 +118,48 @@ class Pipeline:
         if target_language not in project.project.target_languages:
             project.project.target_languages.append(target_language)
             self._save(project)
+
+        project.set_stage(f"translation_{target_language}", StageState.RUNNING)
+        self._save(project)
+
+        # Native whisper.cpp translation to English if no external LLM translation is configured
+        is_llm_configured = not isinstance(self.translation_service.provider, _Unconfigured)
+
+        if not is_llm_configured and target_language == "en" and self.transcription is not None:
+            audio_dir = self.dir / "audio"
+            audio_files = list(audio_dir.iterdir()) if audio_dir.is_dir() else []
+            audio_path = audio_files[0] if audio_files else None
+
+            if audio_path and hasattr(self.transcription, "transcribe"):
+                import inspect
+
+                sig = inspect.signature(self.transcription.transcribe)
+                if "translate" in sig.parameters:
+                    try:
+                        transcript = self.transcription.transcribe(
+                            audio_path,
+                            language=project.project.source_language or None,
+                            translate=True,
+                        )
+                        en_segs = transcript.segments
+                        for i, seg in enumerate(project.segments):
+                            if i < len(en_segs):
+                                seg.translations[target_language] = en_segs[i].text
+                            elif en_segs:
+                                seg.translations[target_language] = en_segs[-1].text
+                            else:
+                                seg.translations[target_language] = ""
+                        project.set_stage(f"translation_{target_language}", StageState.COMPLETED)
+                        self._save(project)
+                        self._write_translation_artifact(target_language, project)
+                        return
+                    except Exception as exc:
+                        project.set_stage(f"translation_{target_language}", StageState.FAILED)
+                        self._save(project)
+                        raise StageError(
+                            f"[ERROR] translation to '{target_language}' failed: {exc}"
+                        ) from exc
+
         try:
             self.translation_service.translate_project(project, target_language)
         except Exception as exc:

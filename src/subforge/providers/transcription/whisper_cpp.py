@@ -87,7 +87,12 @@ class WhisperCppProvider:
         self.binary_path = binary_path
         self.model_manager = LocalModelManager(models_dir=models_dir)
 
-    def transcribe(self, audio_path: Path, language: str | None = None) -> Transcript:
+    def transcribe(
+        self,
+        audio_path: Path,
+        language: str | None = None,
+        translate: bool = False,
+    ) -> Transcript:
         if not self.model_manager.is_installed(self.model_name):
             raise RuntimeError(
                 f"Model file not found for '{self.model_name}'. "
@@ -114,6 +119,8 @@ class WhisperCppProvider:
             ]
             if language:
                 cmd.extend(["-l", language])
+            if translate:
+                cmd.append("-tr")
 
             try:
                 proc = subprocess.run(

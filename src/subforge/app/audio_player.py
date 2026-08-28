@@ -28,10 +28,19 @@ _SPECS: dict[str, dict[str, str]] = {
 }
 
 
-def detect_player(which: Callable[[str], str | None] = shutil.which) -> tuple[str, dict[str, str]] | None:
+def detect_player(which: Callable[[str], str | None] | None = None) -> tuple[str, dict[str, str]] | None:
+    from subforge.app.binaries import find_in_path_or_bin
+
     for binary, spec in _SPECS.items():
-        if which(binary):
-            return binary, spec
+        if which is not None:
+            if which(binary):
+                return binary, spec
+        else:
+            found = find_in_path_or_bin(binary)
+            if found:
+                return str(found), spec
+            if binary == "powershell" and shutil.which("powershell"):
+                return "powershell", spec
     return None
 
 
@@ -43,19 +52,18 @@ def build_command(
     spec: dict[str, str],
 ) -> list[str]:
     """CLI args playing [start, start+duration) of the audio file."""
-    if player_binary == "powershell":
-        abs_uri = audio_path.resolve().as_uri()
+    if player_binary.lower().endswith("powershell") or player_binary == "powershell":
+        from subforge.app.binaries import find_in_path_or_bin
+
+        ffmpeg_bin = find_in_path_or_bin("ffmpeg")
+        ffmpeg_cmd = f'& "{ffmpeg_bin}"' if ffmpeg_bin else "ffmpeg"
+        abs_audio = str(audio_path.resolve())
         ms_wait = max(100, int(duration * 1000))
         ps_code = (
-            f"Add-Type -AssemblyName presentationCore;"
-            f"$p = New-Object System.Windows.Media.MediaPlayer;"
-            f"$p.Open([System.Uri]'{abs_uri}');"
-            f"Start-Sleep -Milliseconds 300;"
-            f"$p.Position = [System.TimeSpan]::FromSeconds({start:.3f});"
-            f"$p.Play();"
-            f"Start-Sleep -Milliseconds {ms_wait};"
-            f"$p.Stop();"
-            f"$p.Close();"
+            f'$tmp = Join-Path $env:TEMP "subforge_preview_{abs(hash(str(audio_path))) % 10000}.wav"; '
+            f'{ffmpeg_cmd} -y -ss {start:.3f} -t {duration:.3f} -i "{abs_audio}" -vn -acodec pcm_s16le -ar 44100 -ac 2 $tmp -loglevel quiet; '
+            f'if (Test-Path $tmp) {{ (New-Object System.Media.SoundPlayer $tmp).PlaySync(); Remove-Item -Force $tmp -ErrorAction SilentlyContinue }} '
+            f'else {{ Add-Type -AssemblyName presentationCore; $p = New-Object System.Windows.Media.MediaPlayer; $p.Open([System.Uri]"{audio_path.resolve().as_uri()}"); Start-Sleep -Milliseconds 200; $p.Position = [System.TimeSpan]::FromSeconds({start:.3f}); $p.Play(); Start-Sleep -Milliseconds {ms_wait}; $p.Stop(); $p.Close() }}'
         )
         return ["powershell", "-NoProfile", "-NonInteractive", "-Command", ps_code]
 

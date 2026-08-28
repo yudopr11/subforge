@@ -20,7 +20,10 @@ def test_detect_player_falls_back_to_mpv_then_none():
 def test_build_command_powershell_style():
     cmd = build_command("powershell", Path("/a/b.mp3"), 1.0, 3.5, {})
     assert cmd[0] == "powershell"
-    assert "System.Windows.Media.MediaPlayer" in cmd[-1]
+    assert "SoundPlayer" in cmd[-1] or "MediaPlayer" in cmd[-1]
+    assert "-ss 1.000" in cmd[-1]
+    assert "-t 3.500" in cmd[-1]
+
 
 
 def test_build_command_ffplay_style():

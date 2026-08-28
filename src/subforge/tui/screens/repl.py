@@ -82,12 +82,12 @@ class ReplScreen(Screen[None]):
         ("/open", "list/open recent projects"),
         ("/projects", "manage/open projects"),
         ("/delete", "delete a project"),
-        ("/models", "manage local GGML models"),
+        ("/models", "manage and select local Whisper models"),
+        ("/language", "set default audio source language"),
         ("/transcribe", "run transcription"),
         ("/review", "searchable picker: captions or translated languages"),
-        ("/translate", "translate (default target remembered)"),
+        ("/translate", "translate to English"),
         ("/export", "export SRT/ASS"),
-        ("/settings", "manual provider/model settings"),
         ("/wizard", "re-run guided setup"),
         ("/status", "pipeline stage states"),
         ("/quit", "exit"),
@@ -100,7 +100,7 @@ class ReplScreen(Screen[None]):
             yield Label("", id="next-action-banner")
             yield Label("", id="status-bar")
         yield Label(
-            "[b cyan]N[/b cyan] New  [b cyan]T[/b cyan] Transcribe  [b cyan]R[/b cyan] Review  [b cyan]L[/b cyan] Translate  [b cyan]V[/b cyan] View TL  [b cyan]E[/b cyan] Export  [b cyan]P[/b cyan] Projects  [b cyan]M[/b cyan] Models  [b cyan]S[/b cyan] Settings  [b cyan]?[/b cyan] Help",
+            "[b cyan]N[/b cyan] New  [b cyan]T[/b cyan] Transcribe  [b cyan]R[/b cyan] Review  [b cyan]L[/b cyan] Translate  [b cyan]V[/b cyan] View EN  [b cyan]E[/b cyan] Export  [b cyan]P[/b cyan] Projects  [b cyan]M[/b cyan] Models  [b cyan]?[/b cyan] Help",
             id="hotkey-bar",
         )
         with Vertical():
@@ -110,7 +110,7 @@ class ReplScreen(Screen[None]):
         with Vertical(id="autocomplete-container"):
             yield OptionList(id="autocomplete-list")
         yield Static(
-            "/new /open /projects /delete /models /transcribe /review /translate /export /settings /wizard /status ? quit",
+            "/new /open /projects /delete /models /language /transcribe /review /translate /export /wizard /status ? quit",
             id="command-legend",
         )
         yield Input(placeholder="Type a command or press hotkey (N, T, R, L, E, P, M, S)...", id="prompt")
@@ -837,8 +837,13 @@ class ReplScreen(Screen[None]):
         except ValueError as exc:
             self.log_line(str(exc))
             return
-        names = ", ".join(p.name for p in paths) or "(nothing to export yet)"
-        self.log_line(f"▸ exported: {names}")
+        if not paths:
+            self.log_line("▸ (nothing to export yet)")
+        else:
+            export_dir = (project_dir / "exports").resolve()
+            self.log_line(f"✓ Exported {len(paths)} subtitle file(s) to [b]{export_dir}[/b]:")
+            for p in paths:
+                self.log_line(f"  • [green]{p.name}[/green]")
         self.refresh_status()
 
     def _cmd_projects(self, arg: str) -> None:
@@ -866,7 +871,18 @@ class ReplScreen(Screen[None]):
             self.log_line("No projects found.")
             return
         if not arg:
-            self.log_line("Usage: /delete <project-name-or-index> or press [d] in /projects picker")
+            from subforge.tui.screens.project import ChoiceScreen
+
+            choices = [p.name for p in sorted(projects, key=lambda p: p.name)]
+
+            def _on_picked(picked: object) -> None:
+                if picked and isinstance(picked, str):
+                    self._cmd_delete(picked)
+
+            self._host.push_screen(
+                ChoiceScreen("Select project to delete", choices),
+                _on_picked,
+            )
             return
         target: Path | None = None
         if arg.isdigit():
@@ -910,15 +926,40 @@ class ReplScreen(Screen[None]):
             on_confirmed,
         )
 
-    def _cmd_settings(self, arg: str) -> None:
-        # Load FRESH from disk: manual edits to config.json are honored instead
-        # of being overwritten by the boot-time snapshot (PRD §20 TUI-first).
-        from subforge.config.app_config import load_app_config
-        from subforge.tui.screens.settings import SettingsScreen
+    def _cmd_language(self, arg: str) -> None:
+        from subforge.config.app_config import save_app_config
+        from subforge.tui.screens.language_picker import LanguagePickerScreen
+
+        if arg:
+            self._host.app_config.transcription.language = arg.strip().lower()
+            save_app_config(self._host.app_config)
+            self.log_line(f"✓ Audio source language set to: [b]{arg}[/b]")
+            self.refresh_status()
+            return
+
+        def _on_lang(lang: str | None) -> None:
+            if lang is not None:
+                chosen = lang.strip().lower()
+                self._host.app_config.transcription.language = chosen
+                save_app_config(self._host.app_config)
+                desc = chosen or "auto-detect"
+                self.log_line(f"✓ Audio source language set to: [b]{desc}[/b]")
+                self.refresh_status()
 
         self._host.push_screen(
-            SettingsScreen(load_app_config(), on_saved=self.reload_config)
+            LanguagePickerScreen(
+                "Audio source language (Enter empty for auto-detect)",
+                current=self._host.app_config.transcription.language,
+            ),
+            _on_lang,
         )
+
+    def _cmd_lang(self, arg: str) -> None:
+        self._cmd_language(arg)
+
+    def _cmd_settings(self, arg: str) -> None:
+        self.log_line("[dim]Settings is divided into: [b]/models[/b] (Whisper models) and [b]/language[/b] (source language).[/dim]")
+        self._cmd_models("")
 
     def _cmd_wizard(self, arg: str) -> None:
         from subforge.tui.screens.setup_wizard import FirstRunSetupScreen
@@ -949,11 +990,14 @@ class ReplScreen(Screen[None]):
         rows = [
             ("/new <audio>", "create project + import audio"),
             ("/open [name|n]", "list/open recent projects"),
+            ("/projects", "manage/open projects"),
+            ("/delete [name]", "delete project"),
+            ("/models", "manage & select Whisper GGML models"),
+            ("/language [lang]", "set default audio source language"),
             ("/transcribe", "run transcription"),
             ("/review [lang]", "searchable picker (captions · translations); <lang> direct"),
-            ("/translate [lang]", "translate (default target remembered)"),
+            ("/translate", "translate to English"),
             ("/export [formats]", "export SRT/ASS"),
-            ("/settings", "manual provider/model settings"),
             ("/wizard", "re-run guided setup"),
             ("/status", "pipeline stage states"),
             ("/quit", "exit"),

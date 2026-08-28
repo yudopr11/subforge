@@ -145,6 +145,9 @@ async def test_new_transcribe_translate_export_e2e(tmp_path, monkeypatch):
         assert project.get_stage("translation_en") is StageState.COMPLETED
 
         repl.run_command("/export")
+        await pilot.pause()
+        assert "Exported 4 subtitle file(s)" in transcript_text(app)
+        assert "exports" in transcript_text(app)
         exports = {p.name for p in (app.project_dir / "exports").iterdir()}
         assert exports == {"source.srt", "source.ass", "en.srt", "en.ass"}
         assert load_project(app.project_dir).get_stage("export") is StageState.COMPLETED
@@ -442,11 +445,11 @@ async def test_tab_fills_highlighted_command(tmp_path):
         await pilot.pause()
         repl = app.repl
         prompt = _prompt(repl)
-        prompt.value = "/se"
+        prompt.value = "/lang"
         await pilot.pause()
         await pilot.press("tab")
         await pilot.pause()
-        assert prompt.value.startswith("/settings")
+        assert prompt.value.startswith("/language")
         assert not _picker_visible(repl)
 
 
@@ -465,28 +468,9 @@ async def test_escape_hides_autocomplete_keeps_input(tmp_path):
         assert prompt.value == "/tr"  # input untouched
 
 
-async def test_settings_session_reloads_config_once(tmp_path, monkeypatch):
-    """Two stages saved in one /settings session -> exactly ONE reload line."""
-    from subforge.tui.screens.language_picker import LanguagePickerScreen
-    from subforge.tui.screens.model_picker import ModelPickerScreen
-    from subforge.tui.screens.project import ChoiceScreen
-    from subforge.tui.screens.settings import (
-        ApiKeyInputScreen,
-        ReasoningPickerScreen,
-        UrlInputScreen,
-    )
-
-    def _pick(screen: object, prompt: str) -> None:
-        if isinstance(screen, ChoiceScreen):
-            screen.choose(prompt)
-        elif isinstance(screen, (ReasoningPickerScreen, ModelPickerScreen)):
-            screen.on_option_list_option_selected(
-                type("Evt", (), {"option": type("O", (), {"prompt": prompt})()})()
-            )
-        elif isinstance(screen, (ApiKeyInputScreen, UrlInputScreen, LanguagePickerScreen)):
-            field = screen.query_one("Input")
-            field.value = prompt
-            screen.on_input_submitted(type("Evt", (), {"input": field})())
+async def test_settings_notice_and_redirection(tmp_path, monkeypatch):
+    """Running /settings explains the division into /models and /language, and opens ModelManagerScreen."""
+    from subforge.tui.screens.model_manager import ModelManagerScreen
 
     monkeypatch.setenv("SUBFORGE_CONFIG", str(tmp_path / "config.json"))
     (tmp_path / "config.json").write_text("{}")
@@ -497,42 +481,8 @@ async def test_settings_session_reloads_config_once(tmp_path, monkeypatch):
 
         repl.run_command("/settings")
         await pilot.pause()
-        assert isinstance(app.screen, ChoiceScreen)
-        _pick(app.screen, "Transcribe  —  model + source language")
-        await pilot.pause()
-        _pick(app.screen, "1 · Select model — Whisper sizes for your machine")
-        await pilot.pause()
-        _pick(app.screen, "small · Lightweight")
-        await pilot.pause()
-        _pick(app.screen, "2 · Source language — or auto-detect")
-        await pilot.pause()
-        _pick(app.screen, "id")
-        await pilot.pause()
-        await pilot.press("escape")  # step menu -> top menu
-        await pilot.pause()
-        _pick(app.screen, "Translation  —  model + target language")
-        await pilot.pause()
-        _pick(app.screen, "Local server (LM Studio / Ollama)")
-        await pilot.pause()
-        _pick(app.screen, "1 · Select model — server URL + model")
-        await pilot.pause()
-        _pick(app.screen, "http://localhost:1234/v1")
-        await pilot.pause()
-        _pick(app.screen, "qwen3-14b")
-        await pilot.pause()
-        _pick(app.screen, "2 · Default target language")
-        await pilot.pause()
-        _pick(app.screen, "en")
-        await pilot.pause()
-
-        await pilot.press("escape")  # step menu -> top menu
-        await pilot.pause()
-        await pilot.press("escape")  # top menu -> close settings
-        await pilot.pause()
-        assert isinstance(app.screen, ReplScreen)
-
-        text = transcript_text(app)
-        assert text.count("configuration reloaded") == 1
+        assert isinstance(app.screen, ModelManagerScreen)
+        assert "Settings is divided into: /models" in transcript_text(app)
 
 
 async def test_locate_mode_disables_autocomplete(tmp_path):
@@ -679,30 +629,19 @@ async def test_arrow_up_with_empty_history_is_harmless(tmp_path):
         assert prompt.value == "draft"  # untouched, no crash
 
 
-async def test_settings_loads_fresh_config_from_disk(tmp_path, monkeypatch):
-    """/settings reads config.json from disk: manual edits are honored, not
-    overwritten by the boot-time snapshot."""
-    import json as _json
-
-    monkeypatch.setenv("SUBFORGE_CONFIG", str(tmp_path / "config.json"))
+async def test_language_command_loads_fresh_config_from_disk(tmp_path, monkeypatch):
+    """/language updates the language and persists to config."""
+    config_path = tmp_path / "config.json"
+    monkeypatch.setenv("SUBFORGE_CONFIG", str(config_path))
     (tmp_path / "config.json").write_text("{}")
     app = SubForgeApp(app_config=AppConfig())
     async with app.run_test() as pilot:
         await pilot.pause()
-        # user edits the config file while the app is running
-        (tmp_path / "config.json").write_text(
-            _json.dumps({"translation": {"source": "local", "model": "qwen3-14b"}})
-        )
-
         repl = app.repl
-        repl.run_command("/settings")
+        repl.run_command("/language id")
         await pilot.pause()
 
-        from subforge.tui.screens.settings import SettingsScreen
-
-        settings = app.screen_stack[-2]
-        assert isinstance(settings, SettingsScreen)
-        assert settings.cfg.translation.model == "qwen3-14b"  # fresh, not boot snapshot
+        assert app.app_config.transcription.language == "id"
 
 
 async def test_review_with_lang_opens_translation_review(tmp_path):
@@ -803,4 +742,64 @@ async def test_cmd_models_selects_and_updates_config(tmp_path, monkeypatch):
 
         assert app.app_config.transcription.model == "base"
         assert load_app_config(config_path).transcription.model == "base"
+
+
+async def test_bare_delete_opens_project_choice(tmp_path, monkeypatch):
+    from subforge.tui.screens.confirm_dialog import ConfirmDialogScreen
+    from subforge.tui.screens.project import ChoiceScreen
+
+    monkeypatch.setenv("SUBFORGE_PROJECTS_DIR", str(tmp_path / "projects"))
+    create_project(
+        tmp_path / "projects" / "test-proj-1",
+        ProjectMeta(name="test-proj-1", source_language="id"),
+    )
+
+    app = SubForgeApp()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        app.repl.run_command("/delete")
+        await pilot.pause()
+
+        assert isinstance(app.screen, ChoiceScreen)
+        app.screen.choose("test-proj-1")
+        await pilot.pause()
+
+        assert isinstance(app.screen, ConfirmDialogScreen)
+        app.screen.action_confirm()
+        await pilot.pause()
+
+        assert not (tmp_path / "projects" / "test-proj-1").exists()
+
+
+async def test_cmd_language_interactive_and_direct(tmp_path, monkeypatch):
+    from subforge.config.app_config import load_app_config
+    from subforge.tui.screens.language_picker import LanguagePickerScreen
+
+    config_path = tmp_path / "config.json"
+    monkeypatch.setenv("SUBFORGE_CONFIG", str(config_path))
+
+    app = SubForgeApp()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+
+        # Direct argument: /language ja
+        app.repl.run_command("/language ja")
+        await pilot.pause()
+        assert app.app_config.transcription.language == "ja"
+        assert load_app_config(config_path).transcription.language == "ja"
+
+        # Interactive picker: /language
+        app.repl.run_command("/language")
+        await pilot.pause()
+
+        assert isinstance(app.screen, LanguagePickerScreen)
+        field = app.screen.query_one("Input")
+        field.value = "es"
+        app.screen.on_input_submitted(type("Evt", (), {"input": field})())
+        await pilot.pause()
+
+        assert app.app_config.transcription.language == "es"
+        assert load_app_config(config_path).transcription.language == "es"
+
+
 

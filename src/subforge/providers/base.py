@@ -21,7 +21,12 @@ class TranslationOutput:
 
 @runtime_checkable
 class TranscriptionProvider(Protocol):
-    def transcribe(self, audio_path: Path, language: str | None = None) -> Transcript: ...
+    def transcribe(
+        self,
+        audio_path: Path,
+        language: str | None = None,
+        translate: bool = False,
+    ) -> Transcript: ...
 
 
 # Alias kept for tests/readability; same interface object.
