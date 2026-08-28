@@ -40,17 +40,21 @@ jobs:
 
       - name: Install dependencies & PyInstaller
         run: |
-          uv sync --all-extras
-          uv add --dev pyinstaller
+          uv sync --no-dev
+          uv pip install pyinstaller
 
       - name: Build standalone binary
         shell: bash
         run: |
-          uv run pyinstaller --noconfirm --onefile --name "${{ matrix.bin_name }}" \
+          PYTHONOPTIMIZE=2 uv run pyinstaller --noconfirm --onefile --clean \
+            --strip \
+            --name "${{ matrix.bin_name }}" \
             --exclude-module "mypy" \
+            --exclude-module "ruff" \
             --exclude-module "pytest" \
             --exclude-module "_pytest" \
             --exclude-module "unittest" \
+            --exclude-module "test" \
             --exclude-module "tkinter" \
             --exclude-module "sqlite3" \
             --exclude-module "setuptools" \
@@ -59,6 +63,10 @@ jobs:
             --exclude-module "pip" \
             --exclude-module "pydoc" \
             --exclude-module "xmlrpc" \
+            --exclude-module "pdb" \
+            --exclude-module "idlelib" \
+            --exclude-module "turtle" \
+            --exclude-module "turtledemo" \
             --collect-all "textual" \
             --collect-all "subforge" \
             src/subforge/cli/main.py
