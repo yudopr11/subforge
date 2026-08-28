@@ -7,7 +7,7 @@ from subforge.models.project import ProjectMeta, Segment, StageState
 def test_create_makes_layout(tmp_path):
     directory = create_project(tmp_path / "yt-001", ProjectMeta(name="yt-001", source_language="id"))
     assert (directory / "project.json").exists()
-    for sub in ("audio", "transcripts", "translations", "exports"):
+    for sub in ("audio", "transcripts", "exports"):
         assert (directory / sub).is_dir()
 
 

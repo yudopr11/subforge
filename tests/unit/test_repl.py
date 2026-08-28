@@ -15,7 +15,6 @@ from subforge.app.project_store import create_project, load_project, save_projec
 from subforge.config.app_config import AppConfig
 from subforge.models.project import ProjectMeta, Segment, StageState
 from subforge.models.transcript import Transcript, TranscriptSegment
-from subforge.providers.base import TranslationInput, TranslationOutput
 from subforge.tui.app import SubForgeApp
 from subforge.tui.screens.repl import ReplScreen
 
@@ -28,19 +27,7 @@ class FakeASR:
         )
 
 
-class FakeTranslator:
-    def translate(
-        self,
-        segments: list[TranslationInput],
-        source_language: str,
-        target_language: str,
-        reasoning_effort: str | None = None,
-    ):
-        return [TranslationOutput(id=s.id, text=f"EN:{s.text}") for s in segments]
-
-
 def fake_pipeline_factory(tmp_path: Path) -> ReplScreen.pipeline_factory:  # type: ignore[valid-type]
-    from subforge.app.translation_service import TranslationService
     from subforge.config.settings import Settings
 
     def factory(project_dir: Path) -> Pipeline:
@@ -48,7 +35,6 @@ def fake_pipeline_factory(tmp_path: Path) -> ReplScreen.pipeline_factory:  # typ
             project_dir,
             Settings(),
             transcription=FakeASR(),
-            translation_service=TranslationService(FakeTranslator()),
         )
 
     return factory
@@ -96,7 +82,7 @@ async def test_help_lists_all_commands(tmp_path):
     async for app, repl in open_repl(tmp_path):
         repl.run_command("/help")
         text = transcript_text(app)
-        for cmd in ("/new", "/open", "/transcribe", "/review", "/translate",
+        for cmd in ("/new", "/open", "/transcribe", "/review",
                     "/export", "/settings", "/wizard", "/status", "/quit"):
             assert cmd in text, cmd
 
@@ -117,7 +103,7 @@ async def test_bare_alias_works_without_slash(tmp_path):
 # ---- full flow e2e ------------------------------------------------------------
 
 
-async def test_new_transcribe_translate_export_e2e(tmp_path, monkeypatch):
+async def test_new_transcribe_export_e2e(tmp_path, monkeypatch):
     monkeypatch.setenv("SUBFORGE_PROJECTS_DIR", str(tmp_path / "projects"))
     audio = tmp_path / "episode.wav"
     audio.write_bytes(b"RIFF-fake")
@@ -137,19 +123,12 @@ async def test_new_transcribe_translate_export_e2e(tmp_path, monkeypatch):
         assert "transcribed" in transcript_text(app)
         assert load_project(app.project_dir).get_stage("transcription") is StageState.COMPLETED
 
-        repl.run_command("/translate en")
-        await pilot.pause()
-        assert "translated to 'en'" in transcript_text(app)
-        project = load_project(app.project_dir)
-        assert project.segments[0].translations["en"] == "EN:halo"
-        assert project.get_stage("translation_en") is StageState.COMPLETED
-
         repl.run_command("/export")
         await pilot.pause()
-        assert "Exported 4 subtitle file(s)" in transcript_text(app)
+        assert "Exported 2 subtitle file(s)" in transcript_text(app)
         assert "exports" in transcript_text(app)
         exports = {p.name for p in (app.project_dir / "exports").iterdir()}
-        assert exports == {"source.srt", "source.ass", "en.srt", "en.ass"}
+        assert exports == {"source.srt", "source.ass"}
         assert load_project(app.project_dir).get_stage("export") is StageState.COMPLETED
 
 
@@ -247,16 +226,6 @@ async def test_busy_guard_blocks_double_run(tmp_path):
         repl = app.repl
         repl._running_stages.add("transcription")
         repl.run_command("/transcribe")
-        assert "already running" in transcript_text(app)
-
-
-async def test_translate_busy_guard(tmp_path):
-    d = create_project(tmp_path / "p", ProjectMeta(name="p", source_language="id"))
-    app = SubForgeApp(project_dir=d)
-    async with app.run_test() as pilot:
-        await pilot.pause()
-        app.repl._running_stages.add("translation")
-        app.repl.run_command("/translate en")
         assert "already running" in transcript_text(app)
 
 
@@ -395,13 +364,11 @@ async def test_slash_opens_filtered_autocomplete(tmp_path):
     async with app.run_test() as pilot:
         await pilot.pause()
         repl = app.repl
-        _prompt(repl).value = "/tr"
+        _prompt(repl).value = "/mod"
         await pilot.pause()
         assert _picker_visible(repl)
         options = _options(repl)
-        assert any("/transcribe" in o for o in options)
-        assert any("/translate" in o for o in options)
-        assert all("/transcribe" in o or "/translate" in o for o in options)
+        assert any("/models" in o for o in options)
 
 
 async def test_non_slash_input_hides_autocomplete(tmp_path):
@@ -430,13 +397,13 @@ async def test_autocomplete_up_down_and_enter_fills_prompt(tmp_path):
         assert not _picker_visible(repl)
 
         # Re-open and navigate with arrows before filling
-        prompt.value = "/tr"
+        prompt.value = "/"
         await pilot.pause()
         await pilot.press("down")
         await pilot.pause()
         assert repl.query_one("#autocomplete-list", OptionList).highlighted == 1
         repl._autocomplete_fill()
-        assert prompt.value.startswith("/translate")
+        assert prompt.value.startswith("/open")
 
 
 async def test_tab_fills_highlighted_command(tmp_path):
@@ -644,44 +611,21 @@ async def test_language_command_loads_fresh_config_from_disk(tmp_path, monkeypat
         assert app.app_config.transcription.language == "id"
 
 
-async def test_review_with_lang_opens_translation_review(tmp_path):
-    """/review opens a searchable picker; /review <lang> goes straight (PRD §13)."""
+async def test_review_opens_caption_review(tmp_path):
     from subforge.tui.screens.caption_review import CaptionReviewScreen
-    from subforge.tui.screens.review_picker import ReviewPickerScreen
-    from subforge.tui.screens.review_translate import ReviewTranslateScreen
 
-    d = create_project(tmp_path / "p", ProjectMeta(name="p", source_language="id", target_languages=["jv"]))
+    d = create_project(tmp_path / "p", ProjectMeta(name="p", source_language="id"))
     project = load_project(d)
-    project.segments = [Segment(id=1, start=1.0, end=2.0, source="halo", translations={"jv": "halo!"})]
+    project.segments = [Segment(id=1, start=1.0, end=2.0, source="halo")]
     save_project(d, project)
 
     app = SubForgeApp(project_dir=d)
     async with app.run_test() as pilot:
         await pilot.pause()
 
-        # bare /review -> searchable picker
         app.repl.run_command("/review")
         await pilot.pause()
-        picker = app.screen
-        assert isinstance(picker, ReviewPickerScreen)
-        options = [str(o.prompt) for o in picker.query_one("#review-options").options]
-        assert any("Captions" in o for o in options)
-        assert any("jv" in o for o in options)
-
-        # picking captions opens caption review
-        picker.on_option_list_option_selected(
-            type("Evt", (), {"option": type("O", (), {"prompt": next(o for o in options if "Captions" in o)})()})()
-        )
-        await pilot.pause()
         assert isinstance(app.screen, CaptionReviewScreen)
-        app.screen.action_cancel()
-        await pilot.pause()
-
-        # /review <lang> still goes straight to translation review
-        app.repl.run_command("/review jv")
-        await pilot.pause()
-        assert isinstance(app.screen, ReviewTranslateScreen)
-        assert app.screen.language == "jv"
 
 
 async def test_delete_command_removes_project(tmp_path, monkeypatch):
@@ -800,6 +744,36 @@ async def test_cmd_language_interactive_and_direct(tmp_path, monkeypatch):
 
         assert app.app_config.transcription.language == "es"
         assert load_app_config(config_path).transcription.language == "es"
+
+
+async def test_download_model_background_with_progress(tmp_path):
+    from subforge.app.model_manager import LocalModelManager
+
+    app = SubForgeApp()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+
+        def fake_install(model_id, progress_callback=None, force=False):
+            if progress_callback:
+                progress_callback(25, 100)
+                progress_callback(50, 100)
+                progress_callback(100, 100)
+            return Path(f"/fake/{model_id}")
+
+        mgr = LocalModelManager(
+            cache_checker=lambda m: False,
+            downloader=lambda m: f"/fake/{m}",
+        )
+        mgr.install = fake_install  # type: ignore[assignment]
+
+        app.download_model_background("tiny", manager=mgr)
+        await pilot.pause(0.2)
+
+        text = transcript_text(app)
+        assert "Downloading Whisper model" in text
+        assert "downloaded and ready" in text
+
+
 
 
 

@@ -10,25 +10,15 @@ class ProviderRegistry:
 
     def __init__(self) -> None:
         self._transcription: dict[str, Callable[..., Any]] = {}
-        self._translation: dict[str, Callable[..., Any]] = {}
 
     def register_transcription(self, name: str, factory: Callable[..., Any]) -> None:
         self._transcription[name] = factory
-
-    def register_translation(self, name: str, factory: Callable[..., Any]) -> None:
-        self._translation[name] = factory
 
     def resolve_transcription(self, name: str) -> Any:
         try:
             return self._transcription[name]
         except KeyError:
             raise self.ProviderNotFound(f"transcription provider not registered: {name}") from None
-
-    def resolve_translation(self, name: str) -> Any:
-        try:
-            return self._translation[name]
-        except KeyError:
-            raise self.ProviderNotFound(f"translation provider not registered: {name}") from None
 
 
 REGISTRY = ProviderRegistry()

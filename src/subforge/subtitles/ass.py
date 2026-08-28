@@ -30,29 +30,22 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
 
 
-def _text_for(seg: Segment, language: str | None) -> str:
-    return seg.source if language is None else seg.translations[language]
-
-
 def render_ass(
     segments: list[Segment],
-    language: str | None = None,
     styles: AssStyles | None = None,
 ) -> str:
     st = styles or AssStyles()
     lines = [_HEADER_TEMPLATE.format(font=st.font_name, size=st.font_size, primary=st.primary_color)]
     for seg in sorted(segments, key=lambda s: s.start):
-        text = _text_for(seg, language)
-        lines.append(f"Dialogue: 0,{format_ass(seg.start)},{format_ass(seg.end)},Default,,0,0,0,,{text}")
+        lines.append(f"Dialogue: 0,{format_ass(seg.start)},{format_ass(seg.end)},Default,,0,0,0,,{seg.source}")
     return "\n".join(lines) + "\n"
 
 
 def write_ass(
     segments: list[Segment],
     path: Path,
-    language: str | None = None,
     styles: AssStyles | None = None,
 ) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(render_ass(segments, language, styles), encoding="utf-8")
+    path.write_text(render_ass(segments, styles), encoding="utf-8")
     return path

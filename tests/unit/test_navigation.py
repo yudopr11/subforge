@@ -2,41 +2,27 @@
 
 from pathlib import Path
 
-import pytest
-
 from subforge.app.project_store import create_project, load_project, save_project
 from subforge.models.project import ProjectMeta, Segment
 from subforge.tui.app import SubForgeApp
 from subforge.tui.screens.caption_review import CaptionReviewScreen
 from subforge.tui.screens.repl import ReplScreen
-from subforge.tui.screens.review_translate import ReviewTranslateScreen
 
 
 def seed_segments(tmp_path: Path):
-    d = create_project(tmp_path / "p", ProjectMeta(name="p", source_language="id", target_languages=["en"]))
+    d = create_project(tmp_path / "p", ProjectMeta(name="p", source_language="id"))
     project = load_project(d)
-    project.segments = [Segment(id=1, start=1.0, end=2.0, source="halo", translations={"en": "hello"})]
+    project.segments = [Segment(id=1, start=1.0, end=2.0, source="halo")]
     save_project(d, project)
     return d
 
 
-@pytest.mark.parametrize(
-    "screen_factory",
-    [
-        lambda d: CaptionReviewScreen(d),
-        lambda d: ReviewTranslateScreen(d),
-    ],
-)
-async def test_escape_returns_to_repl_home(tmp_path, screen_factory):
-    from subforge.app.translation_service import TranslationService
-
+async def test_escape_returns_to_repl_home(tmp_path):
     d = seed_segments(tmp_path)
     app = SubForgeApp(project_dir=d)
     async with app.run_test() as pilot:
         await pilot.pause()
-        screen = screen_factory(d)
-        if isinstance(screen, ReviewTranslateScreen):
-            screen.service = TranslationService(provider=None)  # type: ignore[arg-type]
+        screen = CaptionReviewScreen(d)
         await app.push_screen(screen)
         await pilot.pause()
 

@@ -22,7 +22,6 @@ from subforge.app.projects import create_project_from_audio, discover_projects, 
 from subforge.app.provider_factory import (
     build_pipeline,
     transcription_configured,
-    translation_configured,
 )
 from subforge.models.project import StageState
 from subforge.tui.widgets import SelectableRichLog
@@ -35,9 +34,9 @@ def _glyph(state: StageState) -> str:
     return {
         StageState.PENDING: "○",
         StageState.RUNNING: "●",
-        StageState.COMPLETED: "[green]✓[/green]",
-        StageState.FAILED: "[red]✗[/red]",
-        StageState.SKIPPED: "[dim]–[/dim]",
+        StageState.COMPLETED: "✓",
+        StageState.FAILED: "✗",
+        StageState.SKIPPED: "–",
     }[state]
 
 
@@ -48,8 +47,6 @@ class ReplScreen(Screen[None]):
         Binding("ctrl+n", "hotkey_new", "New Project", show=False),
         Binding("ctrl+t", "hotkey_transcribe", "Transcribe", show=False),
         Binding("ctrl+r", "hotkey_review", "Review Captions", show=False),
-        Binding("ctrl+l", "hotkey_translate", "Translate", show=False),
-        Binding("ctrl+v", "hotkey_view_tl", "View Translation", show=False),
         Binding("ctrl+e", "hotkey_export", "Export", show=False),
         Binding("ctrl+p", "hotkey_projects", "Projects", show=False),
         Binding("ctrl+m", "hotkey_models", "Models", show=False),
@@ -85,8 +82,7 @@ class ReplScreen(Screen[None]):
         ("/models", "manage and select local Whisper models"),
         ("/language", "set default audio source language"),
         ("/transcribe", "run transcription"),
-        ("/review", "searchable picker: captions or translated languages"),
-        ("/translate", "translate to English"),
+        ("/review", "edit and review caption segments"),
         ("/export", "export SRT/ASS"),
         ("/wizard", "re-run guided setup"),
         ("/status", "pipeline stage states"),
@@ -100,7 +96,7 @@ class ReplScreen(Screen[None]):
             yield Label("", id="next-action-banner")
             yield Label("", id="status-bar")
         yield Label(
-            "[b cyan]N[/b cyan] New  [b cyan]T[/b cyan] Transcribe  [b cyan]R[/b cyan] Review  [b cyan]L[/b cyan] Translate  [b cyan]V[/b cyan] View EN  [b cyan]E[/b cyan] Export  [b cyan]P[/b cyan] Projects  [b cyan]M[/b cyan] Models  [b cyan]?[/b cyan] Help",
+            "[b]N[/b] New  │  [b]T[/b] Transcribe  │  [b]R[/b] Review  │  [b]E[/b] Export  │  [b]P[/b] Projects  │  [b]M[/b] Models  │  [b]S[/b] Settings  │  [b]?[/b] Help",
             id="hotkey-bar",
         )
         with Vertical():
@@ -110,10 +106,10 @@ class ReplScreen(Screen[None]):
         with Vertical(id="autocomplete-container"):
             yield OptionList(id="autocomplete-list")
         yield Static(
-            "/new /open /projects /delete /models /language /transcribe /review /translate /export /wizard /status ? quit",
+            "/new /open /projects /delete /models /language /transcribe /review /export /wizard /status ? quit",
             id="command-legend",
         )
-        yield Input(placeholder="Type a command or press hotkey (N, T, R, L, E, P, M, S)...", id="prompt")
+        yield Input(placeholder="Type a command or press hotkey (N, T, R, E, P, M, S)...", id="prompt")
         yield Label("", id="footer-bar")
 
     def on_mount(self) -> None:
@@ -144,12 +140,8 @@ class ReplScreen(Screen[None]):
         if host.project_dir is not None:
             parts.append(f"project:{host.project_dir.name}")
         tc = host.app_config.transcription
-        tl = host.app_config.translation
         if tc.model:
             parts.append(f"asr:{tc.provider}:{tc.model}")
-        if tl.model:
-            src = tl.provider if tl.source == "provider" else "local"
-            parts.append(f"mt:{src}:{tl.model}")
         if not parts:
             parts.append("no project")
         footer = " · ".join(parts)
@@ -158,83 +150,62 @@ class ReplScreen(Screen[None]):
     def _render_project_banner(self) -> str:
         project_dir = self._host.project_dir
         if project_dir is None:
-            return "[b cyan]SUBFORGE STUDIO[/b cyan] · [dim]No project loaded (press [N] to create, [P] to open)[/dim]"
+            return "┌─ [b]SUBFORGE STUDIO[/b] · [dim]No project loaded (press [N] to create, [P] to open)[/dim]"
         try:
             project = load_project(project_dir)
             p_meta = project.project
             src = p_meta.source_language or "auto"
-            tgts = ", ".join(p_meta.target_languages) or self._host.app_config.translation.default_target or "en"
             audio = find_audio_file(project_dir)
             audio_name = audio.name if audio else "no audio"
             seg_count = len(project.segments)
             return (
-                f"[b cyan]SUBFORGE STUDIO[/b cyan] · Project: [b white]{p_meta.name}[/b white]  │  "
-                f"Lang: [cyan]{src}[/cyan] → [green]{tgts}[/green]  │  "
-                f"Audio: [yellow]{audio_name}[/yellow] ({seg_count} segments)"
+                f"┌─ [b]PROJECT:[/b] {p_meta.name}  │  "
+                f"[b]LANG:[/b] {src}  │  "
+                f"[b]AUDIO:[/b] {audio_name} ({seg_count} segments)"
             )
         except Exception:  # noqa: BLE001
-            return f"[b cyan]SUBFORGE STUDIO[/b cyan] · Project: [b white]{project_dir.name}[/b white]"
+            return f"┌─ [b]PROJECT:[/b] {project_dir.name}"
 
     def _render_pipeline_stepper(self) -> str:
         project_dir = self._host.project_dir
         if project_dir is None:
-            return "[dim]Pipeline: [1. New] ──▶ [2. Transcribe] ──▶ [3. Review] ──▶ [4. Translate] ──▶ [5. Export][/dim]"
+            return "│  Pipeline: [1. New] ──▶ [2. Transcribe] ──▶ [3. Review] ──▶ [4. Export]"
         try:
             project = load_project(project_dir)
         except Exception:  # noqa: BLE001
-            return "[dim]Pipeline: [1. New] ──▶ [2. Transcribe] ──▶ [3. Review] ──▶ [4. Translate] ──▶ [5. Export][/dim]"
+            return "│  Pipeline: [1. New] ──▶ [2. Transcribe] ──▶ [3. Review] ──▶ [4. Export]"
 
         t_stage = project.get_stage("transcription")
         has_captions = len(project.segments) > 0
-        tl_stages = [project.get_stage(k) for k in project.stages if k.startswith("translation_")]
-        tl_state = StageState.PENDING
-        if any(s == StageState.RUNNING for s in tl_stages):
-            tl_state = StageState.RUNNING
-        elif any(s == StageState.COMPLETED for s in tl_stages) or any(
-            any(s.translations.values()) for s in project.segments
-        ):
-            tl_state = StageState.COMPLETED
-        elif any(s == StageState.FAILED for s in tl_stages):
-            tl_state = StageState.FAILED
-
         export_stage = project.get_stage("export")
 
         pills = [
-            f"[b cyan]\\[[/b cyan]{_glyph(t_stage)} Transcribe[b cyan]\\][/b cyan]",
-            f"[b cyan]\\[[/b cyan]{'[green]✓[/green]' if has_captions else '○'} Review[b cyan]\\][/b cyan]",
-            f"[b cyan]\\[[/b cyan]{_glyph(tl_state)} Translate[b cyan]\\][/b cyan]",
-            f"[b cyan]\\[[/b cyan]{_glyph(export_stage)} Export[b cyan]\\][/b cyan]",
+            f"\\[{_glyph(t_stage)} Transcribe\\]",
+            f"\\[{'✓' if has_captions else '○'} Review\\]",
+            f"\\[{_glyph(export_stage)} Export\\]",
         ]
-        return "Pipeline: " + " [dim]──▶[/dim] ".join(pills)
+        return "│  [b]PIPELINE:[/b] " + " ─▶ ".join(pills)
 
     def _render_next_step(self) -> str:
         project_dir = self._host.project_dir
         if project_dir is None:
-            return "[b yellow]▶ Suggested Next Step:[/b yellow] Press [b cyan][N][/b cyan] to create a New project or [b cyan][P][/b cyan] to Open an existing project."
+            return "└─ [b]NEXT:[/b] Press [b]N[/b] to create a New project or [b]P[/b] to Open an existing project."
         try:
             project = load_project(project_dir)
         except Exception:  # noqa: BLE001
-            return "[b yellow]▶ Suggested Next Step:[/b yellow] Press [b cyan][N][/b cyan] to create a New project or [b cyan][P][/b cyan] to Open an existing project."
+            return "└─ [b]NEXT:[/b] Press [b]N[/b] to create a New project or [b]P[/b] to Open an existing project."
 
         t_stage = project.get_stage("transcription")
         if t_stage in (StageState.PENDING, StageState.FAILED):
-            return "[b yellow]▶ Suggested Next Step:[/b yellow] Press [b cyan][T][/b cyan] to Transcribe audio with whisper.cpp."
+            return "└─ [b]NEXT:[/b] Press [b]T[/b] to Transcribe audio with whisper.cpp."
         if t_stage == StageState.RUNNING:
-            return "[b yellow]▶ Suggested Next Step:[/b yellow] ⏳ Transcription in progress… please wait."
+            return "└─ [b]NEXT:[/b] ⏳ Transcription in progress… please wait."
 
-        tl_stages = {k: project.get_stage(k) for k in project.stages if k.startswith("translation_")}
-        has_any_tl = any(s == StageState.COMPLETED for s in tl_stages.values()) or any(
-            any(s.translations.values()) for s in project.segments
-        )
         export_stage = project.get_stage("export")
-
         if export_stage == StageState.COMPLETED:
-            return "[b yellow]▶ Suggested Next Step:[/b yellow] Subtitles exported! Press [b cyan][E][/b cyan] to re-export, [b cyan][R][/b cyan] to edit captions, or [b cyan][V][/b cyan] to edit translations."
+            return "└─ [b]NEXT:[/b] Subtitles exported! Press [b]E[/b] to re-export or [b]R[/b] to edit captions."
 
-        if has_any_tl:
-            return "[b yellow]▶ Suggested Next Step:[/b yellow] Press [b cyan][E][/b cyan] to Export Subtitles (SRT / ASS) or [b cyan][V][/b cyan] to View Translations."
-
-        return "[b yellow]▶ Suggested Next Step:[/b yellow] Press [b cyan][R][/b cyan] to Review Captions or [b cyan][L][/b cyan] to Translate."
+        return "└─ [b]NEXT:[/b] Press [b]R[/b] to Review Captions or [b]E[/b] to Export Subtitles."
 
     def refresh_status(self) -> None:
         """Header status line: project banner, pipeline stepper, next action, footer."""
@@ -243,12 +214,8 @@ class ReplScreen(Screen[None]):
         project_dir = host.project_dir
         model_bits: list[str] = []
         tc = host.app_config.transcription
-        tl = host.app_config.translation
         if tc.model:
             model_bits.append(f"asr:{tc.provider}:{tc.model}")
-        if tl.model:
-            src = tl.provider if tl.source == "provider" else "local"
-            model_bits.append(f"mt:{src}:{tl.model}")
 
         if project_dir is None:
             parts.append("no project")
@@ -257,9 +224,6 @@ class ReplScreen(Screen[None]):
             try:
                 project = load_project(project_dir)
                 shown: dict[str, StageState] = {s: project.get_stage(s) for s in ALL_STAGES}
-                for key in sorted(project.stages):
-                    if key.startswith("translation_"):
-                        shown[key.replace("translation_", "tl:")] = project.get_stage(key)
                 for label in sorted(shown):
                     if shown[label] is not StageState.PENDING or label == "transcription":
                         parts.append(f"{label} {_glyph(shown[label])}")
@@ -385,8 +349,6 @@ class ReplScreen(Screen[None]):
                     "n": self.action_hotkey_new,
                     "t": self.action_hotkey_transcribe,
                     "r": self.action_hotkey_review,
-                    "l": self.action_hotkey_translate,
-                    "v": self.action_hotkey_view_tl,
                     "e": self.action_hotkey_export,
                     "p": self.action_hotkey_projects,
                     "m": self.action_hotkey_models,
@@ -474,8 +436,6 @@ class ReplScreen(Screen[None]):
                     "n": self.action_hotkey_new,
                     "t": self.action_hotkey_transcribe,
                     "r": self.action_hotkey_review,
-                    "l": self.action_hotkey_translate,
-                    "v": self.action_hotkey_view_tl,
                     "e": self.action_hotkey_export,
                     "p": self.action_hotkey_projects,
                     "m": self.action_hotkey_models,
@@ -499,21 +459,6 @@ class ReplScreen(Screen[None]):
         self._cmd_transcribe("")
 
     def action_hotkey_review(self) -> None:
-        self._cmd_review("")
-
-    def action_hotkey_translate(self) -> None:
-        self._cmd_translate("")
-
-    def action_hotkey_view_tl(self) -> None:
-        project_dir = self._host.project_dir
-        if project_dir is not None:
-            try:
-                p = load_project(project_dir)
-                if p.project.target_languages:
-                    self._cmd_review(p.project.target_languages[0])
-                    return
-            except Exception:  # noqa: BLE001, S110
-                pass
         self._cmd_review("")
 
     def action_hotkey_export(self) -> None:
@@ -618,8 +563,6 @@ class ReplScreen(Screen[None]):
         cfg = self._host.app_config
         if not transcription_configured(cfg):
             self.log_line('[dim]tip: no transcribe provider yet — run /settings or /wizard[/dim]')
-        if not translation_configured(cfg):
-            self.log_line('[dim]tip: no translate provider yet — run /settings or /wizard[/dim]')
 
     def _launch_stage(self, stage: str, work: Callable[[], str], busy_label: str) -> None:
         if stage in self._running_stages:
@@ -757,83 +700,22 @@ class ReplScreen(Screen[None]):
         project_dir = self._require_project()
         if project_dir is None:
             return
-        from subforge.tui.screens.review_picker import ReviewPickerScreen
+        from subforge.tui.screens.caption_review import CaptionReviewScreen, player_for
 
-        if arg:
-            # /review <lang> -> translation review for that language (PRD §13)
-            from subforge.tui.screens.review_translate import ReviewTranslateScreen
-
-            self._host.push_screen(ReviewTranslateScreen(project_dir, language=arg.strip().lower()))
-            return
-        # bare /review -> searchable picker of what's available (captions, translations)
-        self._host.push_screen(ReviewPickerScreen(project_dir), self._review_picked)
-
-    def _review_picked(self, picked: object) -> None:
-        """Review picker result: CAPTIONS, a language code, or None (cancelled)."""
-        if picked is None:
-            return
-        project_dir = self._require_project()
-        if project_dir is None:
-            return
-        from subforge.tui.screens.review_picker import ReviewPickerScreen
-
-        if picked == ReviewPickerScreen.CAPTIONS:
-            from subforge.tui.screens.caption_review import CaptionReviewScreen, player_for
-
-            audio = find_audio_file(project_dir)
-            player = player_for(audio) if audio else None
-            self._host.push_screen(CaptionReviewScreen(project_dir, player=player))
-            return
-        from subforge.tui.screens.review_translate import ReviewTranslateScreen
-
-        self._host.push_screen(ReviewTranslateScreen(project_dir, language=str(picked)))
-
-    def _cmd_translate(self, arg: str) -> None:
-        if "translation" in self._running_stages:
-            self.log_line("[yellow]⏳[/yellow] translation already running…")
-            return
-        project_dir = self._require_project()
-        if project_dir is None:
-            return
-        language = arg.strip().lower() or self._host.app_config.translation.default_target
-        if not language:
-            from subforge.tui.screens.project import TargetLanguageScreen
-
-            self._host.push_screen(
-                TargetLanguageScreen(),
-                lambda lang: self._begin_translate(str(lang)) if lang else None,
-            )
-            return
-        self._begin_translate(language)
-
-    def _begin_translate(self, language: str) -> None:
-        seam = self.pipeline_factory is not None
-        if not seam and not translation_configured(self._host.app_config):
-            self.log_line(
-                "[SETUP] No translation provider yet — run /settings or /wizard first."
-            )
-            return
-        project_dir = self._require_project()
-        if project_dir is None:
-            return
-        pipeline = self._make_pipeline(project_dir)
-
-        def work() -> str:
-            pipeline.run_translation(language)
-            n = sum(1 for s in pipeline.load().segments if language in s.translations)
-            return f"translated to '{language}' — {n} segments"
-
-        self._launch_stage("translation", work, f"translating to '{language}'")
-        self._host.app_config.translation.default_target = language
+        audio = find_audio_file(project_dir)
+        player = player_for(audio) if audio else None
+        self._host.push_screen(CaptionReviewScreen(project_dir, player=player))
 
     def _cmd_export(self, arg: str) -> None:
         formats = [f.strip() for f in arg.split(",")] if arg else ["srt", "ass"]
         project_dir = self._require_project()
         if project_dir is None:
             return
-        languages = [l for l in load_project(project_dir).project.target_languages if l]
+        cwd = Path.cwd()
         try:
-            paths = export_subtitles(project_dir, formats=formats, languages=languages)
+            paths = export_subtitles(
+                project_dir, formats=formats, output_dir=cwd
+            )
         except ValueError as exc:
             self.log_line(str(exc))
             return
@@ -841,9 +723,10 @@ class ReplScreen(Screen[None]):
             self.log_line("▸ (nothing to export yet)")
         else:
             export_dir = (project_dir / "exports").resolve()
-            self.log_line(f"✓ Exported {len(paths)} subtitle file(s) to [b]{export_dir}[/b]:")
+            self.log_line(f"✓ Exported {len(paths)} subtitle file(s) to [b]{cwd}[/b]:")
             for p in paths:
-                self.log_line(f"  • [green]{p.name}[/green]")
+                self.log_line(f"  • [green]{p.resolve()}[/green]")
+            self.log_line(f"[dim]  (internal copies saved to {export_dir})[/dim]")
         self.refresh_status()
 
     def _cmd_projects(self, arg: str) -> None:
@@ -979,12 +862,8 @@ class ReplScreen(Screen[None]):
         self.log_line(f"project [b]{project.project.name}[/b]")
         for stage in ALL_STAGES:
             self.log_line(f"  {stage:<14} {_glyph(project.get_stage(stage))}")
-        for key in sorted(project.stages):
-            if key.startswith("translation_"):
-                self.log_line(f"  {key:<14} {_glyph(project.get_stage(key))}")
         src = project.project.source_language or "(auto)"
-        targets = ", ".join(project.project.target_languages) or "(none)"
-        self.log_line(f"  languages      source={src} · targets={targets}")
+        self.log_line(f"  language       source={src}")
 
     def _cmd_help(self, arg: str) -> None:
         rows = [
@@ -995,8 +874,7 @@ class ReplScreen(Screen[None]):
             ("/models", "manage & select Whisper GGML models"),
             ("/language [lang]", "set default audio source language"),
             ("/transcribe", "run transcription"),
-            ("/review [lang]", "searchable picker (captions · translations); <lang> direct"),
-            ("/translate", "translate to English"),
+            ("/review", "edit & review caption segments"),
             ("/export [formats]", "export SRT/ASS"),
             ("/wizard", "re-run guided setup"),
             ("/status", "pipeline stage states"),

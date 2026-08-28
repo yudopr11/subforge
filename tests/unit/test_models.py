@@ -3,14 +3,13 @@ from subforge.models.project import Project, ProjectMeta, Segment, StageState
 
 def make_project() -> Project:
     return Project(
-        project=ProjectMeta(name="yt-001", source_language="id", target_languages=["en"]),
+        project=ProjectMeta(name="yt-001", source_language="id"),
         segments=[
             Segment(
                 id=1,
                 start=1.2,
                 end=3.4,
                 source="Halo semuanya!",
-                translations={"en": "Hello everyone!"},
             ),
             Segment(id=2, start=3.5, end=6.8, source="Selamat datang kembali."),
         ],
@@ -19,7 +18,7 @@ def make_project() -> Project:
 
 def test_segment_defaults():
     seg = Segment(id=1, start=0.0, end=1.0, source="hi")
-    assert seg.translations == {}
+    assert seg.source == "hi"
 
 
 def test_roundtrip_serialization():
@@ -36,8 +35,8 @@ def test_stage_defaults_to_pending():
 
 def test_set_and_get_stage():
     p = make_project()
-    p.set_stage("translation_en", StageState.FAILED)
-    assert p.get_stage("translation_en") is StageState.FAILED
+    p.set_stage("export", StageState.COMPLETED)
+    assert p.get_stage("export") is StageState.COMPLETED
 
 
 def test_transcript_normalization():

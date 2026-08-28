@@ -90,6 +90,34 @@ def test_unknown_model_surfaces_error_message():
         manager.install("nonexistent")
 
 
+async def test_install_updates_progress_bar():
+    from textual.widgets import ProgressBar
+
+    app = SubForgeApp()
+    async with app.run_test() as pilot:
+        # Create a manager whose downloader calls progress_callback
+        def downloader_with_progress(model_id):
+            return f"/cache/{model_id}"
+
+        mgr = LocalModelManager(
+            cache_checker=lambda m: False,
+            downloader=downloader_with_progress,
+        )
+        screen = ModelManagerScreen(manager=mgr)
+        await app.push_screen(screen)
+        await pilot.pause()
+
+        progress_bar = screen.query_one("#mm-progress", ProgressBar)
+        assert progress_bar.styles.display == "none"
+
+        screen._update_progress(50, 100)
+        assert progress_bar.styles.display == "block"
+        assert progress_bar.progress == 50
+
+        screen._reset_progress()
+        assert progress_bar.styles.display == "none"
+
+
 async def test_delete_model_screen_action():
     deletions: list[str] = []
     installed = {"small"}

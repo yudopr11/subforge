@@ -6,7 +6,7 @@ from pathlib import Path
 from subforge.models.project import Project, ProjectMeta
 
 _PROJECT_FILE = "project.json"
-_SUBDIRS = ("audio", "transcripts", "translations", "exports")
+_SUBDIRS = ("audio", "transcripts", "exports")
 
 
 def create_project(directory: Path, meta: ProjectMeta) -> Path:

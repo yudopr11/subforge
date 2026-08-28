@@ -20,7 +20,6 @@ class Segment(BaseModel):
     start: float
     end: float
     source: str
-    translations: dict[str, str] = Field(default_factory=dict)
 
 
 class TranscriptSegment(BaseModel):
@@ -39,13 +38,12 @@ class Transcript(BaseModel):
 
 class ProjectMeta(BaseModel):
     name: str
-    source_language: str
-    target_languages: list[str] = Field(default_factory=list)
+    source_language: str = ""
 
 
 class Project(BaseModel):
     project: ProjectMeta
-    segments: list[Segment]
+    segments: list[Segment] = Field(default_factory=list)
     stages: dict[str, StageState] = Field(default_factory=dict)
 
     def get_stage(self, name: str) -> StageState:

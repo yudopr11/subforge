@@ -96,7 +96,6 @@ class WhisperCppProvider:
         self,
         audio_path: Path,
         language: str | None = None,
-        translate: bool = False,
     ) -> Transcript:
         if not self.model_manager.is_installed(self.model_name):
             raise RuntimeError(
@@ -128,8 +127,6 @@ class WhisperCppProvider:
                 cmd.append("-ng")
             if language:
                 cmd.extend(["-l", language])
-            if translate:
-                cmd.append("-tr")
 
             try:
                 proc = subprocess.run(

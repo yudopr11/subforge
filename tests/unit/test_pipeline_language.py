@@ -1,8 +1,6 @@
 from pathlib import Path
 
-import pytest
-
-from subforge.app.pipeline import Pipeline, StageError
+from subforge.app.pipeline import Pipeline
 from subforge.app.project_store import create_project, load_project
 from subforge.config.settings import Settings
 from subforge.models.project import ProjectMeta
@@ -59,17 +57,3 @@ def test_no_detected_language_leaves_meta_empty(tmp_path):
     asr = FakeASR(make_transcript(None))
     Pipeline(d, Settings(), transcription=asr).run_transcription("a.wav")
     assert load_project(d).project.source_language == ""
-
-
-def test_translate_empty_project_fails_loudly(tmp_path):
-    """Zero segments must not 'succeed' with 0 batches (PRD §21 loud failures)."""
-    d = setup(tmp_path)
-    from subforge.app.translation_service import TranslationService
-
-    class Never:
-        def translate(self, segments, s, t, reasoning_effort=None):
-            raise AssertionError("provider must not be called")
-
-    pipe = Pipeline(d, Settings(), transcription=None, translation_service=TranslationService(Never()))
-    with pytest.raises(StageError, match="No captions to translate"):
-        pipe.run_translation("en")

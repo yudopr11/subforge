@@ -23,21 +23,8 @@ class TranscriptionConfig(BaseModel):
     models_dir: str = ""  # optional custom models directory
 
 
-class TranslationConfig(BaseModel):
-    source: Literal["local", "provider"] = "local"
-    local_base_url: str = "http://localhost:1234/v1"  # LM Studio / Ollama (OpenAI-compatible)
-    local_api_key: str = ""  # usually empty for local servers
-    provider: Literal["openai", "opencode-zen", "opencode-go"] = "openai"
-    api_key: str = ""
-    model: str = ""
-    reasoning_effort: str = ""  # MUST be one of the model's discovered values (Task 21)
-    batch_size: int = 5  # PRD §11 contextual batch of five segments
-    default_target: str = "en"  # remembered translation target language
-
-
 class AppConfig(BaseModel):
     transcription: TranscriptionConfig = TranscriptionConfig()
-    translation: TranslationConfig = TranslationConfig()
 
 
 def default_config_path() -> Path:

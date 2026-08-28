@@ -18,29 +18,17 @@ def test_defaults_are_local_and_empty_secrets():
     assert cfg.transcription.language == ""
     assert cfg.transcription.binary_path == ""
     assert cfg.transcription.models_dir == ""
-    assert cfg.translation.source == "local"
-    assert cfg.translation.local_base_url == "http://localhost:1234/v1"
-    assert cfg.translation.api_key == ""
-    assert cfg.translation.reasoning_effort == ""
 
 
 def test_save_load_roundtrip(tmp_path):
     path = tmp_path / "subforge" / "config.json"
     cfg = AppConfig(
         transcription={"provider": "local", "model": "small", "language": "en", "binary_path": "whisper-cli"},
-        translation={
-            "source": "provider",
-            "provider": "opencode-go",
-            "api_key": "oc-t",
-            "model": "glm-5.2",
-            "reasoning_effort": "high",
-        },
     )
     save_app_config(cfg, path)
     loaded = load_app_config(path)
     assert loaded == cfg
     assert loaded.transcription.model == "small"
-    assert loaded.translation.model == "glm-5.2"
 
 
 def test_missing_file_returns_defaults(tmp_path):

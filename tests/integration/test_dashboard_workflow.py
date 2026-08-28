@@ -13,7 +13,7 @@ async def test_dashboard_hotkeys_and_next_action(tmp_path: Path, monkeypatch: py
     monkeypatch.setenv("SUBFORGE_PROJECTS_DIR", str(tmp_path))
     proj_dir = tmp_path / "Demo"
     proj = Project(
-        project=ProjectMeta(name="Demo", source_language="id", target_languages=["en"]),
+        project=ProjectMeta(name="Demo", source_language="id"),
         segments=[],
     )
     save_project(proj_dir, proj)
@@ -35,11 +35,10 @@ async def test_dashboard_stepper_and_status(tmp_path: Path, monkeypatch: pytest.
     monkeypatch.setenv("SUBFORGE_PROJECTS_DIR", str(tmp_path))
     proj_dir = tmp_path / "DemoStepper"
     proj = Project(
-        project=ProjectMeta(name="DemoStepper", source_language="id", target_languages=["en"]),
+        project=ProjectMeta(name="DemoStepper", source_language="id"),
         segments=[],
     )
     proj.set_stage("transcription", StageState.COMPLETED)
-    proj.set_stage("translation_en", StageState.RUNNING)
     save_project(proj_dir, proj)
 
     app = SubForgeApp()
@@ -51,7 +50,7 @@ async def test_dashboard_stepper_and_status(tmp_path: Path, monkeypatch: pytest.
 
         stepper = repl._render_pipeline_stepper()
         assert "Transcribe" in stepper
-        assert "Translate" in stepper
+        assert "Review" in stepper
 
 
 @pytest.mark.asyncio
@@ -98,7 +97,7 @@ async def test_dashboard_export_refreshes_status(tmp_path: Path, monkeypatch: py
     monkeypatch.setenv("SUBFORGE_PROJECTS_DIR", str(tmp_path))
     proj_dir = tmp_path / "DemoExport"
     proj = Project(
-        project=ProjectMeta(name="DemoExport", source_language="id", target_languages=["en"]),
+        project=ProjectMeta(name="DemoExport", source_language="id"),
         segments=[],
     )
     save_project(proj_dir, proj)

@@ -8,7 +8,7 @@ from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.coordinate import Coordinate
 from textual.screen import ModalScreen
-from textual.widgets import Button, DataTable, Label
+from textual.widgets import Button, DataTable, Label, ProgressBar
 
 from subforge.app.model_manager import LocalModelInfo, LocalModelManager
 
@@ -46,9 +46,14 @@ class ModelManagerScreen(ModalScreen[str | None]):
                 "[dim]Enter: select (auto-installs if needed) · i: install · d / Del: delete · ↑↓: move · Esc: cancel[/dim]",
                 id="mm-hints",
             )
+            yield ProgressBar(id="mm-progress", show_eta=True, show_percentage=True)
             yield Label("", id="mm-status")
 
     def on_mount(self) -> None:
+        try:
+            self.query_one("#mm-progress", ProgressBar).styles.display = "none"
+        except Exception:  # noqa: BLE001, S110
+            pass
         table = self.query_one(DataTable)
         table.add_columns("Model", "Profile", "VRAM / Size", "Status")
         self._rows: list[LocalModelInfo] = []
@@ -58,6 +63,23 @@ class ModelManagerScreen(ModalScreen[str | None]):
                 if info.id == self.current_model:
                     table.cursor_coordinate = Coordinate(idx, 0)
                     break
+
+    def _update_progress(self, downloaded: int, total: int) -> None:
+        try:
+            bar = self.query_one("#mm-progress", ProgressBar)
+            if total > 0:
+                bar.styles.display = "block"
+                bar.update(total=total, progress=downloaded)
+        except Exception:  # noqa: BLE001, S110
+            pass
+
+    def _reset_progress(self) -> None:
+        try:
+            bar = self.query_one("#mm-progress", ProgressBar)
+            bar.styles.display = "none"
+            bar.update(total=100, progress=0)
+        except Exception:  # noqa: BLE001, S110
+            pass
 
     # ---- tested seams ----------------------------------------------------
 
@@ -93,8 +115,10 @@ class ModelManagerScreen(ModalScreen[str | None]):
                 msg = f"Downloading {model_id}: {dl_mb:.1f} MB..."
             try:
                 self.app.call_from_thread(self._set_status, msg)
+                self.app.call_from_thread(self._update_progress, downloaded, total)
             except Exception:  # noqa: BLE001
                 self._set_status(msg)
+                self._update_progress(downloaded, total)
 
         try:
             self.manager.install(model_id, progress_callback=_on_progress)
@@ -104,6 +128,11 @@ class ModelManagerScreen(ModalScreen[str | None]):
         except Exception as exc:  # noqa: BLE001
             self._set_status(f"[ERROR] {exc}")
             return f"[ERROR] {exc}"
+        finally:
+            try:
+                self.app.call_from_thread(self._reset_progress)
+            except Exception:  # noqa: BLE001
+                self._reset_progress()
 
         try:
             self.app.call_from_thread(self.refresh_rows)

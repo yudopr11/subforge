@@ -19,17 +19,8 @@ class TranscriptionSettings(BaseModel):
     compute_type: str = "auto"
 
 
-class TranslationSettings(BaseModel):
-    provider: str = "openai-compatible"
-    base_url: str = "http://localhost:1234/v1"
-    api_key: str = ""
-    model: str = ""
-    batch_size: int = 5  # PRD §11 contextual batch of five segments
-
-
 class Settings(BaseModel):
     transcription: TranscriptionSettings = TranscriptionSettings()
-    translation: TranslationSettings = TranslationSettings()
 
 
 def _parse_bool(raw: str) -> bool:
@@ -65,7 +56,6 @@ def load_settings(env_file: Path | str | None = ".env") -> Settings:
     settings = Settings()
     for group_name, group_model in (
         ("transcription", TranscriptionSettings),
-        ("translation", TranslationSettings),
     ):
         updates: dict[str, Any] = {}
         for field_name in group_model.model_fields:

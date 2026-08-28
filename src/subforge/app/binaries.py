@@ -19,7 +19,7 @@ WHISPER_CPP_WIN_VULKAN_ZIP = (
     "https://github.com/ggml-org/whisper.cpp/releases/latest/download/whisper-vulkan-bin-x64.zip"
 )
 WHISPER_CPP_WIN_CUDA_ZIP = (
-    "https://github.com/ggml-org/whisper.cpp/releases/latest/download/whisper-cublas-12.2.0-bin-x64.zip"
+    "https://github.com/ggml-org/whisper.cpp/releases/latest/download/whisper-cublas-12.4.0-bin-x64.zip"
 )
 WHISPER_CPP_LINUX_X64_ZIP = (
     "https://github.com/ggml-org/whisper.cpp/releases/latest/download/whisper-bin-linux-x64.zip"
@@ -60,6 +60,72 @@ def find_in_path_or_bin(tool_name: str, bin_dir: Path | None = None) -> Path | N
     return None
 
 
+def _download_stream_bytes(
+    client: httpx.Client,
+    url: str,
+    description: str,
+    progress_callback: Callable[[float, str], Any] | None = None,
+) -> bytes:
+    with client.stream("GET", url) as response:
+        response.raise_for_status()
+        total_header = response.headers.get("content-length")
+        total_bytes = int(total_header) if total_header and total_header.isdigit() else 0
+        buffer = bytearray()
+        downloaded = 0
+        for chunk in response.iter_bytes(chunk_size=65536):
+            if chunk:
+                buffer.extend(chunk)
+                downloaded += len(chunk)
+                if progress_callback:
+                    if total_bytes > 0:
+                        pct = downloaded / total_bytes
+                        dl_mb = downloaded / (1024 * 1024)
+                        tot_mb = total_bytes / (1024 * 1024)
+                        progress_callback(
+                            pct,
+                            f"{description}: {dl_mb:.1f}/{tot_mb:.1f} MB ({int(pct * 100)}%)",
+                        )
+                    else:
+                        dl_mb = downloaded / (1024 * 1024)
+                        progress_callback(0.0, f"{description}: {dl_mb:.1f} MB")
+        return bytes(buffer)
+
+
+def _download_stream_to_file(
+    client: httpx.Client,
+    url: str,
+    target_path: Path,
+    description: str,
+    progress_callback: Callable[[float, str], Any] | None = None,
+) -> None:
+    tmp_path = target_path.with_suffix(target_path.suffix + ".tmp")
+    with client.stream("GET", url) as response:
+        response.raise_for_status()
+        total_header = response.headers.get("content-length")
+        total_bytes = int(total_header) if total_header and total_header.isdigit() else 0
+        downloaded = 0
+        with open(tmp_path, "wb") as f:
+            for chunk in response.iter_bytes(chunk_size=65536):
+                if chunk:
+                    f.write(chunk)
+                    downloaded += len(chunk)
+                    if progress_callback:
+                        if total_bytes > 0:
+                            pct = downloaded / total_bytes
+                            dl_mb = downloaded / (1024 * 1024)
+                            tot_mb = total_bytes / (1024 * 1024)
+                            progress_callback(
+                                pct,
+                                f"{description}: {dl_mb:.1f}/{tot_mb:.1f} MB ({int(pct * 100)}%)",
+                            )
+                        else:
+                            dl_mb = downloaded / (1024 * 1024)
+                            progress_callback(0.0, f"{description}: {dl_mb:.1f} MB")
+    if target_path.exists():
+        target_path.unlink()
+    tmp_path.rename(target_path)
+
+
 def ensure_whisper_binary(
     progress_callback: Callable[[float, str], Any] | None = None,
     dest_dir: Path | None = None,
@@ -86,8 +152,9 @@ def ensure_whisper_binary(
 
         backend = DeviceDetector.get_specs().recommended_backend
 
+    desc = f"Downloading whisper.cpp prebuilt binaries ({backend} backend)"
     if progress_callback:
-        progress_callback(0.1, f"Downloading whisper.cpp prebuilt binaries ({backend} backend)...")
+        progress_callback(0.0, f"{desc}...")
 
     if os.name == "nt":
         if backend == "cuda":
@@ -103,15 +170,14 @@ def ensure_whisper_binary(
             url = WHISPER_CPP_LINUX_X64_ZIP
 
     try:
-        res = client.get(url)
-        res.raise_for_status()
+        content = _download_stream_bytes(client, url, desc, progress_callback)
     except Exception:  # noqa: BLE001
         fallback_url = WHISPER_CPP_WIN_X64_ZIP if os.name == "nt" else WHISPER_CPP_LINUX_X64_ZIP
-        res = client.get(fallback_url)
-        res.raise_for_status()
+        fallback_desc = "Downloading whisper.cpp prebuilt binaries (CPU fallback)"
+        content = _download_stream_bytes(client, fallback_url, fallback_desc, progress_callback)
 
     if os.name == "nt":
-        with zipfile.ZipFile(io.BytesIO(res.content)) as z:
+        with zipfile.ZipFile(io.BytesIO(content)) as z:
             for member in z.infolist():
                 fn = member.filename.removeprefix("Release/").removeprefix("build/bin/Release/")
                 if fn and not fn.endswith("/"):
@@ -121,7 +187,7 @@ def ensure_whisper_binary(
         if cli_exe.exists():
             return cli_exe
     else:
-        with zipfile.ZipFile(io.BytesIO(res.content)) as z:
+        with zipfile.ZipFile(io.BytesIO(content)) as z:
             for member in z.infolist():
                 fn = member.filename.removeprefix("Release/").removeprefix("build/bin/")
                 if fn and not fn.endswith("/"):
@@ -152,15 +218,16 @@ def ensure_ffmpeg_binary(
     bin_dir.mkdir(parents=True, exist_ok=True)
     client = http_client or httpx.Client(timeout=180.0, follow_redirects=True)
 
-    if progress_callback:
-        progress_callback(0.1, "Downloading static ffmpeg binary...")
-
     target_exe = bin_dir / ("ffmpeg.exe" if os.name == "nt" else "ffmpeg")
     url = FFMPEG_WIN_X64 if os.name == "nt" else FFMPEG_LINUX_X64
 
-    res = client.get(url)
-    res.raise_for_status()
-    target_exe.write_bytes(res.content)
+    _download_stream_to_file(
+        client,
+        url,
+        target_exe,
+        "Downloading static ffmpeg binary",
+        progress_callback,
+    )
     if os.name != "nt":
         target_exe.chmod(0o755)
 

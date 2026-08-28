@@ -4,12 +4,10 @@ The pipeline owns NO business logic: it sequences stages, records explicit
 state, persists after every transition, and never reruns COMPLETED stages.
 """
 
-import json
 from pathlib import Path
 from typing import Any, Protocol
 
 from subforge.app.project_store import load_project, save_project
-from subforge.app.translation_service import DEFAULT_BATCH_SIZE, TranslationService
 from subforge.config.settings import Settings
 from subforge.models.project import Project, Segment, StageState
 from subforge.models.transcript import Transcript
@@ -24,25 +22,10 @@ class _Transcribes(Protocol):
         self,
         audio_path: Path,
         language: str | None = None,
-        translate: bool = False,
     ) -> Transcript: ...
 
 
 ALL_STAGES = ("transcription", "export")
-
-
-class _Unconfigured:
-    def __init__(self, message: str) -> None:
-        self._message = message
-
-    def translate(self, *args: Any, **kwargs: Any) -> Any:
-        raise StageError(self._message)
-
-
-def _unconfigured(what: str) -> _Unconfigured:
-    return _Unconfigured(
-        f"[ERROR] No {what} provider configured. Configure TRANSLATION_* settings or pick one in Settings."
-    )
 
 
 class Pipeline:
@@ -51,15 +34,10 @@ class Pipeline:
         project_dir: Path,
         settings: Settings,
         transcription: _Transcribes | None = None,
-        translation_service: TranslationService | None = None,
     ) -> None:
         self.dir = project_dir
         self.settings = settings
         self.transcription = transcription
-        self.translation_service = translation_service or TranslationService(
-            provider=_unconfigured("translation"),
-            batch_size=settings.translation.batch_size or DEFAULT_BATCH_SIZE,
-        )
 
     # ---- project access -------------------------------------------------
 
@@ -110,83 +88,6 @@ class Pipeline:
         ]
         project.set_stage("transcription", StageState.COMPLETED)
         self._save(project)
-
-    def run_translation(self, target_language: str) -> None:
-        project = self.project
-        if not project.segments:
-            raise StageError("[ERROR] No captions to translate — transcribe first.")
-        if target_language not in project.project.target_languages:
-            project.project.target_languages.append(target_language)
-            self._save(project)
-
-        project.set_stage(f"translation_{target_language}", StageState.RUNNING)
-        self._save(project)
-
-        # Native whisper.cpp translation to English if no external LLM translation is configured
-        is_llm_configured = not isinstance(self.translation_service.provider, _Unconfigured)
-
-        if not is_llm_configured and target_language == "en" and self.transcription is not None:
-            audio_dir = self.dir / "audio"
-            audio_files = list(audio_dir.iterdir()) if audio_dir.is_dir() else []
-            audio_path = audio_files[0] if audio_files else None
-
-            if audio_path and hasattr(self.transcription, "transcribe"):
-                import inspect
-
-                sig = inspect.signature(self.transcription.transcribe)
-                if "translate" in sig.parameters:
-                    try:
-                        transcript = self.transcription.transcribe(
-                            audio_path,
-                            language=project.project.source_language or None,
-                            translate=True,
-                        )
-                        en_segs = transcript.segments
-                        for i, seg in enumerate(project.segments):
-                            if i < len(en_segs):
-                                seg.translations[target_language] = en_segs[i].text
-                            elif en_segs:
-                                seg.translations[target_language] = en_segs[-1].text
-                            else:
-                                seg.translations[target_language] = ""
-                        project.set_stage(f"translation_{target_language}", StageState.COMPLETED)
-                        self._save(project)
-                        self._write_translation_artifact(target_language, project)
-                        return
-                    except Exception as exc:
-                        project.set_stage(f"translation_{target_language}", StageState.FAILED)
-                        self._save(project)
-                        raise StageError(
-                            f"[ERROR] translation to '{target_language}' failed: {exc}"
-                        ) from exc
-
-        try:
-            self.translation_service.translate_project(project, target_language)
-        except Exception as exc:
-            self._save(project)  # persist FAILED state recorded by service
-            raise StageError(f"[ERROR] translation to '{target_language}' failed: {exc}") from exc
-        self._save(project)
-        self._write_translation_artifact(target_language, project)
-
-    def _write_translation_artifact(self, target_language: str, project: Project) -> None:
-        """Per-language artifact mirroring transcripts/source.json (ARCH §21).
-
-        Written only after the run fully succeeds; retries re-render in place.
-        The canonical storage stays project.json — this file is a durable,
-        inspectable snapshot of the batch output for that language.
-        """
-        (self.dir / "translations").mkdir(exist_ok=True)
-        artifact = {
-            "language": target_language,
-            "segments": [
-                {"id": seg.id, "text": seg.translations.get(target_language, "")}
-                for seg in project.segments
-            ],
-        }
-        (self.dir / "translations" / f"{target_language}.json").write_text(
-            json.dumps(artifact, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
 
     # ---- resumability ------------------------------------------------------
 

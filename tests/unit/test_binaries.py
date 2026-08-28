@@ -122,3 +122,48 @@ def test_ensure_whisper_binary_picks_gpu_backend_url(tmp_path: Path, monkeypatch
         assert any("vulkan" in u for u in downloaded_urls)
 
 
+def test_ensure_binaries_progress_callback(tmp_path: Path, monkeypatch):
+    import io
+    import zipfile
+
+    import httpx
+
+    bin_dir = tmp_path / "progress_bin"
+    monkeypatch.setenv("SUBFORGE_BIN_DIR", str(bin_dir))
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        z.writestr("Release/whisper-cli.exe" if sys.platform == "win32" else "Release/whisper-cli", b"whisper-data")
+    zip_bytes = buf.getvalue()
+
+    whisper_progress_events: list[tuple[float, str]] = []
+    ffmpeg_progress_events: list[tuple[float, str]] = []
+
+    def handle_whisper(req: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=zip_bytes, headers={"content-length": str(len(zip_bytes))})
+
+    def handle_ffmpeg(req: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=b"ffmpeg-data", headers={"content-length": "11"})
+
+    whisper_client = httpx.Client(transport=httpx.MockTransport(handle_whisper))
+    ffmpeg_client = httpx.Client(transport=httpx.MockTransport(handle_ffmpeg))
+
+    with patch("shutil.which", return_value=None):
+        ensure_whisper_binary(
+            progress_callback=lambda pct, msg: whisper_progress_events.append((pct, msg)),
+            dest_dir=bin_dir,
+            http_client=whisper_client,
+        )
+        assert len(whisper_progress_events) >= 1
+        assert any("Downloading whisper.cpp" in msg for _, msg in whisper_progress_events)
+
+        ensure_ffmpeg_binary(
+            progress_callback=lambda pct, msg: ffmpeg_progress_events.append((pct, msg)),
+            dest_dir=bin_dir,
+            http_client=ffmpeg_client,
+        )
+        assert len(ffmpeg_progress_events) >= 1
+        assert any("Downloading static ffmpeg" in msg for _, msg in ffmpeg_progress_events)
+
+
+
