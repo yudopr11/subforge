@@ -10,6 +10,8 @@ TARGET_BIN="${INSTALL_DIR}/${APP_NAME}"
 DATA_DIR="${HOME}/.local/share/subforge"
 PROJECTS_DIR="${DATA_DIR}/projects"
 CONFIG_DIR="${HOME}/.config/subforge"
+DOT_SUBFORGE_DIR="${HOME}/.subforge"
+CUSTOM_SUBFORGE_DIR="${SUBFORGE_HOME}"
 
 KEEP_PROJECTS=false
 
@@ -72,6 +74,21 @@ if [ -d "${CONFIG_DIR}" ]; then
   rm -rf "${CONFIG_DIR}"
   printf "\033[32m✓ Removed %s.\033[0m\n" "${CONFIG_DIR}"
 fi
+
+# Clean ~/.subforge or $SUBFORGE_HOME if used
+for EXTRA_DIR in "${DOT_SUBFORGE_DIR}" "${CUSTOM_SUBFORGE_DIR}"; do
+  if [ -n "${EXTRA_DIR}" ] && [ -d "${EXTRA_DIR}" ]; then
+    if [ "${KEEP_PROJECTS}" = true ] && [ -d "${EXTRA_DIR}/projects" ]; then
+      printf "\033[33m▸ Cleaning models and managed binaries in %s (keeping projects)...\033[0m\n" "${EXTRA_DIR}"
+      find "${EXTRA_DIR}" -mindepth 1 -maxdepth 1 ! -name "projects" -exec rm -rf {} +
+      printf "\033[32m✓ Cleaned %s (projects preserved).\033[0m\n" "${EXTRA_DIR}"
+    else
+      printf "\033[33m▸ Removing %s...\033[0m\n" "${EXTRA_DIR}"
+      rm -rf "${EXTRA_DIR}"
+      printf "\033[32m✓ Removed %s.\033[0m\n" "${EXTRA_DIR}"
+    fi
+  fi
+done
 
 # 5. Shell profile PATH note/cleanup
 for PROFILE in "${HOME}/.zshrc" "${HOME}/.bashrc" "${HOME}/.profile"; do
