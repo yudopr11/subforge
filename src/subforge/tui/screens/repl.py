@@ -564,6 +564,9 @@ class ReplScreen(Screen[None]):
         if not transcription_configured(cfg):
             self.log_line('[dim]tip: no transcribe provider yet — run /settings or /wizard[/dim]')
 
+    def _finish_stage(self, stage: str) -> None:
+        self._running_stages.discard(stage)
+
     def _launch_stage(self, stage: str, work: Callable[[], str], busy_label: str) -> None:
         if stage in self._running_stages:
             self.log_line(f"[yellow]⏳[/yellow] {busy_label} already running…")
@@ -580,7 +583,7 @@ class ReplScreen(Screen[None]):
             except Exception as exc:  # noqa: BLE001 — last-resort guard for the UI thread
                 message = f"[ERROR] {exc}"
             finally:
-                self._host.call_from_thread(self._running_stages.discard, stage)
+                self._host.call_from_thread(self._finish_stage, stage)
             self._host.call_from_thread(self._log_result, message)
 
         self.run_worker(runner, thread=True, exclusive=False, group=f"stage-{stage}")

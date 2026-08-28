@@ -28,8 +28,12 @@ WHISPER_CPP_LINUX_VULKAN_ZIP = (
     "https://github.com/ggml-org/whisper.cpp/releases/latest/download/whisper-vulkan-bin-linux-x64.zip"
 )
 
-FFMPEG_WIN_X64 = "https://github.com/eugeneware/ffmpeg-static/releases/download/b6.0/win32-x64"
-FFMPEG_LINUX_X64 = "https://github.com/eugeneware/ffmpeg-static/releases/download/b6.0/linux-x64"
+FFMPEG_WIN_X64 = (
+    "https://github.com/eugeneware/ffmpeg-static/releases/latest/download/ffmpeg-win32-x64"
+)
+FFMPEG_LINUX_X64 = (
+    "https://github.com/eugeneware/ffmpeg-static/releases/latest/download/ffmpeg-linux-x64"
+)
 
 
 def find_in_path_or_bin(tool_name: str, bin_dir: Path | None = None) -> Path | None:

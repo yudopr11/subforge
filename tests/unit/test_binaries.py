@@ -42,7 +42,8 @@ def test_ensure_ffmpeg_binary_cached(tmp_path: Path, monkeypatch):
     assert path == bin_dir / target_name
 
 
-def test_find_in_path_or_bin_system_fallback(monkeypatch):
+def test_find_in_path_or_bin_system_fallback(tmp_path: Path, monkeypatch):
+    monkeypatch.setenv("SUBFORGE_BIN_DIR", str(tmp_path / "empty_bin"))
     with patch("shutil.which", return_value="/usr/bin/ffmpeg"):
         found = find_in_path_or_bin("ffmpeg")
         assert found == Path("/usr/bin/ffmpeg")

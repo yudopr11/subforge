@@ -5,9 +5,11 @@ File-management glue lives here (not in screens) so the TUI stays logic-free
 """
 
 import shutil
+import subprocess
 from collections.abc import Callable
 from pathlib import Path
 
+from subforge.app.binaries import ensure_ffmpeg_binary, find_in_path_or_bin
 from subforge.app.project_store import create_project
 from subforge.app.storage import get_projects_dir
 from subforge.models.project import ProjectMeta
@@ -34,8 +36,35 @@ def unique_project_dir(root: Path, base_name: str) -> Path:
     return candidate
 
 
+def convert_to_16khz_wav(audio_path: Path, out_path: Path) -> bool:
+    """Convert audio to 16kHz 16-bit mono PCM WAV using ffmpeg."""
+    try:
+        ffmpeg_bin = str(find_in_path_or_bin("ffmpeg") or ensure_ffmpeg_binary())
+    except Exception:  # noqa: BLE001
+        ffmpeg_bin = shutil.which("ffmpeg") or "ffmpeg"
+
+    cmd = [
+        ffmpeg_bin,
+        "-y",
+        "-i",
+        str(audio_path),
+        "-ar",
+        "16000",
+        "-ac",
+        "1",
+        "-c:a",
+        "pcm_s16le",
+        str(out_path),
+    ]
+    try:
+        res = subprocess.run(cmd, capture_output=True, check=False)
+        return res.returncode == 0 and out_path.exists()
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def create_project_from_audio(audio_path: Path, root: Path | None = None) -> Path:
-    """Create a new project around an audio file and copy the audio into it."""
+    """Create a new project around an audio file, converting/resampling to 16kHz WAV."""
     if not audio_path.is_file():
         raise ValueError(f"[ERROR] audio file not found: {audio_path}")
     if not is_audio_file(audio_path):
@@ -45,7 +74,20 @@ def create_project_from_audio(audio_path: Path, root: Path | None = None) -> Pat
     directory = unique_project_dir(target_root, audio_path.stem)
     meta = ProjectMeta(name=directory.name, source_language="")
     create_project(directory, meta)
-    shutil.copy2(audio_path, directory / "audio" / audio_path.name)
+
+    audio_dir = directory / "audio"
+    audio_dir.mkdir(parents=True, exist_ok=True)
+    target_wav = audio_dir / f"{audio_path.stem}.wav"
+
+    converted = False
+    try:
+        converted = convert_to_16khz_wav(audio_path, target_wav)
+    except Exception:  # noqa: BLE001
+        converted = False
+
+    if not converted or not target_wav.exists():
+        shutil.copy2(audio_path, audio_dir / audio_path.name)
+
     return directory
 
 

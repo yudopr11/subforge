@@ -774,6 +774,22 @@ async def test_download_model_background_with_progress(tmp_path):
         assert "downloaded and ready" in text
 
 
+async def test_launch_stage_thread_lifecycle(tmp_path):
+    app = SubForgeApp()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        repl = app.repl
+
+        repl._launch_stage("custom_stage", lambda: "stage done successfully", "processing")
+        await pilot.pause(0.1)
+
+        assert "custom_stage" not in repl._running_stages
+        text = transcript_text(app)
+        assert "processing" in text
+        assert "stage done successfully" in text
+
+
+
 
 
 

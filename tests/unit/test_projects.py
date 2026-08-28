@@ -28,6 +28,25 @@ def test_create_from_audio_copies_into_layout(tmp_path, audio):
     assert copied.read_bytes() == b"RIFF-fake"
 
 
+def test_create_from_audio_auto_converts_to_wav(tmp_path, monkeypatch):
+    from unittest.mock import patch
+
+    src_mp3 = tmp_path / "song.mp3"
+    src_mp3.write_bytes(b"fake-mp3-bytes")
+
+    def fake_convert(audio_path: Path, out_path: Path) -> bool:
+        out_path.write_bytes(b"RIFF-converted-16k-wav")
+        return True
+
+    with patch("subforge.app.projects.convert_to_16khz_wav", side_effect=fake_convert):
+        d = create_project_from_audio(src_mp3, tmp_path / "projects")
+        assert d.name == "song"
+        wav_file = d / "audio" / "song.wav"
+        assert wav_file.exists()
+        assert wav_file.read_bytes() == b"RIFF-converted-16k-wav"
+
+
+
 def test_collisions_get_numbered_suffixes(tmp_path, audio):
     first = create_project_from_audio(audio, tmp_path / "p")
     second = create_project_from_audio(audio, tmp_path / "p")
