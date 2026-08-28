@@ -1,4 +1,3 @@
-#!/usr/bin/env pwsh
 # SubForge Windows One-Line Installer
 # Usage: irm https://raw.githubusercontent.com/yudopr11/subforge/master/install.ps1 | iex
 
@@ -9,9 +8,9 @@ $Repo = "yudopr11/subforge"
 $InstallDir = Join-Path $env:LOCALAPPDATA "subforge\bin"
 $ExePath = Join-Path $InstallDir "$AppName.exe"
 
-Write-Host "════════════════════════════════════════════════════════════════" -ForegroundColor Cyan
-Write-Host "  SubForge — Local-First Subtitle Generator" -ForegroundColor White
-Write-Host "════════════════════════════════════════════════════════════════" -ForegroundColor Cyan
+Write-Host "================================================================" -ForegroundColor Cyan
+Write-Host "  SubForge -- Local-First Subtitle Generator" -ForegroundColor White
+Write-Host "================================================================" -ForegroundColor Cyan
 Write-Host ""
 
 # 1. Create install directory
@@ -20,7 +19,7 @@ if (-not (Test-Path $InstallDir)) {
 }
 
 # 2. Determine latest release or standalone binary download URL
-Write-Host "▸ Fetching latest release information..." -ForegroundColor Yellow
+Write-Host "[*] Fetching latest release information..." -ForegroundColor Yellow
 
 $DownloadUrl = $null
 try {
@@ -39,7 +38,7 @@ if (-not $DownloadUrl) {
     $DownloadUrl = "https://github.com/$Repo/releases/latest/download/subforge-windows-x64.exe"
 }
 
-Write-Host "▸ Downloading SubForge to $InstallDir..." -ForegroundColor Yellow
+Write-Host "[*] Downloading SubForge to $InstallDir..." -ForegroundColor Yellow
 
 $TempFile = Join-Path $env:TEMP "subforge-setup-download.tmp"
 try {
@@ -52,14 +51,14 @@ try {
     }
 } catch {
     # If standalone binary not yet published on GitHub, offer uv/pipx bootstrap fallback
-    Write-Host "ℹ Standalone binary not found. Bootstrapping via uv tool/pipx..." -ForegroundColor DarkGray
+    Write-Host "[i] Standalone binary not found. Bootstrapping via uv tool/pipx..." -ForegroundColor DarkGray
     if (Get-Command uv -ErrorAction SilentlyContinue) {
         uv tool install "git+https://github.com/$Repo.git" --force
-        Write-Host "✓ SubForge installed via uv tool." -ForegroundColor Green
+        Write-Host "[OK] SubForge installed via uv tool." -ForegroundColor Green
         exit 0
     } elseif (Get-Command pipx -ErrorAction SilentlyContinue) {
         pipx install "git+https://github.com/$Repo.git" --force
-        Write-Host "✓ SubForge installed via pipx." -ForegroundColor Green
+        Write-Host "[OK] SubForge installed via pipx." -ForegroundColor Green
         exit 0
     } else {
         Write-Host "[ERROR] Could not download subforge binary: $_" -ForegroundColor Red
@@ -74,13 +73,13 @@ try {
 # 3. Add to user PATH if not present
 $UserPath = [Environment]::GetEnvironmentVariable("Path", "User")
 if ($UserPath -notlike "*$InstallDir*") {
-    Write-Host "▸ Adding $InstallDir to user PATH..." -ForegroundColor Yellow
+    Write-Host "[*] Adding $InstallDir to user PATH..." -ForegroundColor Yellow
     [Environment]::SetEnvironmentVariable("Path", "$UserPath;$InstallDir", "User")
     $env:Path += ";$InstallDir"
 }
 
 Write-Host ""
-Write-Host "✓ SubForge installed successfully!" -ForegroundColor Green
+Write-Host "[OK] SubForge installed successfully!" -ForegroundColor Green
 Write-Host ""
 Write-Host "  To get started, open a new terminal and type:" -ForegroundColor White
 Write-Host "    subforge" -ForegroundColor Cyan
