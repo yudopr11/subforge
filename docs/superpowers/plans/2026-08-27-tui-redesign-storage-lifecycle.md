@@ -33,7 +33,7 @@
 - Consumes: `os`, `pathlib.Path`, `shutil`
 - Produces: `get_subforge_dir()`, `get_config_path()`, `get_bin_dir()`, `get_models_dir()`, `get_projects_dir()`, `migrate_legacy_projects()`
 
-- [ ] **Step 1: Write failing tests for storage resolver and legacy migration**
+- [x] **Step 1: Write failing tests for storage resolver and legacy migration**
 
 ```python
 # tests/unit/test_storage.py
@@ -89,12 +89,12 @@ def test_migrate_legacy_projects(tmp_path: Path, monkeypatch):
     assert (target_projects / "ProjectA" / "project.json").exists()
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `uv run pytest tests/unit/test_storage.py -v`
 Expected: FAIL (ModuleNotFoundError: No module named 'subforge.app.storage')
 
-- [ ] **Step 3: Implement `src/subforge/app/storage.py` and integrate with config & projects**
+- [x] **Step 3: Implement `src/subforge/app/storage.py` and integrate with config & projects**
 
 ```python
 # src/subforge/app/storage.py
@@ -161,12 +161,12 @@ def migrate_legacy_projects(source_dir: Path | None = None) -> list[str]:
 
 Update `src/subforge/config/app_config.py` to use `get_config_path()`, `src/subforge/app/projects.py` to use `get_projects_dir()`, and `src/subforge/app/model_manager.py` to use `get_models_dir()`.
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `uv run pytest tests/unit/test_storage.py tests/unit/test_projects.py -v`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/subforge/app/storage.py src/subforge/config/app_config.py src/subforge/app/projects.py src/subforge/app/model_manager.py tests/unit/test_storage.py
@@ -186,7 +186,7 @@ git commit -m "feat(storage): centralize OS-standard storage paths and add legac
 - Consumes: `subforge.app.storage.get_bin_dir()`, `httpx`, `shutil`
 - Produces: `ensure_whisper_binary(progress_callback=None) -> Path`, `ensure_ffmpeg_binary(progress_callback=None) -> Path`
 
-- [ ] **Step 1: Write failing tests for binary resolver and provisioning**
+- [x] **Step 1: Write failing tests for binary resolver and provisioning**
 
 ```python
 # tests/unit/test_binaries.py
@@ -219,21 +219,21 @@ def test_ensure_whisper_binary_cached(tmp_path: Path, monkeypatch):
     assert path == bin_dir / target_name
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `uv run pytest tests/unit/test_binaries.py -v`
 Expected: FAIL (ModuleNotFoundError: No module named 'subforge.app.binaries')
 
-- [ ] **Step 3: Implement `src/subforge/app/binaries.py`**
+- [x] **Step 3: Implement `src/subforge/app/binaries.py`**
 
 Support finding system binaries or auto-downloading official release zip/executables for Windows x64 and Linux x64 into `get_bin_dir()`. Integrate with `whisper_cpp.py`.
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `uv run pytest tests/unit/test_binaries.py tests/unit/test_whisper_cpp_provider.py -v`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/subforge/app/binaries.py src/subforge/providers/transcription/whisper_cpp.py tests/unit/test_binaries.py
@@ -255,7 +255,7 @@ git commit -m "feat(binaries): add automated self-provisioning for whisper-cli a
 - Consumes: `LocalModelManager.get_model_path`, `ConfirmDialogScreen`
 - Produces: `LocalModelManager.delete_model(model_id: str) -> bool`, `ConfirmDialogScreen(title, message)`
 
-- [ ] **Step 1: Write failing test for model deletion and confirmation screen**
+- [x] **Step 1: Write failing test for model deletion and confirmation screen**
 
 ```python
 # tests/unit/test_model_manager.py (addition)
@@ -276,23 +276,23 @@ def test_delete_nonexistent_model_returns_false(tmp_path: Path):
     assert mgr.delete_model("tiny") is False
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `uv run pytest tests/unit/test_model_manager.py -k test_delete_model -v`
 Expected: FAIL (AttributeError: 'LocalModelManager' object has no attribute 'delete_model')
 
-- [ ] **Step 3: Implement `delete_model` and `ConfirmDialogScreen`**
+- [x] **Step 3: Implement `delete_model` and `ConfirmDialogScreen`**
 
 1. Implement `LocalModelManager.delete_model(self, model_id: str) -> bool`.
 2. Create `src/subforge/tui/screens/confirm_dialog.py` with `y`/`Enter` to confirm, `n`/`Escape` to cancel.
 3. Add `d` and `Delete` keybindings to `ModelManagerScreen` to delete the selected model with confirmation.
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `uv run pytest tests/unit/test_model_manager.py tests/unit/test_model_manager_screen.py -v`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/subforge/app/model_manager.py src/subforge/tui/screens/confirm_dialog.py src/subforge/tui/screens/model_manager.py tests/unit/test_model_manager.py tests/unit/test_model_manager_screen.py
@@ -314,7 +314,7 @@ git commit -m "feat(models): add local ASR model deletion and confirmation dialo
 - Consumes: `delete_project(project_dir: Path) -> bool`, `ConfirmDialogScreen`
 - Produces: Safe project directory deletion, UI list refresh, and active project state reset.
 
-- [ ] **Step 1: Write failing test for `delete_project` and project picker deletion**
+- [x] **Step 1: Write failing test for `delete_project` and project picker deletion**
 
 ```python
 # tests/unit/test_projects.py (addition)
@@ -334,23 +334,23 @@ def test_delete_invalid_project_returns_false(tmp_path: Path):
     assert delete_project(tmp_path / "Nonexistent") is False
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `uv run pytest tests/unit/test_projects.py -k test_delete_project -v`
 Expected: FAIL (ImportError: cannot import name 'delete_project')
 
-- [ ] **Step 3: Implement `delete_project` and project picker deletion keybinding**
+- [x] **Step 3: Implement `delete_project` and project picker deletion keybinding**
 
 1. Implement `delete_project(project_dir: Path) -> bool` in `src/subforge/app/projects.py`.
 2. Add `d` and `Delete` keybindings to `ProjectPickerScreen` with `ConfirmDialogScreen`.
 3. In `ReplScreen`, if the deleted project was the active project, reset `self.active_project = None` and update banner.
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `uv run pytest tests/unit/test_projects.py tests/unit/test_project_picker.py -v`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/subforge/app/projects.py src/subforge/tui/screens/project_picker.py src/subforge/tui/screens/repl.py tests/unit/test_projects.py tests/unit/test_project_picker.py
@@ -371,7 +371,7 @@ git commit -m "feat(projects): add project deletion with confirmation and active
 - Consumes: Project stage states, `Pipeline`, hotkeys (`N`, `T`, `R`, `L`, `V`, `E`, `P`, `M`, `S`, `?`)
 - Produces: Studio top header, pipeline progress stepper, dynamic next-step suggestions, action hotkey bar, prompt autocompletion.
 
-- [ ] **Step 1: Write integration tests for Studio Dashboard hotkeys & workflow**
+- [x] **Step 1: Write integration tests for Studio Dashboard hotkeys & workflow**
 
 ```python
 # tests/integration/test_dashboard_workflow.py
@@ -401,12 +401,12 @@ async def test_dashboard_hotkeys_and_next_action(tmp_path: Path, monkeypatch):
         assert "Transcribe" in repl._render_next_step()
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `uv run pytest tests/integration/test_dashboard_workflow.py -v`
 Expected: FAIL
 
-- [ ] **Step 3: Implement redesigned Studio Dashboard in `repl.py`**
+- [x] **Step 3: Implement redesigned Studio Dashboard in `repl.py`**
 
 1. Create styled top header widget: Project name, audio duration, source/target languages.
 2. Render interactive pipeline stepper pills: `[✓ Transcribe] ──▶ [✓ Review] ──▶ [● Translate] ──▶ [Export]`.
@@ -414,12 +414,12 @@ Expected: FAIL
 4. Implement direct keyboard bindings (`N`, `T`, `R`, `L`, `V`, `E`, `P`, `M`, `S`, `?`).
 5. Ensure smooth terminal autocompletion and clear typography in `RichLog`.
 
-- [ ] **Step 4: Run all unit and integration tests**
+- [x] **Step 4: Run all unit and integration tests**
 
 Run: `uv run pytest && uv run ruff check src tests && uv run mypy src`
 Expected: ALL PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/subforge/tui/screens/repl.py src/subforge/tui/app.py tests/unit/test_repl.py tests/integration/test_dashboard_workflow.py
@@ -434,14 +434,14 @@ git commit -m "feat(tui): redesign Studio Dashboard with action center, pipeline
 - Test: Full test suite (`uv run pytest`)
 - Lint & Typecheck: `uv run ruff check src tests && uv run mypy src`
 
-- [ ] **Step 1: Run full verification suite**
+- [x] **Step 1: Run full verification suite**
 Run: `uv run pytest && uv run ruff check src tests && uv run mypy src`
 Expected: 270+ passing tests, zero lint errors, zero mypy errors.
 
-- [ ] **Step 2: Verify live migration of `Timeline 1-enhanced-v2` into `%LOCALAPPDATA%\subforge\projects`**
+- [x] **Step 2: Verify live migration of `Timeline 1-enhanced-v2` into `%LOCALAPPDATA%\subforge\projects`**
 Run SubForge startup check to verify auto-migration and project loading.
 
-- [ ] **Step 3: Commit and update plan status**
+- [x] **Step 3: Commit and update plan status**
 ```bash
 git add docs/superpowers/plans/2026-08-27-tui-redesign-storage-lifecycle.md
 git commit -m "docs(plan): complete implementation plan for TUI redesign, storage, and resource lifecycle"
