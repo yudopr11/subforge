@@ -439,6 +439,47 @@ class SubForgeApp(App[None]):
                 return screen
         raise LookupError("repl not mounted")
 
+    def download_model_background(
+        self,
+        model_id: str,
+        manager: object = None,
+    ) -> None:
+        from subforge.app.model_manager import LocalModelManager
+
+        mgr = manager if isinstance(manager, LocalModelManager) else LocalModelManager()
+        if mgr.is_installed(model_id):
+            return
+
+        def _work() -> None:
+            try:
+                try:
+                    self.call_from_thread(
+                        self.repl.log_line,
+                        f"⏳ Downloading Whisper model '[b]{model_id}[/b]' in background...",
+                    )
+                except Exception:  # noqa: BLE001, S110
+                    pass
+
+                mgr.install(model_id)
+                try:
+                    self.call_from_thread(
+                        self.repl.log_line,
+                        f"✓ Model '[b]{model_id}[/b]' downloaded and ready.",
+                    )
+                    self.call_from_thread(self.repl.refresh_status)
+                except Exception:  # noqa: BLE001, S110
+                    pass
+            except Exception as exc:  # noqa: BLE001
+                try:
+                    self.call_from_thread(
+                        self.repl.log_line,
+                        f"[red]✗[/red] Failed to download model '{model_id}': {exc}",
+                    )
+                except Exception:  # noqa: BLE001, S110
+                    pass
+
+        self.run_worker(_work, thread=True, group="model_downloads")
+
     def _setup_finished(self) -> None:
         """Wizard saved config: reload providers and refresh the menu status."""
         repl = self.screen_query_menu()

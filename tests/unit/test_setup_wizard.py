@@ -214,6 +214,36 @@ async def test_after_setup_menu_status_refreshes(first_run_env):
         assert repl is not None
 
 
+async def test_wizard_does_not_block_on_uninstalled_model_download(tmp_path, monkeypatch):
+    from subforge.tui.screens.language_picker import LanguagePickerScreen
+    from subforge.tui.screens.repl import ReplScreen
+
+    monkeypatch.setenv("SUBFORGE_HOME", str(tmp_path))
+    config_path = tmp_path / "fresh.json"
+    monkeypatch.setenv("SUBFORGE_CONFIG", str(config_path))
+    config_path.unlink(missing_ok=True)
+
+    models_dir = tmp_path / "models"
+    models_dir.mkdir(parents=True, exist_ok=True)
+
+    app = SubForgeApp()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        assert isinstance(app.screen, ModelManagerScreen)
+
+        # Select uninstalled model 'tiny'
+        _pick(app.screen, "tiny")
+        await pilot.pause()
+
+        assert isinstance(app.screen, LanguagePickerScreen)
+        _pick(app.screen, "en")
+        await pilot.pause()
+
+        assert isinstance(app.screen, ReplScreen)
+        assert app.needs_setup is False
+        assert app.app_config.transcription.model == "tiny"
+
+
 def _menu_import_guard() -> None:  # keep explicit import referenced for readers
     
     assert ProjectPickerScreen and NewProjectScreen and ModelManagerScreen

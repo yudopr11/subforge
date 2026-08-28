@@ -139,20 +139,22 @@ class ModelManagerScreen(ModalScreen[str | None]):
             self._set_status("[ERROR] Select a model row first.")
             return
         selected_info = self._rows[row]
-        if selected_info.installed:
-            if self.on_done:
-                try:
-                    self.app.call_from_thread(self.on_done)
-                except Exception:  # noqa: BLE001
-                    self.on_done()
-            self.dismiss(selected_info.id)
-        else:
-            self.run_worker(
-                lambda: self._install_worker(selected_info.id, dismiss_on_success=True),
-                thread=True,
-                exclusive=True,
-                group="install",
-            )
+        if not selected_info.installed:
+            if hasattr(self.app, "download_model_background"):
+                self.app.download_model_background(selected_info.id, self.manager)
+            else:
+                self.run_worker(
+                    lambda: self.manager.install(selected_info.id),
+                    thread=True,
+                    group="model_download",
+                )
+
+        if self.on_done:
+            try:
+                self.app.call_from_thread(self.on_done)
+            except Exception:  # noqa: BLE001
+                self.on_done()
+        self.dismiss(selected_info.id)
 
     def install_selected(self) -> str:
         table = self.query_one(DataTable)
