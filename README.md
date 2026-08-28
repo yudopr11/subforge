@@ -27,6 +27,20 @@ After installation completes, simply open a new terminal window and type:
 subforge
 ```
 
+### Uninstallation
+
+To uninstall SubForge:
+
+**Windows (PowerShell):**
+```powershell
+irm https://raw.githubusercontent.com/yudopr11/subforge/master/uninstall.ps1 | iex
+```
+
+**Linux & macOS (Terminal):**
+```bash
+curl -fsSL https://raw.githubusercontent.com/yudopr11/subforge/master/uninstall.sh | sh
+```
+
 ---
 
 ## How It Works
