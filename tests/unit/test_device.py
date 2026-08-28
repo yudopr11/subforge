@@ -40,3 +40,18 @@ def test_get_specs_returns_positive_numbers() -> None:
     specs = DeviceDetector.get_specs()
     assert specs.ram_gb > 0
     assert specs.cpu_cores > 0
+    assert isinstance(specs.has_gpu, bool)
+    assert specs.recommended_backend in ("cuda", "vulkan", "cpu")
+
+
+def test_recommend_model_with_gpu() -> None:
+    # If dedicated GPU is available, recommend large-v3-turbo even on budget RAM
+    specs = DeviceSpecs(
+        ram_gb=8.0,
+        cpu_cores=4,
+        has_gpu=True,
+        gpu_name="NVIDIA GeForce RTX 4070",
+        recommended_backend="cuda",
+    )
+    assert DeviceDetector.recommend_model(specs) == "large-v3-turbo"
+

@@ -93,3 +93,32 @@ def test_ensure_whisper_binary_download(tmp_path: Path, monkeypatch):
         assert path.exists()
         assert path.read_bytes() == b"fake-whisper-binary"
 
+
+def test_ensure_whisper_binary_picks_gpu_backend_url(tmp_path: Path, monkeypatch):
+    import io
+    import zipfile
+
+    import httpx
+
+    bin_dir = tmp_path / "download_vulkan_bin"
+    monkeypatch.setenv("SUBFORGE_BIN_DIR", str(bin_dir))
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        z.writestr("Release/whisper-cli.exe" if sys.platform == "win32" else "Release/whisper-cli", b"vulkan-whisper")
+    zip_bytes = buf.getvalue()
+
+    downloaded_urls: list[str] = []
+
+    def handle(req: httpx.Request) -> httpx.Response:
+        downloaded_urls.append(str(req.url))
+        return httpx.Response(200, content=zip_bytes)
+
+    client = httpx.Client(transport=httpx.MockTransport(handle))
+
+    with patch("shutil.which", return_value=None):
+        path = ensure_whisper_binary(dest_dir=bin_dir, http_client=client, backend="vulkan")
+        assert path.exists()
+        assert any("vulkan" in u for u in downloaded_urls)
+
+

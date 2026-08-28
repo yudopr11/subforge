@@ -15,8 +15,17 @@ from subforge.app.storage import get_bin_dir
 WHISPER_CPP_WIN_X64_ZIP = (
     "https://github.com/ggml-org/whisper.cpp/releases/latest/download/whisper-bin-x64.zip"
 )
+WHISPER_CPP_WIN_VULKAN_ZIP = (
+    "https://github.com/ggml-org/whisper.cpp/releases/latest/download/whisper-vulkan-bin-x64.zip"
+)
+WHISPER_CPP_WIN_CUDA_ZIP = (
+    "https://github.com/ggml-org/whisper.cpp/releases/latest/download/whisper-cublas-12.2.0-bin-x64.zip"
+)
 WHISPER_CPP_LINUX_X64_ZIP = (
     "https://github.com/ggml-org/whisper.cpp/releases/latest/download/whisper-bin-linux-x64.zip"
+)
+WHISPER_CPP_LINUX_VULKAN_ZIP = (
+    "https://github.com/ggml-org/whisper.cpp/releases/latest/download/whisper-vulkan-bin-linux-x64.zip"
 )
 
 FFMPEG_WIN_X64 = "https://github.com/eugeneware/ffmpeg-static/releases/download/b6.0/win32-x64"
@@ -55,6 +64,7 @@ def ensure_whisper_binary(
     progress_callback: Callable[[float, str], Any] | None = None,
     dest_dir: Path | None = None,
     http_client: httpx.Client | None = None,
+    backend: str | None = None,
 ) -> Path:
     """Ensure whisper-cli binary is available. Downloads if missing."""
     bin_dir = dest_dir or get_bin_dir()
@@ -71,13 +81,36 @@ def ensure_whisper_binary(
     bin_dir.mkdir(parents=True, exist_ok=True)
     client = http_client or httpx.Client(timeout=120.0, follow_redirects=True)
 
+    if backend is None:
+        from subforge.app.device import DeviceDetector
+
+        backend = DeviceDetector.get_specs().recommended_backend
+
     if progress_callback:
-        progress_callback(0.1, "Downloading whisper.cpp prebuilt binaries...")
+        progress_callback(0.1, f"Downloading whisper.cpp prebuilt binaries ({backend} backend)...")
 
     if os.name == "nt":
-        url = WHISPER_CPP_WIN_X64_ZIP
+        if backend == "cuda":
+            url = WHISPER_CPP_WIN_CUDA_ZIP
+        elif backend == "vulkan":
+            url = WHISPER_CPP_WIN_VULKAN_ZIP
+        else:
+            url = WHISPER_CPP_WIN_X64_ZIP
+    else:
+        if backend == "vulkan":
+            url = WHISPER_CPP_LINUX_VULKAN_ZIP
+        else:
+            url = WHISPER_CPP_LINUX_X64_ZIP
+
+    try:
         res = client.get(url)
         res.raise_for_status()
+    except Exception:  # noqa: BLE001
+        fallback_url = WHISPER_CPP_WIN_X64_ZIP if os.name == "nt" else WHISPER_CPP_LINUX_X64_ZIP
+        res = client.get(fallback_url)
+        res.raise_for_status()
+
+    if os.name == "nt":
         with zipfile.ZipFile(io.BytesIO(res.content)) as z:
             for member in z.infolist():
                 fn = member.filename.removeprefix("Release/").removeprefix("build/bin/Release/")
@@ -88,23 +121,16 @@ def ensure_whisper_binary(
         if cli_exe.exists():
             return cli_exe
     else:
-        # Linux x64
-        url = WHISPER_CPP_LINUX_X64_ZIP
-        try:
-            res = client.get(url)
-            res.raise_for_status()
-            with zipfile.ZipFile(io.BytesIO(res.content)) as z:
-                for member in z.infolist():
-                    fn = member.filename.removeprefix("Release/").removeprefix("build/bin/")
-                    if fn and not fn.endswith("/"):
-                        target_file = bin_dir / fn
-                        target_file.write_bytes(z.read(member))
-                        target_file.chmod(0o755)
-            cli_bin = bin_dir / "whisper-cli"
-            if cli_bin.exists():
-                return cli_bin
-        except Exception:  # noqa: BLE001, S110
-            pass
+        with zipfile.ZipFile(io.BytesIO(res.content)) as z:
+            for member in z.infolist():
+                fn = member.filename.removeprefix("Release/").removeprefix("build/bin/")
+                if fn and not fn.endswith("/"):
+                    target_file = bin_dir / fn
+                    target_file.write_bytes(z.read(member))
+                    target_file.chmod(0o755)
+        cli_bin = bin_dir / "whisper-cli"
+        if cli_bin.exists():
+            return cli_bin
 
     raise RuntimeError(
         "Could not automatically locate or install whisper-cli. "

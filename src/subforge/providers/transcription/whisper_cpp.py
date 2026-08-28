@@ -1,6 +1,7 @@
 """Local whisper.cpp transcription provider (PRD §8, ARCH §7)."""
 
 import json
+import os
 import shutil
 import subprocess
 import tempfile
@@ -82,9 +83,13 @@ class WhisperCppProvider:
         model: str = "large-v3-turbo",
         binary_path: str = "",
         models_dir: Path | None = None,
+        threads: int | None = None,
+        no_gpu: bool = False,
     ) -> None:
         self.model_name = model
         self.binary_path = binary_path
+        self.threads = threads or min(os.cpu_count() or 4, 8)
+        self.no_gpu = no_gpu
         self.model_manager = LocalModelManager(models_dir=models_dir)
 
     def transcribe(
@@ -116,7 +121,11 @@ class WhisperCppProvider:
                 "-of",
                 str(out_prefix),
                 "--output-json-full",
+                "-t",
+                str(self.threads),
             ]
+            if self.no_gpu:
+                cmd.append("-ng")
             if language:
                 cmd.extend(["-l", language])
             if translate:
