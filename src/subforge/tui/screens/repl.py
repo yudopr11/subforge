@@ -113,7 +113,9 @@ class ReplScreen(Screen[None]):
         yield Label("", id="footer-bar")
 
     def on_mount(self) -> None:
-        self.log_line("[b]subforge[/b] v0.1.0  —  local-first subtitles")
+        from subforge import __version__
+
+        self.log_line(f"[b]subforge[/b] v{__version__}  —  local-first subtitles")
         self.log_line("[dim]Type /new to start, ? for help, /quit to exit[/dim]")
         self.log_line("")
         if self._host.project_dir is not None:
