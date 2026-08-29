@@ -59,5 +59,6 @@ func New(width, height int) Model {
 	}
 	l := list.New(languages, itemDelegate{}, width, h)
 	l.Title = "Select Audio Source Language"
+	l.KeyMap.Quit.SetEnabled(false) // Handle quit/esc in app router
 	return Model{List: l}
 }

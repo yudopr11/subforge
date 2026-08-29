@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/yudopr11/subforge/internal/app/binaries"
 	"github.com/yudopr11/subforge/internal/app/config"
@@ -393,7 +394,7 @@ func (a AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case ScreenModelMgr:
 		if keyMsg, ok := msg.(tea.KeyMsg); ok {
-			if keyMsg.Type == tea.KeyEsc && !a.modelMgrView.IsDownloading() {
+			if (keyMsg.Type == tea.KeyEsc || keyMsg.String() == "q") && !a.modelMgrView.IsDownloading() {
 				a.screen = ScreenREPL
 				return a, nil
 			}
@@ -406,11 +407,13 @@ func (a AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case ScreenAudioPicker:
 		if keyMsg, ok := msg.(tea.KeyMsg); ok {
-			switch keyMsg.Type {
-			case tea.KeyEsc:
-				a.screen = ScreenREPL
-				return a, nil
-			case tea.KeyEnter:
+			if a.audioPickerView.List.FilterState() == list.Unfiltered {
+				if keyMsg.Type == tea.KeyEsc || keyMsg.String() == "q" {
+					a.screen = ScreenREPL
+					return a, nil
+				}
+			}
+			if keyMsg.Type == tea.KeyEnter {
 				if item, ok := a.audioPickerView.List.SelectedItem().(audiopicker.AudioFileItem); ok {
 					baseName := strings.TrimSuffix(filepath.Base(item.Path), filepath.Ext(item.Path))
 					proj := domain.NewProject(baseName, item.Path, a.config.DefaultModel, a.config.DefaultLanguage)
@@ -429,11 +432,13 @@ func (a AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case ScreenLangPicker:
 		if keyMsg, ok := msg.(tea.KeyMsg); ok {
-			switch keyMsg.Type {
-			case tea.KeyEsc:
-				a.screen = ScreenREPL
-				return a, nil
-			case tea.KeyEnter:
+			if a.langPickerView.List.FilterState() == list.Unfiltered {
+				if keyMsg.Type == tea.KeyEsc || keyMsg.String() == "q" {
+					a.screen = ScreenREPL
+					return a, nil
+				}
+			}
+			if keyMsg.Type == tea.KeyEnter {
 				if item, ok := a.langPickerView.List.SelectedItem().(langpicker.LanguageItem); ok {
 					a.config.DefaultLanguage = item.Code
 					_ = config.SaveConfig(a.config)
