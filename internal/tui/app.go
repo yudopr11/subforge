@@ -13,6 +13,7 @@ import (
 	"github.com/yudopr11/subforge/internal/app/pipeline"
 	"github.com/yudopr11/subforge/internal/app/project"
 	"github.com/yudopr11/subforge/internal/domain"
+	"github.com/yudopr11/subforge/internal/tui/theme"
 	"github.com/yudopr11/subforge/internal/tui/views/audiopicker"
 	"github.com/yudopr11/subforge/internal/tui/views/langpicker"
 	"github.com/yudopr11/subforge/internal/tui/views/modelmgr"
@@ -32,9 +33,32 @@ const (
 	ScreenReview
 )
 
-type TranscribeProgressMsg string
+type TranscribeProgressMsg struct {
+	Line    string
+	NextCmd tea.Cmd
+}
+
 type TranscribeCompleteMsg struct {
 	Err error
+}
+
+type pipelineProgressEvent struct {
+	Line string
+	Done bool
+	Err  error
+}
+
+func WaitForPipelineProgress(ch <-chan pipelineProgressEvent) tea.Cmd {
+	return func() tea.Msg {
+		event, ok := <-ch
+		if !ok || event.Done {
+			return TranscribeCompleteMsg{Err: event.Err}
+		}
+		return TranscribeProgressMsg{
+			Line:    event.Line,
+			NextCmd: WaitForPipelineProgress(ch),
+		}
+	}
 }
 
 type AppModel struct {
@@ -63,34 +87,27 @@ func NewApp() AppModel {
 		startScreen = ScreenWizard
 	}
 
-	w, h := 80, 24
-
-	// If there's an existing project in current directory, load it
-	var activeProj *domain.Project
-	if loaded, err := project.LoadProject("."); err == nil {
-		activeProj = loaded
-	}
-
-	replM := repl.New(w, h)
-	if activeProj != nil {
-		replM.SetProject(activeProj)
-		replM.AppendLog(fmt.Sprintf("✓ Loaded existing project '%s' from current directory", activeProj.Name))
-	}
-
-	return AppModel{
+	app := AppModel{
 		screen:          startScreen,
 		config:          cfg,
-		project:         activeProj,
 		modelManager:    mgr,
-		replView:        replM,
-		wizardView:      wizard.New(w, h),
-		audioPickerView: audiopicker.New(".", w, h),
-		modelMgrView:    modelmgr.New(mgr, w, h),
-		langPickerView:  langpicker.New(w, h),
-		reviewView:      review.New(activeProj, w, h),
-		width:           w,
-		height:          h,
+		replView:        repl.New(80, 24),
+		wizardView:      wizard.New(80, 24),
+		audioPickerView: audiopicker.New(".", 80, 24),
+		modelMgrView:    modelmgr.New(mgr, 80, 24),
+		langPickerView:  langpicker.New(80, 24),
+		width:           80,
+		height:          24,
 	}
+
+	// Try auto-loading existing project in current directory
+	if existing, err := project.LoadProject("."); err == nil {
+		app.project = existing
+		app.replView.SetProject(existing)
+		app.replView.AppendLog(fmt.Sprintf("✓ Loaded existing project: %s (%d segments)", existing.Name, len(existing.Segments)))
+	}
+
+	return app
 }
 
 func (a AppModel) CurrentScreen() Screen {
@@ -101,12 +118,8 @@ func (a AppModel) CurrentProject() *domain.Project {
 	return a.project
 }
 
-func (a AppModel) Config() *config.AppConfig {
-	return a.config
-}
-
 func (a AppModel) Init() tea.Cmd {
-	return a.replView.Init()
+	return nil
 }
 
 func (a AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -115,44 +128,50 @@ func (a AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.width = msg.Width
 		a.height = msg.Height
 		var cmds []tea.Cmd
+		var m tea.Model
+		m, cmd := a.replView.Update(msg)
+		a.replView = m.(repl.Model)
+		cmds = append(cmds, cmd)
 
-		if rm, cmd := a.replView.Update(msg); cmd != nil {
-			a.replView = rm.(repl.Model)
-			cmds = append(cmds, cmd)
-		}
-		if wm, cmd := a.wizardView.Update(msg); cmd != nil {
-			a.wizardView = wm.(wizard.Model)
-			cmds = append(cmds, cmd)
-		}
-		if rvm, cmd := a.reviewView.Update(msg); cmd != nil {
-			a.reviewView = rvm.(review.Model)
-			cmds = append(cmds, cmd)
-		}
-		if mm, cmd := a.modelMgrView.Update(msg); cmd != nil {
-			a.modelMgrView = mm.(modelmgr.Model)
-			cmds = append(cmds, cmd)
-		}
-		a.audioPickerView.List.SetSize(a.width, a.height-4)
-		a.langPickerView.List.SetSize(a.width, a.height-4)
+		m, cmd = a.reviewView.Update(msg)
+		a.reviewView = m.(review.Model)
+		cmds = append(cmds, cmd)
 
+		m, cmd = a.modelMgrView.Update(msg)
+		a.modelMgrView = m.(modelmgr.Model)
+		cmds = append(cmds, cmd)
 		return a, tea.Batch(cmds...)
 
-	case TranscribeProgressMsg:
-		a.replView.AppendLog(string(msg))
+	case modelmgr.ModelSelectedMsg:
+		a.config.DefaultModel = msg.Name
+		_ = config.SaveConfig(a.config)
+		if a.project != nil {
+			a.project.Model = msg.Name
+			_ = project.SaveProject(a.project, ".")
+		}
+		a.replView.AppendLog(fmt.Sprintf("✓ Active model set to '%s'", msg.Name))
+		a.screen = ScreenREPL
 		return a, nil
+
+	case TranscribeProgressMsg:
+		if strings.TrimSpace(msg.Line) != "" {
+			a.replView.AppendLog(msg.Line)
+		}
+		return a, msg.NextCmd
 
 	case TranscribeCompleteMsg:
 		if msg.Err != nil {
-			a.replView.AppendLog("[ERROR] Transcription failed: " + msg.Err.Error())
+			a.replView.AppendLog(theme.ErrorStyle.Render("[ERROR] " + msg.Err.Error()))
 		} else {
 			a.replView.SetProject(a.project)
-			a.replView.AppendLog(fmt.Sprintf("✓ Transcribed %d captions successfully", len(a.project.Segments)))
+			a.replView.AppendLog(theme.StatusSuccessStyle.Render(fmt.Sprintf("✓ Transcription completed! Generated %d captions.", len(a.project.Segments))))
+			a.replView.AppendLog("ℹ Type /review to edit captions or /export to generate SRT/ASS.")
 		}
 		return a, nil
 
 	case repl.ExecuteCommandMsg:
 		switch msg.Command {
-		case "quit", "exit", "q":
+		case "quit", "exit":
 			return a, tea.Quit
 
 		case "new":
@@ -171,66 +190,65 @@ func (a AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "open":
 			if len(msg.Args) > 0 {
-				dir := msg.Args[0]
-				if loaded, err := project.LoadProject(dir); err == nil {
-					a.project = loaded
-					a.replView.SetProject(loaded)
-					a.replView.AppendLog(fmt.Sprintf("✓ Opened project '%s'", loaded.Name))
+				targetDir := msg.Args[0]
+				proj, err := project.LoadProject(targetDir)
+				if err != nil {
+					a.replView.AppendLog(fmt.Sprintf("[ERROR] Failed to load project from '%s': %v", targetDir, err))
 				} else {
-					a.replView.AppendLog(fmt.Sprintf("[ERROR] Failed to open project at %s: %v", dir, err))
+					a.project = proj
+					a.replView.SetProject(proj)
+					a.replView.AppendLog(fmt.Sprintf("✓ Opened project '%s' (%d captions)", proj.Name, len(proj.Segments)))
 				}
 			} else {
-				if loaded, err := project.LoadProject("."); err == nil {
-					a.project = loaded
-					a.replView.SetProject(loaded)
-					a.replView.AppendLog(fmt.Sprintf("✓ Opened project '%s' from current directory", loaded.Name))
+				if proj, err := project.LoadProject("."); err == nil {
+					a.project = proj
+					a.replView.SetProject(proj)
+					a.replView.AppendLog(fmt.Sprintf("✓ Opened project '%s' (%d captions)", proj.Name, len(proj.Segments)))
 				} else {
-					a.replView.AppendLog("No project.json found in current directory. Use /new to create one.")
+					a.replView.AppendLog("[ERROR] No project.json found in current directory. Use /new or /open <path>.")
 				}
 			}
 
 		case "projects":
 			projects, err := project.ListProjects(".")
-			if err != nil || len(projects) == 0 {
-				a.replView.AppendLog("No projects found under current working directory.")
+			if err != nil {
+				a.replView.AppendLog(fmt.Sprintf("[ERROR] Failed to list projects: %v", err))
+			} else if len(projects) == 0 {
+				a.replView.AppendLog("No projects found in this directory. Type /new to create one.")
 			} else {
 				a.replView.AppendLog(fmt.Sprintf("Found %d project(s):", len(projects)))
 				for _, p := range projects {
-					a.replView.AppendLog(fmt.Sprintf("  • %s (%d segments, model: %s, lang: %s)", p.Name, len(p.Segments), p.Model, p.Language))
+					a.replView.AppendLog(fmt.Sprintf("  • %-20s (%d captions) [%s]", p.Name, len(p.Segments), p.Stages["transcribe"]))
 				}
 			}
 
 		case "status":
 			if a.project == nil {
-				a.replView.AppendLog("No active project loaded.")
+				a.replView.AppendLog("No project loaded. Type /new to create a project.")
 			} else {
-				a.replView.AppendLog(fmt.Sprintf("Project: %s | Audio: %s | Model: %s | Lang: %s", a.project.Name, a.project.AudioPath, a.project.Model, a.project.Language))
-				a.replView.AppendLog(fmt.Sprintf("Transcribe stage: %s (%d segments)", a.project.Stages["transcribe"], len(a.project.Segments)))
-				a.replView.AppendLog(fmt.Sprintf("Export stage: %s", a.project.Stages["export"]))
-			}
-
-		case "review":
-			if a.project != nil {
-				a.reviewView = review.New(a.project, a.width, a.height)
-				a.screen = ScreenReview
-			} else {
-				a.replView.AppendLog("[ERROR] No project loaded. Create one with /new first.")
+				a.replView.AppendLog(fmt.Sprintf("Project:   %s", a.project.Name))
+				a.replView.AppendLog(fmt.Sprintf("Audio:     %s", a.project.AudioPath))
+				a.replView.AppendLog(fmt.Sprintf("Model:     %s", a.project.Model))
+				a.replView.AppendLog(fmt.Sprintf("Language:  %s", a.project.Language))
+				a.replView.AppendLog(fmt.Sprintf("Captions:  %d segments", len(a.project.Segments)))
+				a.replView.AppendLog(fmt.Sprintf("Status:    transcribe: %s | export: %s",
+					a.project.Stages["transcribe"], a.project.Stages["export"]))
 			}
 
 		case "models":
 			a.modelMgrView = modelmgr.New(a.modelManager, a.width, a.height)
 			a.screen = ScreenModelMgr
 
-		case "language", "lang":
+		case "language":
 			if len(msg.Args) > 0 {
-				lang := strings.ToLower(msg.Args[0])
-				a.config.DefaultLanguage = lang
+				code := msg.Args[0]
+				a.config.DefaultLanguage = code
 				_ = config.SaveConfig(a.config)
 				if a.project != nil {
-					a.project.Language = lang
+					a.project.Language = code
 					_ = project.SaveProject(a.project, ".")
 				}
-				a.replView.AppendLog("✓ Language set to " + lang)
+				a.replView.AppendLog(fmt.Sprintf("✓ Language set to %s", code))
 			} else {
 				a.langPickerView = langpicker.New(a.width, a.height)
 				a.screen = ScreenLangPicker
@@ -239,6 +257,18 @@ func (a AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "wizard":
 			a.wizardView = wizard.New(a.width, a.height)
 			a.screen = ScreenWizard
+
+		case "review":
+			if a.project != nil {
+				if len(a.project.Segments) == 0 {
+					a.replView.AppendLog("[ERROR] Project has 0 captions. Run /transcribe first.")
+				} else {
+					a.reviewView = review.New(a.project, a.width, a.height)
+					a.screen = ScreenReview
+				}
+			} else {
+				a.replView.AppendLog("[ERROR] No project loaded. Create one with /new first.")
+			}
 
 		case "export":
 			if a.project != nil {
@@ -268,23 +298,31 @@ func (a AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				a.replView.AppendLog("▸ Starting transcription pipeline...")
 				modelPath, exists := a.modelManager.GetModelPath(a.project.Model)
 				if !exists {
-					a.replView.AppendLog(fmt.Sprintf("[ERROR] Model '%s' not downloaded. Run /models to download it.", a.project.Model))
+					a.replView.AppendLog(fmt.Sprintf("[ERROR] Model '%s' not downloaded. Run /models to download it first.", a.project.Model))
 				} else {
-					whisperBin, err := binaries.FindBinary("whisper-cli")
-					if err != nil {
-						a.replView.AppendLog(fmt.Sprintf("[ERROR] whisper-cli not found: %v. Please install or place whisper-cli in PATH or ~/.local/share/subforge/bin", err))
-					} else {
-						proj := a.project
-						return a, func() tea.Msg {
-							err := pipeline.RunTranscription(proj, ".", modelPath, whisperBin, func(s string) {
-								// Progress callback
-							})
-							if err == nil {
-								_ = project.SaveProject(proj, ".")
-							}
-							return TranscribeCompleteMsg{Err: err}
+					proj := a.project
+					ch := make(chan pipelineProgressEvent, 50)
+					go func() {
+						whisperBin, err := binaries.EnsureWhisperBinary(func(curr, tot int64, status string) {
+							ch <- pipelineProgressEvent{Line: status}
+						})
+						if err != nil {
+							ch <- pipelineProgressEvent{Done: true, Err: fmt.Errorf("whisper-cli setup failed: %w", err)}
+							close(ch)
+							return
 						}
-					}
+
+						ch <- pipelineProgressEvent{Line: "▸ Converting audio & running Whisper..."}
+						err = pipeline.RunTranscription(proj, ".", modelPath, whisperBin, func(line string) {
+							ch <- pipelineProgressEvent{Line: line}
+						})
+						if err == nil {
+							_ = project.SaveProject(proj, ".")
+						}
+						ch <- pipelineProgressEvent{Done: true, Err: err}
+						close(ch)
+					}()
+					return a, WaitForPipelineProgress(ch)
 				}
 			} else {
 				a.replView.AppendLog("[ERROR] No project loaded. Use /new to create one.")
@@ -355,22 +393,9 @@ func (a AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case ScreenModelMgr:
 		if keyMsg, ok := msg.(tea.KeyMsg); ok {
-			switch keyMsg.Type {
-			case tea.KeyEsc:
+			if keyMsg.Type == tea.KeyEsc && !a.modelMgrView.IsDownloading() {
 				a.screen = ScreenREPL
 				return a, nil
-			case tea.KeyEnter:
-				if selected := a.modelMgrView.SelectedModel(); selected != nil {
-					a.config.DefaultModel = selected.Name
-					_ = config.SaveConfig(a.config)
-					if a.project != nil {
-						a.project.Model = selected.Name
-						_ = project.SaveProject(a.project, ".")
-					}
-					a.replView.AppendLog(fmt.Sprintf("✓ Active model set to '%s'", selected.Name))
-					a.screen = ScreenREPL
-					return a, nil
-				}
 			}
 		}
 		var cmd tea.Cmd
