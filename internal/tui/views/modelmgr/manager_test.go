@@ -20,7 +20,7 @@ func TestModelManagerViewAndNavigation(t *testing.T) {
 
 	// Test View rendering
 	view := m.View()
-	if !strings.Contains(view, "Whisper GGML Model Manager") {
+	if !strings.Contains(view, "Model Manager") {
 		t.Errorf("View missing title: %s", view)
 	}
 	if !strings.Contains(view, "tiny") || !strings.Contains(view, "small") {

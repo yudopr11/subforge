@@ -8,6 +8,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/yudopr11/subforge/internal/app/models"
+	"github.com/yudopr11/subforge/internal/tui/components"
 	"github.com/yudopr11/subforge/internal/tui/theme"
 )
 
@@ -110,13 +111,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.Err != nil {
 			m.statusMsg = theme.ErrorStyle.Render(fmt.Sprintf("Download failed: %v", msg.Err))
 		} else {
-			m.statusMsg = theme.StatusSuccessStyle.Render(fmt.Sprintf("✓ Model '%s' downloaded successfully! Press Enter to select as active model.", msg.Model))
+			m.statusMsg = theme.StatusSuccessStyle.Render(fmt.Sprintf("✓ Model '%s' installed! Press Enter to set active.", msg.Model))
 		}
 		return m, nil
 
 	case tea.KeyMsg:
 		if m.downloading {
-			// Do not accept navigation during active download
+			// Ignore navigation during active download
 			return m, nil
 		}
 
@@ -210,51 +211,62 @@ func (m Model) renderProgressBar(current, total int64, width int) string {
 }
 
 func (m Model) View() string {
-	var sb strings.Builder
-	sb.WriteString(theme.TitleStyle.Render("Whisper GGML Model Manager\n\n"))
+	width := m.width
+	if width <= 0 {
+		width = 80
+	}
 
+	header := components.RenderHeader("subforge v0.2.0", "Model Manager", width)
+
+	var sb strings.Builder
+	sb.WriteString(header + "\n\n")
+
+	// Table Header
+	tblHeader := fmt.Sprintf("  %-10s  %-10s  %-18s  %s", "Model", "Size", "Status", "Description")
+	sb.WriteString(lipgloss.NewStyle().Foreground(theme.ColorMuted).Bold(true).Render(tblHeader) + "\n")
+	sb.WriteString(lipgloss.NewStyle().Foreground(theme.ColorMuted).Render("  "+strings.Repeat("─", width-4)) + "\n")
+
+	// Rows
 	for i, info := range m.available {
 		cursor := "  "
 		if i == m.cursor {
-			cursor = theme.PromptStyle.Render("▸ ")
+			cursor = "▸ "
 		}
 
-		nameStyle := lipgloss.NewStyle().Width(10)
-		if i == m.cursor {
-			nameStyle = nameStyle.Bold(true).Foreground(theme.ColorPrimary)
-		}
-		colName := nameStyle.Render(info.Name)
-
-		colSize := fmt.Sprintf("(%4d MB)", info.SizeMB)
+		colName := fmt.Sprintf("%-10s", info.Name)
+		colSize := fmt.Sprintf("%6d MB  ", info.SizeMB)
 
 		installed := false
 		if m.mgr != nil {
 			_, installed = m.mgr.GetModelPath(info.Name)
 		}
 
-		statusStyle := lipgloss.NewStyle().Width(18)
 		var colStatus string
 		if installed {
-			colStatus = statusStyle.Foreground(theme.ColorSuccess).Render("[Installed ✓]")
+			colStatus = lipgloss.NewStyle().Foreground(theme.ColorSuccess).Render("[Installed ✓]   ")
 		} else {
-			colStatus = statusStyle.Foreground(theme.ColorMuted).Render("[Not Downloaded]")
+			colStatus = lipgloss.NewStyle().Foreground(theme.ColorMuted).Render("[Not Installed] ")
 		}
 
-		sb.WriteString(fmt.Sprintf("%s%s %s %s - %s\n",
-			cursor, colName, colSize, colStatus, info.Description))
+		rowText := fmt.Sprintf("%s%s  %s%s  %s", cursor, colName, colSize, colStatus, info.Description)
+		if i == m.cursor {
+			rowText = lipgloss.NewStyle().Foreground(theme.ColorPrimary).Bold(true).Render(fmt.Sprintf("%s%s  %s", cursor, colName, colSize)) +
+				colStatus +
+				lipgloss.NewStyle().Foreground(theme.ColorPrimary).Render("  "+info.Description)
+		}
+		sb.WriteString(rowText + "\n")
 	}
 
 	if m.downloading {
-		sb.WriteString("\n" + theme.TitleStyle.Render(fmt.Sprintf("Downloading ggml-%s.bin...", m.downloadName)) + "\n")
-		sb.WriteString("  " + m.renderProgressBar(m.downloadCurrent, m.downloadTotal, m.width-25) + "\n")
+		sb.WriteString("\n  " + theme.TitleStyle.Render(fmt.Sprintf("Downloading ggml-%s.bin...", m.downloadName)) + "\n")
+		sb.WriteString("  " + m.renderProgressBar(m.downloadCurrent, m.downloadTotal, width-30) + "\n")
 	} else if m.statusMsg != "" {
-		sb.WriteString("\n" + m.statusMsg + "\n")
+		sb.WriteString("\n  " + m.statusMsg + "\n")
 	}
 
-	if m.downloading {
-		sb.WriteString("\nDownloading in progress... Please wait.\n")
-	} else {
-		sb.WriteString("\n[Enter] Download / Set Active  [d] Delete  [Esc] Back\n")
-	}
-	return sb.String()
+	footer := components.RenderFooter(
+		[]string{"[↑/↓] Select", "[Enter] Download / Set Active", "[d] Delete", "[Esc] Back to REPL"},
+		width,
+	)
+	return sb.String() + "\n" + footer
 }
