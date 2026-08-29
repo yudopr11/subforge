@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 
@@ -67,9 +68,18 @@ func RunTranscription(
 	}
 
 	// 2. Build whisper-cli command
+	threads := runtime.NumCPU()
+	if threads > 8 {
+		threads = 8
+	}
+	if threads < 1 {
+		threads = 1
+	}
+
 	args := []string{
 		"-m", absModelPath,
 		"-f", absWavPath,
+		"-t", strconv.Itoa(threads),
 		"--output-json",
 		"--output-file", absJsonOutputBase,
 		"--print-progress",
