@@ -4,103 +4,66 @@ Instructions for AI coding agents (and human contributors using agent tooling) w
 
 ## Project Overview
 
-SubForge is a **local-first subtitle generation and translation tool** for content creators. It transcribes exported final audio into timestamped captions, optionally translates them via LLMs, and exports SRT/ASS files through a Textual TUI.
+SubForge is a **local-first subtitle generation, review, and export tool** for content creators. It transcribes audio into timestamped captions using local Whisper models, provides a keyboard-driven Bubble Tea TUI for editing captions and speaker tags with audio playback preview, and exports SRT/ASS subtitle files.
 
 **Read these before doing anything non-trivial:**
 
-- `docs/PRD.md` — what SubForge is (product requirements, v0.2.0)
-- `docs/ARCHITECTURE.md` — how it must be built (technical architecture, v0.2.0)
-- `docs/superpowers/plans/` — current implementation plans
+- `docs/PRD.md` — product requirements and UX specification (v0.3.0)
+- `docs/ARCHITECTURE.md` — technical architecture, package layout, and guarantees (v0.3.0)
+- `docs/superpowers/plans/` — implementation plans
+
+---
 
 ## Non-Negotiable Architectural Rules
 
-These come from ARCHITECTURE.md §37. Violating any of them is a bug even if tests pass:
+These rules come from `docs/ARCHITECTURE.md §5`. Violating any of them is a bug even if tests pass:
 
-1. **Provider independence.** The application core depends only on the protocols in `src/subforge/providers/base.py`. Never import a concrete provider (`whisper_cpp`, …) outside its own module. New providers are registered in `src/subforge/providers/registry.py`.
-2. **Local first, zero-bloat.** Transcription uses native standalone `whisper.cpp` executables with GGML models without heavy PyTorch, TorchAudio, or CUDA packages. Dependencies stay lightweight (<50 MB).
-3. **AI does not own metadata.** LLMs generate text only. Segment IDs, timestamps, project state, file paths are application-owned and validated on merge. Translation output missing/duplicating IDs or empty text must fail that batch — never silently corrupt the project.
-4. **Human review.** All AI output is editable; review screens are part of the core workflow, not an afterthought.
-5. **Resumable pipeline.** Every expensive stage records explicit state (`PENDING/RUNNING/COMPLETED/FAILED/SKIPPED`) in `project.json`. Retrying a stage must never rerun completed upstream stages.
-6. **Canonical internal representation.** SRT and ASS are *output formats only*. The canonical model is `Segment {id, start: float seconds, end: float seconds, source, speaker?, translations{lang→text}}` in `src/subforge/models/project.py`. Never store formatted timestamps as data.
-7. **The TUI contains no business logic.** Screens construct and call `app/pipeline.py`, `app/export.py`, etc.
+1. **Pure Go, Zero CGO.** Always build with `CGO_ENABLED=0` to ensure static standalone binaries (~5.5 MB) and instant cross-compilation without C toolchains.
+2. **Local first, zero-bloat.** Transcription uses standalone `whisper-cli` executables with GGML models. Zero heavy PyTorch, TorchAudio, or CUDA dependencies.
+3. **Application owns metadata.** Segment IDs, start/end timestamps, project state, and file paths are application-owned.
+4. **Human review.** All transcription output is editable; caption review with speaker tagging and audio preview is a first-class citizen.
+5. **Resumable pipeline.** Every expensive stage records explicit state (`pending`, `running`, `completed`, `failed`) in `project.json`.
+6. **Canonical internal representation.** SRT and ASS are *output formats only*. The canonical model is `domain.Segment {ID int, Start float64, End float64, Source string, Speaker string}`. Never store formatted timestamp strings in project state.
+7. **The TUI contains no business logic.** Bubble Tea views render presentation and dispatch messages (`tea.Msg`); pipeline execution, model management, and file storage live in `internal/app/`.
+8. **Unified 3-Tier Screen Layout.** Every interactive screen (`REPL`, `Wizard`, `AudioPicker`, `ProjectPicker`, `LanguagePicker`, `ModelManager`, `Review`) must use the standard 3-tier structure:
+   - **Top Header Banner**: `components.RenderHeader("subforge v0.3.0", subtitle, width)`
+   - **Central Content Area**: Clean, column-aligned table or list with `▸ ` selection cursor
+   - **Bottom Key Legend**: `components.RenderFooter(keys, width)`
+9. **Atomic file writes.** All `project.json` and `config.json` writes must write to a temporary file (`.tmp`) first before atomic `os.Rename`.
 
-## Commands
+---
+
+## Commands & Quality Gates
 
 ```bash
-uv sync                          # install deps (or pip install -e .)
-uv run pytest                    # all tests (unit + integration/e2e)
-uv run pytest tests/unit -v      # unit only
-uv run pytest tests/integration -v  # e2e only
-uv run ruff check src tests      # lint
-uv run mypy src                  # type check (strict)
+make test        # Run all unit and integration tests with race detector (go test -v -race ./...)
+make lint        # Run linter (go vet ./...)
+make build       # Compile standalone static binary to bin/subforge
 ```
 
-All tests must pass without network access, GPU, downloaded models, or running LLM servers. Use fakes/mocks (`httpx.MockTransport`, scripted providers) — see `tests/integration/test_full_flow.py` for the pattern.
+All tests must pass without network access, GPU, downloaded models, or running servers. Use in-memory mocks, temporary directories (`t.TempDir()`), and mock binaries.
+
+---
 
 ## Testing Requirements (every feature)
 
-Unit coverage alone is NOT done. A feature is complete only when **all three** gates pass:
+A feature is complete only when all three gates pass:
 
-1. **Unit tests** cover the new logic (edge cases, failure paths), mirroring `src/` layout.
-2. **E2E / integration test** exercises the feature through its *user-visible flow*:
-   - pipeline/service features → drive them through `Pipeline` / `export_subtitles` end-to-end with scripted providers (see `tests/integration/test_full_flow.py`);
-   - TUI features → boot `SubForgeApp` with `run_test()`, push the real screen, and drive its public handlers/seams (see `tests/unit/test_tui_flow.py`, `test_setup_wizard.py`) asserting persisted state and status output;
-   - provider features → full request→normalize→merge path over `httpx.MockTransport`.
-   An e2e test must assert observable outcomes (files written, `project.json` state, on-screen status), not internal calls.
-3. **Quality gates**: `uv run pytest tests/ && uv run ruff check src tests && uv run mypy src`.
+1. **Unit tests** (`*_test.go`) cover logic and edge cases in the respective package.
+2. **Integration / UI tests** exercise full flows (e.g. `tests/integration/full_flow_test.go`, `internal/tui/app_test.go`).
+3. **Quality gates**: `make test && make lint && make build`.
 
-If a feature can only be tested at unit level, that is a design smell — add a seam so the flow is testable end-to-end.
+---
+
+## Keybindings & Navigation Standards
+
+- Every sub-screen (`AudioPicker`, `ProjectPicker`, `LanguagePicker`, `ModelManager`, `Review`, `Wizard`) must allow returning to the REPL via `Esc` or `q` (when not actively filtering).
+- In the REPL, commands are entered at the `> ` prompt (`/new`, `/open`, `/transcribe`, `/review`, `/export`, `/models`, `/language`, `/wizard`, `/status`, `quit`, `exit`, `?`).
+
+---
 
 ## Documentation Sync
 
-`docs/PRD.md` and `docs/ARCHITECTURE.md` are load-bearing: code cites their section numbers (`PRD §11`, `ARCH §16`). Therefore:
-
-- New behavior, UX flow, guarantee, or design decision that is **not already in the specs** requires updating the relevant PRD/ARCHITECTURE sections **in the same change set** (same commit or a `docs:` commit immediately after the feature commit).
-- When adding sections, keep numbering aligned with existing citations; grep first: `grep -rn "PRD §\|ARCH §" src tests`.
-- Plans in `docs/superpowers/plans/` use checkbox tracking (`- [ ]`/`- [x]`) and must be kept current as tasks finish.
-
-## Conventions
-
-- Python ≥ 3.11, full type hints, `mypy --strict` clean.
-- Formatting/linting via ruff (`line-length = 100`).
-- Pydantic models for anything serialized to `project.json`; frozen dataclasses for provider value objects.
-- Tests live in `tests/unit/`, `tests/integration/`, fixtures in `tests/fixtures/`. One test file per module, mirroring `src/` layout.
-- Every feature ships unit + e2e coverage per "Testing Requirements" above.
-- Specs stay in sync per "Documentation Sync" above.
-- TUI screens are keyboard-only (ARCH §3.2): declare `BINDINGS` for every action,
-  render an on-screen key legend, and never require mouse interaction.
-- Commit style: conventional commits (`feat:`, `fix:`, `test:`, `docs:`, `chore:`).
-- Work task-by-task from a plan in `docs/superpowers/plans/`; each plan task ends with a commit.
-- TDD: write the failing test first, watch it fail, implement minimally, watch it pass, commit.
-
-## Security & Privacy (ARCHITECTURE §29)
-
-Never commit:
-
-- `.env` or any API key
-- Secrets live only in: (a) the TUI-authored AppConfig at `~/.config/subforge/config.json` (`chmod 600`, atomic writes — primary path) and (b) environment variables for headless automation (`OPENAI_API_KEY`, `OPENCODE_API_KEY`). Never hardcode keys, never echo them in logs/tests/output.
-- user audio (`*.wav`, `*.mp3`, `*.flac`)
-- generated subtitles (`*.srt`, `*.ass`)
-- model weights, caches, or user project data
-
-`.gitignore` already covers these — keep it that way. Test audio fixtures must be synthetic/openly licensed; generate binary fixtures at test time when possible.
-
-## Error Handling Style
-
-User-facing failures follow PRD §21: explicit, prefixed messages (e.g., `[ERROR] LM Studio is not running.`) raised as `StageError` from pipeline stages, so the TUI can display them and the user can retry just that stage. Fail loudly at validation boundaries; never swallow exceptions in providers.
-
-## Providers & Configuration
-
-User configurations live in AppConfig (`~/.config/subforge/config.json` on Linux/macOS or `%LOCALAPPDATA%/subforge/config.json` on Windows):
-
-- Transcription: `local-whisper-cpp` / `local` (default, always local via standalone whisper.cpp CLI)
-
-Model recommendations are dynamically hardware-aware (inspecting available RAM and CPU cores via `DeviceDetector`). Models are downloaded on demand from official GGML repositories into local app storage.
-
-## When Adding a Provider
-
-1. Implement the protocol from `providers/base.py` (`TranscriptionProvider`).
-2. Normalize output to the internal types (`Transcript`) inside your module.
-3. Register with `REGISTRY.register_*("<name>", Factory)` at module bottom.
-4. Unit-test with mocks (no real network/models).
-5. Core pipeline code stays untouched — if you find yourself editing `pipeline.py` to add a provider, stop and re-read rule 1.
+`docs/PRD.md` and `docs/ARCHITECTURE.md` are load-bearing:
+- Any new behavior, UX flow, or design decision must update `docs/PRD.md` and `docs/ARCHITECTURE.md` in the same change set.
+- Plans in `docs/superpowers/plans/` use checkbox tracking (`- [ ]` / `- [x]`) and must stay current.
