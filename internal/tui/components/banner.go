@@ -29,7 +29,9 @@ func RenderHeader(ctx HeaderContext, width int) string {
 	}
 
 	left := theme.TitleStyle.Render(" " + appTitle)
-	right := lipgloss.NewStyle().Foreground(theme.ColorPrimary).Bold(true).Render(screenTitle + " ")
+	logoBadge := lipgloss.NewStyle().Background(theme.ColorPrimary).Foreground(theme.ColorBgDark).Bold(true).Render(" SF ")
+	screenBadge := lipgloss.NewStyle().Foreground(theme.ColorPrimary).Bold(true).Render(" " + screenTitle + " ")
+	right := logoBadge + screenBadge
 
 	gap1 := width - lipgloss.Width(left) - lipgloss.Width(right)
 	if gap1 < 0 {

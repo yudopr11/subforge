@@ -114,6 +114,51 @@ func TestReviewModelEditSpeaker(t *testing.T) {
 	}
 }
 
+func TestReviewModelBulkSpeakerTagging(t *testing.T) {
+	proj := createTestProject()
+	m := review.New(proj, 80, 24)
+
+	// Toggle select row 0 with 'v'
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'v'}})
+	m = updated.(review.Model)
+	if m.SelectedCount() != 1 {
+		t.Fatalf("Expected 1 selected row, got %d", m.SelectedCount())
+	}
+
+	// Move down and select row 1 with 'v'
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m = updated.(review.Model)
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'v'}})
+	m = updated.(review.Model)
+	if m.SelectedCount() != 2 {
+		t.Fatalf("Expected 2 selected rows, got %d", m.SelectedCount())
+	}
+
+	// Trigger bulk speaker mode with 'S'
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'S'}})
+	m = updated.(review.Model)
+	if !m.IsEditing() {
+		t.Fatalf("Expected IsEditing() to be true in bulk speaker mode")
+	}
+
+	// Type speaker name 'Host'
+	for _, r := range "Host" {
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		m = updated.(review.Model)
+	}
+
+	// Commit with Enter
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(review.Model)
+
+	if proj.Segments[0].Speaker != "Host" || proj.Segments[1].Speaker != "Host" {
+		t.Errorf("Bulk speaker tag failed: seg[0]=%q, seg[1]=%q; want 'Host'", proj.Segments[0].Speaker, proj.Segments[1].Speaker)
+	}
+	if m.SelectedCount() != 0 {
+		t.Errorf("Expected selections to be cleared after commit, got %d", m.SelectedCount())
+	}
+}
+
 func TestReviewModelUndo(t *testing.T) {
 	proj := createTestProject()
 	m := review.New(proj, 80, 24)

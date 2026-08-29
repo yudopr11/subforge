@@ -19,6 +19,7 @@ const (
 	modeBrowse editMode = iota
 	modeEditCaption
 	modeEditSpeaker
+	modeBulkSpeaker
 )
 
 type Model struct {
@@ -27,6 +28,7 @@ type Model struct {
 	cursor    int
 	mode      editMode
 	input     textinput.Model
+	selected  map[int]bool
 	history   [][]domain.Segment
 	statusMsg string
 	headerCtx components.HeaderContext
@@ -50,6 +52,7 @@ func New(proj *domain.Project, width, height int) Model {
 		cursor:    0,
 		mode:      modeBrowse,
 		input:     ti,
+		selected:  make(map[int]bool),
 		headerCtx: components.HeaderContext{ScreenName: "Caption Review"},
 		width:     width,
 		height:    height,
@@ -66,6 +69,16 @@ func (m Model) Cursor() int {
 
 func (m Model) IsEditing() bool {
 	return m.mode != modeBrowse
+}
+
+func (m Model) SelectedCount() int {
+	count := 0
+	for _, sel := range m.selected {
+		if sel {
+			count++
+		}
+	}
+	return count
 }
 
 func (m *Model) StopAudio() {
@@ -109,9 +122,34 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
-		if m.mode == modeEditCaption || m.mode == modeEditSpeaker {
+		if m.mode == modeEditCaption || m.mode == modeEditSpeaker || m.mode == modeBulkSpeaker {
 			switch msg.Type {
 			case tea.KeyEnter:
+				val := strings.TrimSpace(m.input.Value())
+				if m.mode == modeBulkSpeaker {
+					m.pushHistory()
+					count := 0
+					if m.SelectedCount() > 0 {
+						for idx, sel := range m.selected {
+							if sel && idx < len(m.project.Segments) {
+								m.project.Segments[idx].Speaker = val
+								count++
+							}
+						}
+					} else if m.cursor >= 0 && m.cursor < len(m.project.Segments) {
+						m.project.Segments[m.cursor].Speaker = val
+						count = 1
+					}
+					m.selected = make(map[int]bool)
+					m.mode = modeBrowse
+					if val == "" {
+						m.statusMsg = fmt.Sprintf("✓ Cleared speaker on %d segment(s)", count)
+					} else {
+						m.statusMsg = fmt.Sprintf("✓ Set speaker '%s' on %d segment(s)", val, count)
+					}
+					return m, nil
+				}
+
 				if m.cursor >= 0 && m.cursor < len(m.project.Segments) {
 					m.pushHistory()
 					if m.mode == modeEditCaption {
@@ -123,10 +161,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.mode = modeBrowse
 				m.statusMsg = "✓ Saved"
 				return m, nil
+
 			case tea.KeyEsc:
 				m.mode = modeBrowse
 				m.statusMsg = "Edit cancelled"
 				return m, nil
+
 			default:
 				var cmd tea.Cmd
 				m.input, cmd = m.input.Update(msg)
@@ -143,6 +183,26 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.project != nil && m.cursor < len(m.project.Segments)-1 {
 				m.cursor++
 			}
+		case "v", "x":
+			if m.project != nil && len(m.project.Segments) > 0 {
+				m.selected[m.cursor] = !m.selected[m.cursor]
+				if !m.selected[m.cursor] {
+					delete(m.selected, m.cursor)
+				}
+				m.statusMsg = fmt.Sprintf("%d segment(s) selected", m.SelectedCount())
+			}
+		case "a", "ctrl+a":
+			if m.project != nil && len(m.project.Segments) > 0 {
+				if m.SelectedCount() == len(m.project.Segments) {
+					m.selected = make(map[int]bool)
+					m.statusMsg = "Cleared selection"
+				} else {
+					for i := range m.project.Segments {
+						m.selected[i] = true
+					}
+					m.statusMsg = fmt.Sprintf("Selected all %d segments", len(m.project.Segments))
+				}
+			}
 		case "enter", "e":
 			if m.project != nil && len(m.project.Segments) > 0 && m.cursor < len(m.project.Segments) {
 				m.mode = modeEditCaption
@@ -150,9 +210,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.input.Focus()
 			}
 		case "s":
-			if m.project != nil && len(m.project.Segments) > 0 && m.cursor < len(m.project.Segments) {
-				m.mode = modeEditSpeaker
-				m.input.SetValue(m.project.Segments[m.cursor].Speaker)
+			if m.project != nil && len(m.project.Segments) > 0 {
+				if m.SelectedCount() > 1 {
+					m.mode = modeBulkSpeaker
+					m.input.SetValue("")
+					m.input.Focus()
+				} else if m.cursor < len(m.project.Segments) {
+					m.mode = modeEditSpeaker
+					m.input.SetValue(m.project.Segments[m.cursor].Speaker)
+					m.input.Focus()
+				}
+			}
+		case "S", "b":
+			if m.project != nil && len(m.project.Segments) > 0 {
+				m.mode = modeBulkSpeaker
+				m.input.SetValue("")
 				m.input.Focus()
 			}
 		case "u", "ctrl+z":
@@ -220,6 +292,8 @@ func (m Model) View() string {
 		endIdx = len(m.project.Segments)
 	}
 
+	hasSelections := m.SelectedCount() > 0
+
 	for i := startIdx; i < endIdx; i++ {
 		seg := m.project.Segments[i]
 		cursor := "  "
@@ -227,13 +301,22 @@ func (m Model) View() string {
 			cursor = "▸ "
 		}
 
+		selectMarker := ""
+		if hasSelections {
+			if m.selected[i] {
+				selectMarker = lipgloss.NewStyle().Foreground(theme.ColorSuccess).Bold(true).Render("[✓] ")
+			} else {
+				selectMarker = lipgloss.NewStyle().Foreground(theme.ColorMuted).Render("[ ] ")
+			}
+		}
+
 		timeStr := fmt.Sprintf("[%s → %s]", domain.FormatSRTTime(seg.Start), domain.FormatSRTTime(seg.End))
 		speakerStr := ""
 		if seg.Speaker != "" {
-			speakerStr = fmt.Sprintf("<%s> ", seg.Speaker)
+			speakerStr = lipgloss.NewStyle().Foreground(theme.ColorSecondary).Bold(true).Render(fmt.Sprintf("<%s> ", seg.Speaker))
 		}
 
-		line := fmt.Sprintf("%s#%03d %-25s %s%s", cursor, seg.ID, timeStr, speakerStr, seg.Source)
+		line := fmt.Sprintf("%s%s#%03d %-25s %s%s", cursor, selectMarker, seg.ID, timeStr, speakerStr, seg.Source)
 		if i == m.cursor {
 			line = lipgloss.NewStyle().Foreground(theme.ColorPrimary).Bold(true).Render(line)
 		}
@@ -244,12 +327,23 @@ func (m Model) View() string {
 		sb.WriteString("\n  Editing Caption: " + m.input.View() + "\n")
 	} else if m.mode == modeEditSpeaker {
 		sb.WriteString("\n  Editing Speaker: " + m.input.View() + "\n")
+	} else if m.mode == modeBulkSpeaker {
+		count := m.SelectedCount()
+		if count == 0 {
+			count = 1
+		}
+		sb.WriteString(fmt.Sprintf("\n  Bulk Speaker Tag for %d segment(s): %s\n", count, m.input.View()))
+	}
+
+	footerKeys := []string{"[↑/↓] Move", "[Enter] Edit Text", "[s] Speaker", "[v] Select", "[S] Bulk Speaker", "[Space] Play", "[u] Undo", "[Esc] Back"}
+	if hasSelections {
+		footerKeys = []string{"[v] Toggle", "[a] Select All", "[S] Apply Speaker", "[u] Undo", "[Esc] Back"}
 	}
 
 	return components.RenderScreen(
 		ctx,
 		sb.String(),
-		[]string{"[↑/↓/j/k] Move", "[Enter/e] Edit Caption", "[s] Speaker", "[Space] Play", "[u] Undo", "[Esc] Back to REPL"},
+		footerKeys,
 		width,
 		height,
 	)
