@@ -9,7 +9,7 @@ $InstallDir = Join-Path $env:LOCALAPPDATA "subforge\bin"
 $ExePath = Join-Path $InstallDir "$AppName.exe"
 
 Write-Host "================================================================" -ForegroundColor Cyan
-Write-Host "  SubForge -- Local-First Subtitle Generator" -ForegroundColor White
+Write-Host "  SubForge -- Local-First Subtitle Generator (Go)" -ForegroundColor White
 Write-Host "================================================================" -ForegroundColor Cyan
 Write-Host ""
 
@@ -18,14 +18,14 @@ if (-not (Test-Path $InstallDir)) {
     New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
 }
 
-# 2. Determine latest release or standalone binary download URL
+# 2. Determine latest release download URL
 Write-Host "[*] Fetching latest release information..." -ForegroundColor Yellow
 
 $DownloadUrl = $null
 try {
     $ReleaseApi = "https://api.github.com/repos/$Repo/releases/latest"
     $Release = Invoke-RestMethod -Uri $ReleaseApi -Headers @{ "User-Agent" = "subforge-installer" } -TimeoutSec 10
-    $Asset = $Release.assets | Where-Object { $_.name -like "*windows*.zip" -or $_.name -like "*windows*.exe" -or $_.name -eq "$AppName.exe" } | Select-Object -First 1
+    $Asset = $Release.assets | Where-Object { $_.name -like "*windows*.exe" -or $_.name -eq "$AppName.exe" } | Select-Object -First 1
     if ($Asset) {
         $DownloadUrl = $Asset.browser_download_url
     }
@@ -43,23 +43,13 @@ Write-Host "[*] Downloading SubForge to $InstallDir..." -ForegroundColor Yellow
 $TempFile = Join-Path $env:TEMP "subforge-setup-download.tmp"
 try {
     Invoke-WebRequest -Uri $DownloadUrl -OutFile $TempFile -UseBasicParsing
-    
-    if ($DownloadUrl.EndsWith(".zip")) {
-        Expand-Archive -Path $TempFile -DestinationPath $InstallDir -Force
-    } else {
-        Move-Item -Path $TempFile -Destination $ExePath -Force
-    }
+    Move-Item -Path $TempFile -Destination $ExePath -Force
 } catch {
-    # If standalone binary not yet published on GitHub, offer uv/pipx bootstrap fallback
-    Write-Host "[i] Standalone binary not found. Bootstrapping via uv tool/pipx..." -ForegroundColor DarkGray
-    if (Get-Command uv -ErrorAction SilentlyContinue) {
-        uv tool install "git+https://github.com/$Repo.git" --force
-        Write-Host "[OK] SubForge installed via uv tool." -ForegroundColor Green
-        exit 0
-    } elseif (Get-Command pipx -ErrorAction SilentlyContinue) {
-        pipx install "git+https://github.com/$Repo.git" --force
-        Write-Host "[OK] SubForge installed via pipx." -ForegroundColor Green
-        exit 0
+    Write-Host "[i] Standalone binary not found. Trying go install..." -ForegroundColor DarkGray
+    if (Get-Command go -ErrorAction SilentlyContinue) {
+        $env:GOBIN = $InstallDir
+        go install "github.com/$Repo/cmd/subforge@latest"
+        Write-Host "[OK] SubForge installed via go install." -ForegroundColor Green
     } else {
         Write-Host "[ERROR] Could not download subforge binary: $_" -ForegroundColor Red
         exit 1

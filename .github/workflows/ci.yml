@@ -2,31 +2,31 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, master]
   pull_request:
 
 jobs:
   test:
+    name: Test & Lint
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: ["3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v5
+      - name: Set up Go
+        uses: actions/setup-go@v5
         with:
-          python-version: ${{ matrix.python-version }}
+          go-version: '1.24.x'
+          check-latest: true
+          cache: true
 
-      - name: Sync dependencies
-        run: uv sync
+      - name: Verify dependencies
+        run: go mod verify
 
-      - name: Lint (ruff)
-        run: uv run ruff check src tests
+      - name: Lint (go vet)
+        run: go vet ./...
 
-      - name: Type check (mypy strict)
-        run: uv run mypy src
+      - name: Run Tests (with race detector)
+        run: go test -v -race ./...
 
-      - name: Tests (no network/GPU required)
-        run: uv run pytest tests/ -q
+      - name: Build Binary Verification
+        run: CGO_ENABLED=0 go build -ldflags="-s -w" -o bin/subforge ./cmd/subforge

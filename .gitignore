@@ -34,6 +34,11 @@ whisper*/
 /models/
 /cache/
 
+# --- Go & Build Artifacts ---
+/bin/
+/dist/
+.superpowers/
+
 # --- Python ---
 __pycache__/
 *.py[cod]

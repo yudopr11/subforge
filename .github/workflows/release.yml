@@ -11,70 +11,51 @@ permissions:
 
 jobs:
   build:
+    name: Build Multi-OS Binaries
+    runs-on: ubuntu-latest
     strategy:
       matrix:
         include:
-          - os: windows-latest
-            bin_name: subforge-windows-x64
-            artifact_file: dist/subforge-windows-x64.exe
-          - os: ubuntu-latest
-            bin_name: subforge-linux-x64
-            artifact_file: dist/subforge-linux-x64
-          - os: macos-latest
-            bin_name: subforge-darwin-arm64
-            artifact_file: dist/subforge-darwin-arm64
-
-    runs-on: ${{ matrix.os }}
+          - goos: linux
+            goarch: amd64
+            artifact_name: subforge-linux-x64
+          - goos: linux
+            goarch: arm64
+            artifact_name: subforge-linux-arm64
+          - goos: darwin
+            goarch: amd64
+            artifact_name: subforge-darwin-x64
+          - goos: darwin
+            goarch: arm64
+            artifact_name: subforge-darwin-arm64
+          - goos: windows
+            goarch: amd64
+            artifact_name: subforge-windows-x64.exe
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v3
+      - name: Set up Go
+        uses: actions/setup-go@v5
         with:
-          enable-cache: true
+          go-version: '1.24.x'
+          check-latest: true
+          cache: true
 
-      - name: Set up Python
-        run: uv python install 3.12
-
-      - name: Install dependencies & PyInstaller
+      - name: Build Binary
+        env:
+          CGO_ENABLED: 0
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
         run: |
-          uv sync --no-dev
-          uv pip install pyinstaller
-
-      - name: Build standalone binary
-        shell: bash
-        run: |
-          PYTHONOPTIMIZE=2 uv run pyinstaller --noconfirm --onefile --clean \
-            --strip \
-            --name "${{ matrix.bin_name }}" \
-            --exclude-module "mypy" \
-            --exclude-module "ruff" \
-            --exclude-module "pytest" \
-            --exclude-module "_pytest" \
-            --exclude-module "unittest" \
-            --exclude-module "test" \
-            --exclude-module "tkinter" \
-            --exclude-module "sqlite3" \
-            --exclude-module "setuptools" \
-            --exclude-module "distutils" \
-            --exclude-module "pkg_resources" \
-            --exclude-module "pip" \
-            --exclude-module "pydoc" \
-            --exclude-module "xmlrpc" \
-            --exclude-module "pdb" \
-            --exclude-module "idlelib" \
-            --exclude-module "turtle" \
-            --exclude-module "turtledemo" \
-            --collect-all "textual" \
-            --collect-all "subforge" \
-            src/subforge/cli/main.py
+          mkdir -p dist
+          go build -ldflags="-s -w" -o dist/${{ matrix.artifact_name }} ./cmd/subforge
 
       - name: Upload Release Asset
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
         with:
-          files: ${{ matrix.artifact_file }}
+          files: dist/${{ matrix.artifact_name }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

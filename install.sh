@@ -10,7 +10,7 @@ INSTALL_DIR="${HOME}/.local/bin"
 TARGET_BIN="${INSTALL_DIR}/${APP_NAME}"
 
 printf "\033[36m════════════════════════════════════════════════════════════════\033[0m\n"
-printf "\033[1;37m  SubForge — Local-First Subtitle Generator\033[0m\n"
+printf "\033[1;37m  SubForge — Local-First Subtitle Generator (Go)\033[0m\n"
 printf "\033[36m════════════════════════════════════════════════════════════════\033[0m\n\n"
 
 # 1. Ensure install directory exists
@@ -44,16 +44,11 @@ if curl -fsSL "${DOWNLOAD_URL}" -o "${TEMP_FILE}" 2>/dev/null; then
   mv "${TEMP_FILE}" "${TARGET_BIN}"
   chmod +x "${TARGET_BIN}"
 else
-  # Fallback to uv tool or pipx if binary release is not available
-  printf "\033[90mℹ Standalone binary not found. Bootstrapping via uv tool/pipx...\033[0m\n"
-  if command -v uv >/dev/null 2>&1; then
-    uv tool install "git+https://github.com/${REPO}.git" --force
-    printf "\033[32m✓ SubForge installed via uv tool.\033[0m\n"
-    exit 0
-  elif command -v pipx >/dev/null 2>&1; then
-    pipx install "git+https://github.com/${REPO}.git" --force
-    printf "\033[32m✓ SubForge installed via pipx.\033[0m\n"
-    exit 0
+  # Fallback to go install if binary release is not available
+  printf "\033[90mℹ Standalone binary release not found. Trying go install...\033[0m\n"
+  if command -v go >/dev/null 2>&1; then
+    GOBIN="${INSTALL_DIR}" go install "github.com/${REPO}/cmd/subforge@latest"
+    printf "\033[32m✓ SubForge installed via go install.\033[0m\n"
   else
     printf "\033[31m[ERROR] Failed to download binary from %s\033[0m\n" "${DOWNLOAD_URL}"
     rm -f "${TEMP_FILE}"

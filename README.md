@@ -2,7 +2,7 @@
 
 > **Create once. Caption for everyone.**
 
-SubForge is a fast, local-first subtitle generation and editing tool for content creators. Export the final audio from your video editor, and SubForge turns it into accurate, timestamped captions ready for editing and export.
+SubForge is a fast, ultra-lightweight, local-first subtitle generation and editing tool for content creators built in pure **Go** with **Bubble Tea**. Export the final audio from your video editor, and SubForge turns it into accurate, timestamped captions ready for review and export.
 
 Built accessibility-first: captions that let Deaf and hard-of-hearing viewers follow your content.
 
@@ -10,7 +10,7 @@ Built accessibility-first: captions that let Deaf and hard-of-hearing viewers fo
 
 ## Quick Install (One-Line Installer)
 
-You can install SubForge with a single terminal command — no manual Python, PyTorch, or environment setup required!
+You can install SubForge with a single terminal command — standalone static binary, zero Python or environment setup required!
 
 ### Windows (PowerShell)
 ```powershell
@@ -48,20 +48,20 @@ curl -fsSL https://raw.githubusercontent.com/yudopr11/subforge/master/uninstall.
 ```
 final_audio.wav
       ↓
- Transcribe (local whisper.cpp)
+ Transcribe (local whisper.cpp CLI)
       ↓
- Review Captions (edit text & timing)
+ Review Captions (edit text, speaker tag & timing preview)
       ↓
  Export ({project_name}.srt · {project_name}.ass)
 ```
 
 ## Features
 
-- 🎙️ **Local-First Transcription** — standalone whisper.cpp CLI (GGML models `tiny` … `large-v3`, hardware recommendations based on CPU/RAM, on-demand download in-app with progress bars).
-- ✍️ **Caption Review & Audio Playback** — view, edit, audio preview (`p` to play, `x` to stop), and undo/redo (`Ctrl+Z`/`Ctrl+Y`) caption text in a terminal UI.
-- 📦 **Direct Export** — export clean SRT & ASS files directly to your current working directory and project archives.
-- ⚡ **Zero Bloat** — lightweight (<50 MB) without heavy PyTorch or CUDA dependencies.
-- 🖥️ **Monochrome & Transparent Aesthetic** — clean terminal design with transparent background support.
+- 🎙️ **Local-First Transcription** — standalone whisper.cpp CLI (GGML models `tiny` … `large-v3`, hardware recommendations based on CPU/RAM, automatic on-demand download in-app with progress bars).
+- ✍️ **Caption & Speaker Review** — interactive table view, edit caption text (`Enter`), edit speaker tags (`s`), segment audio preview (`Space`), and undo (`u`) in an interactive terminal UI.
+- 💾 **Direct Export** — export clean SRT & styled ASS files directly to your current working directory.
+- ⚡ **Ultra Lightweight & Fast** — single static binary (~10 MB), instant startup (<20ms), and low memory footprint (~15MB RAM) powered by Go & Bubble Tea.
+- 🖥️ **Hardware Aware** — automatic CPU & RAM detection with tailored Whisper model recommendations.
 
 ---
 
@@ -72,17 +72,20 @@ Launch SubForge in your terminal:
 subforge
 ```
 
-Then work with simple slash commands or keyboard shortcuts:
+Then work with simple slash commands:
 
-- `/new <audio>` (or press **`N`**) — Create project & import audio file.
-- `/transcribe` (or press **`T`**) — Transcribe audio using local whisper.cpp.
-- `/review` (or press **`R`**) — Open caption review, edit text, and preview audio.
-- `/export` (or press **`E`**) — Export `.srt` and `.ass` to current working directory.
-- `/models` (or press **`M`**) — Install & manage local Whisper GGML models.
-- `/language` — Set default audio source language (or auto-detect).
+- `/new [audio]` — Create project from audio/video file (or open interactive picker).
+- `/open [name]` — Open an existing project (or open interactive picker).
+- `/transcribe [force]` — Transcribe audio using local whisper.cpp.
+- `/review` — Open interactive caption & speaker review table with audio preview.
+- `/export [srt|ass|all]` — Export `.srt` and `.ass` to current working directory.
+- `/models` — Install, manage, and inspect local Whisper GGML models.
+- `/language [code]` — Set default audio source language (or auto-detect).
+- `/projects` — List all projects in working directory.
 - `/wizard` — Re-run the guided first-run setup wizard.
 - `/status` — View pipeline stage states.
 - `?` or `/help` — View all commands.
+- `quit` or `exit` — Exit application.
 
 ---
 
@@ -93,7 +96,13 @@ For developers contributing or building from source:
 ```bash
 git clone https://github.com/yudopr11/subforge.git
 cd subforge
-uv sync
-uv run pytest
-uv run subforge
+
+# Run tests
+make test
+
+# Build single static binary
+make build
+
+# Run
+./bin/subforge
 ```
