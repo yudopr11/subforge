@@ -65,4 +65,23 @@ func TestParseTime(t *testing.T) {
 			t.Errorf("ParseTime(%q) = %f; want %f", tt.input, got, tt.expected)
 		}
 	}
+
+	invalidTests := []string{
+		"invalid",
+		"00:00:aa,123",
+		"00:aa:00,123",
+		"aa:00:00,123",
+		"00:00:00,abc",
+		"00:00,123",
+		"0:00:aa.12",
+		"0:aa:00.12",
+		"a:00:00.12",
+		"0:00:00.abc",
+		"0:00.12",
+	}
+	for _, inv := range invalidTests {
+		if _, err := domain.ParseTime(inv); err == nil {
+			t.Errorf("ParseTime(%q) expected error, got nil", inv)
+		}
+	}
 }

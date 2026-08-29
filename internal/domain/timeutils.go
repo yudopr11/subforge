@@ -53,9 +53,18 @@ func ParseTime(formatted string) (float64, error) {
 		if len(timeParts) != 3 {
 			return 0, fmt.Errorf("invalid srt time parts: %s", formatted)
 		}
-		h, _ := strconv.ParseFloat(timeParts[0], 64)
-		m, _ := strconv.ParseFloat(timeParts[1], 64)
-		s, _ := strconv.ParseFloat(timeParts[2], 64)
+		h, err := strconv.ParseFloat(timeParts[0], 64)
+		if err != nil {
+			return 0, err
+		}
+		m, err := strconv.ParseFloat(timeParts[1], 64)
+		if err != nil {
+			return 0, err
+		}
+		s, err := strconv.ParseFloat(timeParts[2], 64)
+		if err != nil {
+			return 0, err
+		}
 		return (h * 3600) + (m * 60) + s + (ms / 1000.0), nil
 	} else if strings.Contains(formatted, ".") {
 		// ASS format: H:MM:SS.cc
@@ -71,9 +80,18 @@ func ParseTime(formatted string) (float64, error) {
 		if len(timeParts) != 3 {
 			return 0, fmt.Errorf("invalid ass time parts: %s", formatted)
 		}
-		h, _ := strconv.ParseFloat(timeParts[0], 64)
-		m, _ := strconv.ParseFloat(timeParts[1], 64)
-		s, _ := strconv.ParseFloat(timeParts[2], 64)
+		h, err := strconv.ParseFloat(timeParts[0], 64)
+		if err != nil {
+			return 0, err
+		}
+		m, err := strconv.ParseFloat(timeParts[1], 64)
+		if err != nil {
+			return 0, err
+		}
+		s, err := strconv.ParseFloat(timeParts[2], 64)
+		if err != nil {
+			return 0, err
+		}
 		scale := math.Pow10(len(parts[1]))
 		return (h * 3600) + (m * 60) + s + (cs / scale), nil
 	}

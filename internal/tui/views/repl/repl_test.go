@@ -97,3 +97,16 @@ func TestREPLEnterKeyCommandExecution(t *testing.T) {
 		t.Errorf("Args = %+v; want ['srt']", execMsg.Args)
 	}
 }
+
+func TestREPLWindowSizeMsg(t *testing.T) {
+	m := repl.New(80, 24)
+	updated, cmd := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	if cmd != nil {
+		t.Errorf("expected nil cmd on WindowSizeMsg")
+	}
+	m = updated.(repl.Model)
+	view := m.View()
+	if !strings.Contains(view, "subforge") {
+		t.Errorf("View missing header after resize")
+	}
+}

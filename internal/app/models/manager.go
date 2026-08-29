@@ -96,7 +96,7 @@ func (m *Manager) DeleteModel(name string) error {
 	return os.Remove(path)
 }
 
-func (m *Manager) DownloadModel(name string, progressFn func(current, total int64)) (string, error) {
+func (m *Manager) DownloadModel(name string, progressFn func(current, total int64)) (targetPath string, err error) {
 	var targetInfo *ModelInfo
 	for _, info := range standardModels {
 		if info.Name == name {
@@ -108,8 +108,13 @@ func (m *Manager) DownloadModel(name string, progressFn func(current, total int6
 		return "", fmt.Errorf("unknown model %q", name)
 	}
 
-	targetPath := filepath.Join(m.modelsDir, targetInfo.FileName)
+	targetPath = filepath.Join(m.modelsDir, targetInfo.FileName)
 	tmpPath := targetPath + ".download"
+	defer func() {
+		if err != nil {
+			_ = os.Remove(tmpPath)
+		}
+	}()
 
 	resp, err := http.Get(targetInfo.URL)
 	if err != nil {
@@ -118,7 +123,8 @@ func (m *Manager) DownloadModel(name string, progressFn func(current, total int6
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("bad HTTP status: %s", resp.Status)
+		err = fmt.Errorf("bad HTTP status: %s", resp.Status)
+		return "", err
 	}
 
 	total := resp.ContentLength
@@ -134,7 +140,8 @@ func (m *Manager) DownloadModel(name string, progressFn func(current, total int6
 		n, readErr := resp.Body.Read(buf)
 		if n > 0 {
 			if _, writeErr := out.Write(buf[:n]); writeErr != nil {
-				return "", writeErr
+				err = writeErr
+				return "", err
 			}
 			current += int64(n)
 			if progressFn != nil {
@@ -145,12 +152,14 @@ func (m *Manager) DownloadModel(name string, progressFn func(current, total int6
 			if readErr == io.EOF {
 				break
 			}
-			return "", readErr
+			err = readErr
+			return "", err
 		}
 	}
 
-	out.Close()
-	if err := os.Rename(tmpPath, targetPath); err != nil {
+	_ = out.Close()
+	_ = os.Remove(targetPath)
+	if err = os.Rename(tmpPath, targetPath); err != nil {
 		return "", err
 	}
 	return targetPath, nil
