@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/yudopr11/subforge/internal/app/binaries"
 	"github.com/yudopr11/subforge/internal/app/config"
 	"github.com/yudopr11/subforge/internal/app/export"
 	"github.com/yudopr11/subforge/internal/app/models"
@@ -249,6 +250,9 @@ func (a AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if err != nil {
 					a.replView.AppendLog("[ERROR] Export failed: " + err.Error())
 				} else {
+					if a.project.Stages == nil {
+						a.project.Stages = make(map[string]domain.StageStatus)
+					}
 					a.project.Stages["export"] = domain.StatusCompleted
 					_ = project.SaveProject(a.project, ".")
 					for _, f := range files {
@@ -266,17 +270,20 @@ func (a AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if !exists {
 					a.replView.AppendLog(fmt.Sprintf("[ERROR] Model '%s' not downloaded. Run /models to download it.", a.project.Model))
 				} else {
-					proj := a.project
-					mgr := a.modelManager
-					return a, func() tea.Msg {
-						err := pipeline.RunTranscription(proj, ".", modelPath, "whisper-cli", func(s string) {
-							// Progress callback
-						})
-						if err == nil {
-							_ = project.SaveProject(proj, ".")
+					whisperBin, err := binaries.FindBinary("whisper-cli")
+					if err != nil {
+						a.replView.AppendLog(fmt.Sprintf("[ERROR] whisper-cli not found: %v. Please install or place whisper-cli in PATH or ~/.local/share/subforge/bin", err))
+					} else {
+						proj := a.project
+						return a, func() tea.Msg {
+							err := pipeline.RunTranscription(proj, ".", modelPath, whisperBin, func(s string) {
+								// Progress callback
+							})
+							if err == nil {
+								_ = project.SaveProject(proj, ".")
+							}
+							return TranscribeCompleteMsg{Err: err}
 						}
-						_ = mgr
-						return TranscribeCompleteMsg{Err: err}
 					}
 				}
 			} else {
@@ -330,13 +337,15 @@ func (a AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case ScreenReview:
 		if keyMsg, ok := msg.(tea.KeyMsg); ok && keyMsg.Type == tea.KeyEsc {
-			if a.project != nil {
-				_ = project.SaveProject(a.project, ".")
+			if !a.reviewView.IsEditing() {
+				if a.project != nil {
+					_ = project.SaveProject(a.project, ".")
+				}
+				a.replView.SetProject(a.project)
+				a.replView.AppendLog("✓ Returned from caption review. Project saved.")
+				a.screen = ScreenREPL
+				return a, nil
 			}
-			a.replView.SetProject(a.project)
-			a.replView.AppendLog("✓ Returned from caption review. Project saved.")
-			a.screen = ScreenREPL
-			return a, nil
 		}
 		var cmd tea.Cmd
 		var updatedModel tea.Model

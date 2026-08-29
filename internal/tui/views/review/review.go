@@ -65,6 +65,10 @@ func (m Model) Cursor() int {
 	return m.cursor
 }
 
+func (m Model) IsEditing() bool {
+	return m.mode != modeBrowse
+}
+
 func (m *Model) SetSize(width, height int) {
 	m.width = width
 	m.height = height

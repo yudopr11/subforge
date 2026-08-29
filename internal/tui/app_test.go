@@ -64,7 +64,17 @@ func TestAppModelRoutingAndCommands(t *testing.T) {
 		t.Errorf("Screen after /review = %v; want ScreenReview", app.CurrentScreen())
 	}
 
-	// 6. Press Esc on Review -> returns to ScreenREPL
+	// 5b. Start editing caption (Enter) inside ScreenReview, then press Esc
+	// It should cancel edit mode while STAYING on ScreenReview
+	updated, _ = app.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	app = updated.(tui.AppModel)
+	updated, _ = app.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	app = updated.(tui.AppModel)
+	if app.CurrentScreen() != tui.ScreenReview {
+		t.Errorf("Screen after first Esc during editing = %v; want ScreenReview", app.CurrentScreen())
+	}
+
+	// 6. Press Esc on Review when not editing -> returns to ScreenREPL
 	updated, _ = app.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	app = updated.(tui.AppModel)
 	if app.CurrentScreen() != tui.ScreenREPL {

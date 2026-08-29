@@ -140,6 +140,47 @@ func TestReviewModelUndo(t *testing.T) {
 	}
 }
 
+func TestReviewModelIsEditingAndCancel(t *testing.T) {
+	proj := createTestProject()
+	m := review.New(proj, 80, 24)
+
+	if m.IsEditing() {
+		t.Errorf("Expected IsEditing() to be false initially")
+	}
+
+	// Enter edit caption mode
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(review.Model)
+
+	if !m.IsEditing() {
+		t.Errorf("Expected IsEditing() to be true after Enter")
+	}
+
+	// Cancel with Esc
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = updated.(review.Model)
+
+	if m.IsEditing() {
+		t.Errorf("Expected IsEditing() to be false after Esc")
+	}
+
+	// Enter edit speaker mode with 's'
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}})
+	m = updated.(review.Model)
+
+	if !m.IsEditing() {
+		t.Errorf("Expected IsEditing() to be true in speaker mode")
+	}
+
+	// Cancel with Esc
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = updated.(review.Model)
+
+	if m.IsEditing() {
+		t.Errorf("Expected IsEditing() to be false after Esc")
+	}
+}
+
 func TestReviewModelView(t *testing.T) {
 	proj := createTestProject()
 	m := review.New(proj, 80, 24)
