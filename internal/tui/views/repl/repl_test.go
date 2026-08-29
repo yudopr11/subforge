@@ -82,6 +82,23 @@ func TestREPLAppendLogAndSetProject(t *testing.T) {
 	}
 }
 
+func TestREPLInPlaceProgressUpdate(t *testing.T) {
+	m := repl.New(80, 24)
+	m.AppendLog("▸ Downloading medium: 10% (150/1500 MB)")
+	m.AppendLog("▸ Downloading medium: 20% (300/1500 MB)")
+
+	ctx := components.HeaderContext{ScreenName: "REPL"}
+	m.SetHeaderContext(ctx)
+	view := m.View()
+
+	if strings.Contains(view, "10% (150/1500 MB)") {
+		t.Errorf("Older progress line was not replaced in-place in log:\n%s", view)
+	}
+	if !strings.Contains(view, "20% (300/1500 MB)") {
+		t.Errorf("Newer progress line missing from log:\n%s", view)
+	}
+}
+
 func TestREPLEnterKeyCommandExecution(t *testing.T) {
 	m := repl.New(80, 24)
 

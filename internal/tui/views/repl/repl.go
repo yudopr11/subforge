@@ -58,6 +58,26 @@ func (m *Model) SetHeaderContext(ctx components.HeaderContext) {
 }
 
 func (m *Model) AppendLog(msg string) {
+	msg = strings.TrimSpace(msg)
+	if msg == "" {
+		return
+	}
+
+	// Check if this is an in-place progress update (downloading % or whisper progress %)
+	isProgress := strings.HasPrefix(msg, "▸ Downloading ") ||
+		strings.Contains(msg, "%") ||
+		strings.HasPrefix(msg, "whisper_print_progress:")
+
+	if isProgress && len(m.logs) > 0 {
+		last := m.logs[len(m.logs)-1]
+		if strings.HasPrefix(last, "▸ Downloading ") ||
+			strings.Contains(last, "%") ||
+			strings.HasPrefix(last, "whisper_print_progress:") {
+			m.logs[len(m.logs)-1] = msg
+			return
+		}
+	}
+
 	m.logs = append(m.logs, msg)
 }
 

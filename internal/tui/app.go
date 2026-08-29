@@ -332,7 +332,7 @@ func (a AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					downloadedPath, err := modelMgr.DownloadModel(modelName, func(curr, tot int64) {
 						if tot > 0 {
 							pct := int(float64(curr) / float64(tot) * 100)
-							if pct%10 == 0 && pct != lastReportPct {
+							if pct != lastReportPct {
 								lastReportPct = pct
 								ch <- pipelineProgressEvent{Line: fmt.Sprintf("▸ Downloading %s: %d%% (%.1f/%.1f MB)", modelName, pct, float64(curr)/1e6, float64(tot)/1e6)}
 							}
