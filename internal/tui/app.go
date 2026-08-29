@@ -206,6 +206,7 @@ func (a AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case repl.ExecuteCommandMsg:
 		switch msg.Command {
 		case "quit", "exit":
+			a.reviewView.StopAudio()
 			return a, tea.Quit
 
 		case "new":
@@ -461,8 +462,9 @@ func (a AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, cmd
 
 	case ScreenReview:
-		if keyMsg, ok := msg.(tea.KeyMsg); ok && keyMsg.Type == tea.KeyEsc {
+		if keyMsg, ok := msg.(tea.KeyMsg); ok && (keyMsg.Type == tea.KeyEsc || keyMsg.String() == "q") {
 			if !a.reviewView.IsEditing() {
+				a.reviewView.StopAudio()
 				if a.project != nil {
 					_ = project.SaveProject(a.project, ".")
 				}

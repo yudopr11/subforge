@@ -68,6 +68,12 @@ func (m Model) IsEditing() bool {
 	return m.mode != modeBrowse
 }
 
+func (m *Model) StopAudio() {
+	if m.player != nil {
+		m.player.Stop()
+	}
+}
+
 func (m Model) Init() tea.Cmd {
 	return nil
 }
