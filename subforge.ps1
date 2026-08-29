@@ -34,21 +34,38 @@ if ($Choice -ne "2") {
         New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
     }
 
-    Write-Host "[*] Fetching latest release..." -ForegroundColor Yellow
+    $Arch = "x64"
+    $SysArch = $env:PROCESSOR_ARCHITECTURE
+    if ($env:PROCESSOR_ARCHITEW6432) {
+        $SysArch = $env:PROCESSOR_ARCHITEW6432
+    }
+    if ($SysArch -match "ARM64|AARCH64") {
+        $Arch = "arm64"
+    } else {
+        $Arch = "x64"
+    }
+
+    $TargetAsset = "subforge-windows-$Arch.exe"
+    Write-Host "[*] Fetching latest release for Windows ($Arch)..." -ForegroundColor Yellow
 
     $DownloadUrl = $null
     try {
         $Release = Invoke-RestMethod -Uri "https://api.github.com/repos/$Repo/releases/latest" `
             -Headers @{ "User-Agent" = "subforge-installer" } -TimeoutSec 10
         $Asset = $Release.assets |
-            Where-Object { $_.name -like "*windows*.exe" -or $_.name -eq "$AppName.exe" } |
+            Where-Object { $_.name -eq $TargetAsset } |
             Select-Object -First 1
+        if (-not $Asset) {
+            $Asset = $Release.assets |
+                Where-Object { $_.name -like "*windows*$Arch*.exe" -or $_.name -eq "$AppName.exe" } |
+                Select-Object -First 1
+        }
         if ($Asset) { $DownloadUrl = $Asset.browser_download_url }
     } catch {
-        $DownloadUrl = "https://github.com/$Repo/releases/latest/download/subforge-windows-x64.exe"
+        $DownloadUrl = "https://github.com/$Repo/releases/latest/download/$TargetAsset"
     }
     if (-not $DownloadUrl) {
-        $DownloadUrl = "https://github.com/$Repo/releases/latest/download/subforge-windows-x64.exe"
+        $DownloadUrl = "https://github.com/$Repo/releases/latest/download/$TargetAsset"
     }
 
     Write-Host "[*] Downloading SubForge to $InstallDir..." -ForegroundColor Yellow
