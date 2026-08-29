@@ -1,6 +1,6 @@
 # SubForge Go Rewrite with Bubble Tea Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Rebuild SubForge in pure Go with a Bubble Tea TUI for a lightweight (~10–15 MB), zero-Python, instant-startup local-first subtitle generator, editor, and exporter.
 
@@ -36,7 +36,7 @@
   - `domain.FormatASSTime(seconds float64) string`
   - `domain.ParseTime(formatted string) (float64, error)`
 
-- [ ] **Step 1: Initialize Go Module and install charmbracelet dependencies**
+- [x] **Step 1: Initialize Go Module and install charmbracelet dependencies**
 
 ```bash
 go mod init github.com/yudopr11/subforge
@@ -45,7 +45,7 @@ go get github.com/charmbracelet/lipgloss@v1.0.0
 go get github.com/charmbracelet/bubbles@v0.20.0
 ```
 
-- [ ] **Step 2: Write failing unit tests for domain models & timeutils**
+- [x] **Step 2: Write failing unit tests for domain models & timeutils**
 
 Create `internal/domain/timeutils_test.go`:
 ```go
@@ -174,12 +174,12 @@ func TestProjectJSONSerialization(t *testing.T) {
 }
 ```
 
-- [ ] **Step 3: Run test to verify it fails**
+- [x] **Step 3: Run test to verify it fails**
 
 Run: `go test ./internal/domain/...`
 Expected: FAIL (types and functions not yet defined)
 
-- [ ] **Step 4: Implement domain models and timeutils**
+- [x] **Step 4: Implement domain models and timeutils**
 
 Create `internal/domain/project.go`:
 ```go
@@ -327,12 +327,12 @@ func ParseTime(formatted string) (float64, error) {
 }
 ```
 
-- [ ] **Step 5: Run tests and verify they pass**
+- [x] **Step 5: Run tests and verify they pass**
 
 Run: `go test ./internal/domain/... -v`
 Expected: PASS
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add go.mod go.sum internal/domain/
@@ -356,7 +356,7 @@ git commit -m "feat(domain): add project, segment, and timestamp domain models"
   - `export.GenerateASS(segments []domain.Segment, title string) string`
   - `export.ExportFiles(proj *domain.Project, outputDir string, formats []string) ([]string, error)`
 
-- [ ] **Step 1: Write failing unit tests for SRT and ASS export**
+- [x] **Step 1: Write failing unit tests for SRT and ASS export**
 
 Create `internal/app/export/export_test.go`:
 ```go
@@ -408,12 +408,12 @@ func TestGenerateASS(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `go test ./internal/app/export/...`
 Expected: FAIL
 
-- [ ] **Step 3: Implement SRT and ASS exporters**
+- [x] **Step 3: Implement SRT and ASS exporters**
 
 Create `internal/app/export/srt.go`:
 ```go
@@ -540,12 +540,12 @@ func ExportFiles(proj *domain.Project, outputDir string, formats []string) ([]st
 }
 ```
 
-- [ ] **Step 4: Run tests and verify they pass**
+- [x] **Step 4: Run tests and verify they pass**
 
 Run: `go test ./internal/app/export/... -v`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add internal/app/export/
@@ -571,7 +571,7 @@ git commit -m "feat(export): implement SRT and ASS subtitle exporters"
   - `project.LoadProject(dir string) (*domain.Project, error)`
   - `project.ListProjects(rootDir string) ([]*domain.Project, error)`
 
-- [ ] **Step 1: Write failing tests for AppConfig, Device detection & Project Store**
+- [x] **Step 1: Write failing tests for AppConfig, Device detection & Project Store**
 
 Create `internal/app/config/config_test.go`:
 ```go
@@ -666,12 +666,12 @@ func TestAtomicSaveAndLoadProject(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `go test ./internal/app/config/... ./internal/app/project/...`
 Expected: FAIL
 
-- [ ] **Step 3: Implement Config, Device Detection & Project Store**
+- [x] **Step 3: Implement Config, Device Detection & Project Store**
 
 Create `internal/app/config/config.go`:
 ```go
@@ -861,12 +861,12 @@ func ListProjects(rootDir string) ([]*domain.Project, error) {
 }
 ```
 
-- [ ] **Step 4: Run tests and verify they pass**
+- [x] **Step 4: Run tests and verify they pass**
 
 Run: `go test ./internal/app/config/... ./internal/app/project/... -v`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add internal/app/config/ internal/app/project/
@@ -891,7 +891,7 @@ git commit -m "feat(config,project): add app config, device detection, and atomi
   - `models.DeleteModel(name string) error`
   - `models.GetModelPath(name string) (string, bool)`
 
-- [ ] **Step 1: Write failing tests for ModelManager and Binary Locator**
+- [x] **Step 1: Write failing tests for ModelManager and Binary Locator**
 
 Create `internal/app/models/manager_test.go`:
 ```go
@@ -934,12 +934,12 @@ func TestModelPathResolution(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `go test ./internal/app/models/...`
 Expected: FAIL
 
-- [ ] **Step 3: Implement Binary Locator and Model Manager**
+- [x] **Step 3: Implement Binary Locator and Model Manager**
 
 Create `internal/app/binaries/locator.go`:
 ```go
@@ -1169,12 +1169,12 @@ func (m *Manager) DownloadModel(name string, progressFn func(current, total int6
 }
 ```
 
-- [ ] **Step 4: Run tests and verify they pass**
+- [x] **Step 4: Run tests and verify they pass**
 
 Run: `go test ./internal/app/models/... -v`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add internal/app/binaries/ internal/app/models/
@@ -1196,7 +1196,7 @@ git commit -m "feat(models): add model manager and binary locator"
   - `(p *SegmentPlayer) PlaySegment(start, end float64) (string, error)`
   - `(p *SegmentPlayer) Stop() string`
 
-- [ ] **Step 1: Write failing tests for SegmentPlayer command building**
+- [x] **Step 1: Write failing tests for SegmentPlayer command building**
 
 Create `internal/app/player/player_test.go`:
 ```go
@@ -1225,12 +1225,12 @@ func TestBuildPlayerCommand(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `go test ./internal/app/player/...`
 Expected: FAIL
 
-- [ ] **Step 3: Implement SegmentPlayer**
+- [x] **Step 3: Implement SegmentPlayer**
 
 Create `internal/app/player/player.go`:
 ```go
@@ -1356,12 +1356,12 @@ func (p *SegmentPlayer) stopLocked() {
 }
 ```
 
-- [ ] **Step 4: Run tests and verify they pass**
+- [x] **Step 4: Run tests and verify they pass**
 
 Run: `go test ./internal/app/player/... -v`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add internal/app/player/
@@ -1383,7 +1383,7 @@ git commit -m "feat(player): implement segment audio preview player"
   - `pipeline.Prepare16kHzAudio(inputPath, outputWav string) error`
   - `pipeline.RunTranscription(proj *domain.Project, modelPath, whisperBin string, logFn func(string)) error`
 
-- [ ] **Step 1: Write failing tests for JSON transcript parsing and pipeline runner**
+- [x] **Step 1: Write failing tests for JSON transcript parsing and pipeline runner**
 
 Create `internal/app/pipeline/runner_test.go`:
 ```go
@@ -1420,12 +1420,12 @@ func TestParseWhisperJSON(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `go test ./internal/app/pipeline/...`
 Expected: FAIL
 
-- [ ] **Step 3: Implement JSON Parser, Audio Prep & Pipeline Runner**
+- [x] **Step 3: Implement JSON Parser, Audio Prep & Pipeline Runner**
 
 Create `internal/domain/transcript.go`:
 ```go
@@ -1630,12 +1630,12 @@ func RunTranscription(
 }
 ```
 
-- [ ] **Step 4: Run tests and verify they pass**
+- [x] **Step 4: Run tests and verify they pass**
 
 Run: `go test ./internal/app/pipeline/... -v`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add internal/domain/transcript.go internal/app/pipeline/
@@ -1658,7 +1658,7 @@ git commit -m "feat(pipeline): implement audio converter and whisper transcripti
   - `components.RenderHeader(title, status string, width int) string`
   - `components.RenderFooter(keys []string, width int) string`
 
-- [ ] **Step 1: Write failing tests for header/footer rendering**
+- [x] **Step 1: Write failing tests for header/footer rendering**
 
 Create `internal/tui/theme/theme_test.go`:
 ```go
@@ -1684,12 +1684,12 @@ func TestRenderHeaderAndFooter(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `go test ./internal/tui/theme/...`
 Expected: FAIL
 
-- [ ] **Step 3: Implement Theme & Components**
+- [x] **Step 3: Implement Theme & Components**
 
 Create `internal/tui/theme/theme.go`:
 ```go
@@ -1781,12 +1781,12 @@ func RenderFooter(keys []string, width int) string {
 }
 ```
 
-- [ ] **Step 4: Run tests and verify they pass**
+- [x] **Step 4: Run tests and verify they pass**
 
 Run: `go test ./internal/tui/theme/... -v`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add internal/tui/theme/ internal/tui/components/
@@ -1808,7 +1808,7 @@ git commit -m "feat(tui): add lipgloss theme and common header/footer components
   - `langpicker.Model`, `langpicker.New(width, height int) langpicker.Model`
   - `modelmgr.Model`, `modelmgr.New(mgr *models.Manager, width, height int) modelmgr.Model`
 
-- [ ] **Step 1: Write audio picker and language list definitions**
+- [x] **Step 1: Write audio picker and language list definitions**
 
 Create `internal/tui/views/langpicker/picker.go`:
 ```go
@@ -1986,12 +1986,12 @@ func (m Model) View() string {
 }
 ```
 
-- [ ] **Step 2: Run build to verify compilation**
+- [x] **Step 2: Run build to verify compilation**
 
 Run: `go build ./internal/tui/views/...`
 Expected: PASS
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add internal/tui/views/
@@ -2012,7 +2012,7 @@ git commit -m "feat(tui): add audiopicker, langpicker, and modelmgr views"
   - `review.Model`, `review.New(proj *domain.Project, width, height int) review.Model`
   - Keyboard handlers: `Space` (audio play), `Enter` (edit caption), `s` (edit speaker), `u` (undo), `Esc` (save & back)
 
-- [ ] **Step 1: Write unit tests for Review Model state transitions**
+- [x] **Step 1: Write unit tests for Review Model state transitions**
 
 Create `internal/tui/views/review/review_test.go`:
 ```go
@@ -2047,12 +2047,12 @@ func TestReviewModelNavigation(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `go test ./internal/tui/views/review/...`
 Expected: FAIL
 
-- [ ] **Step 3: Implement Caption Review View**
+- [x] **Step 3: Implement Caption Review View**
 
 Create `internal/tui/views/review/review.go`:
 ```go
@@ -2228,12 +2228,12 @@ func (m Model) View() string {
 }
 ```
 
-- [ ] **Step 4: Run tests and verify they pass**
+- [x] **Step 4: Run tests and verify they pass**
 
 Run: `go test ./internal/tui/views/review/... -v`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add internal/tui/views/review/
@@ -2253,7 +2253,7 @@ git commit -m "feat(review): implement caption and speaker review table with aud
   - `repl.Model`, `repl.New(width, height int) repl.Model`
   - Handles commands: `/new`, `/open`, `/transcribe`, `/review`, `/export`, `/models`, `/language`, `/wizard`, `/status`, `help`, `quit`
 
-- [ ] **Step 1: Write failing tests for REPL command execution**
+- [x] **Step 1: Write failing tests for REPL command execution**
 
 Create `internal/tui/views/repl/repl_test.go`:
 ```go
@@ -2285,12 +2285,12 @@ func TestREPLViewRender(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `go test ./internal/tui/views/repl/...`
 Expected: FAIL
 
-- [ ] **Step 3: Implement REPL View**
+- [x] **Step 3: Implement REPL View**
 
 Create `internal/tui/views/repl/repl.go`:
 ```go
@@ -2411,12 +2411,12 @@ func (m Model) View() string {
 }
 ```
 
-- [ ] **Step 4: Run tests and verify they pass**
+- [x] **Step 4: Run tests and verify they pass**
 
 Run: `go test ./internal/tui/views/repl/... -v`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add internal/tui/views/repl/
@@ -2438,7 +2438,7 @@ git commit -m "feat(repl): implement interactive REPL view and command parser"
   - `tui.NewApp()` Bubble Tea root application
   - `cmd/subforge/main.go` executable entrypoint
 
-- [ ] **Step 1: Write integration test for full project flow**
+- [x] **Step 1: Write integration test for full project flow**
 
 Create `tests/integration/full_flow_test.go`:
 ```go
@@ -2479,12 +2479,12 @@ func TestFullProjectCreationAndExportFlow(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it passes**
+- [x] **Step 2: Run test to verify it passes**
 
 Run: `go test ./tests/integration/... -v`
 Expected: PASS
 
-- [ ] **Step 3: Implement Setup Wizard, Root App Model & CLI Entrypoint**
+- [x] **Step 3: Implement Setup Wizard, Root App Model & CLI Entrypoint**
 
 Create `internal/tui/views/wizard/wizard.go`:
 ```go
@@ -2761,14 +2761,14 @@ func main() {
 }
 ```
 
-- [ ] **Step 4: Verify full test suite and binary compilation**
+- [x] **Step 4: Verify full test suite and binary compilation**
 
 Run: `go test -v -race ./...`
 Expected: PASS
 Run: `CGO_ENABLED=0 go build -o bin/subforge ./cmd/subforge`
 Expected: PASS (generates static binary)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add internal/tui/ cmd/ tests/
@@ -2792,7 +2792,7 @@ git commit -m "feat(app): assemble root TUI application and CLI entrypoint"
   - `make build`, `make test`, `make release`
   - GitHub Actions multi-OS cross-compilation pipeline
 
-- [ ] **Step 1: Create Makefile**
+- [x] **Step 1: Create Makefile**
 
 Create `Makefile`:
 ```makefile
@@ -2816,16 +2816,16 @@ clean:
 	rm -rf $(BUILD_DIR) dist
 ```
 
-- [ ] **Step 2: Update CI and Release workflows for Go**
+- [x] **Step 2: Update CI and Release workflows for Go**
 
 Update `.github/workflows/ci.yml` and `.github/workflows/release.yml` to build Go binaries across linux-x64, linux-arm64, darwin-arm64, darwin-x64, and windows-x64.
 
-- [ ] **Step 3: Run `make test` and `make build`**
+- [x] **Step 3: Run `make test` and `make build`**
 
 Run: `make test && make build`
 Expected: PASS
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add Makefile .github/ README.md install.sh install.ps1
