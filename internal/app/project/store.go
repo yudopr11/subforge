@@ -13,6 +13,7 @@ import (
 const ProjectFileName = "project.json"
 
 func SaveProject(proj *domain.Project, dir string) error {
+	_ = os.MkdirAll(dir, 0755)
 	proj.UpdatedAt = time.Now().UTC()
 	data, err := json.MarshalIndent(proj, "", "  ")
 	if err != nil {

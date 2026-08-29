@@ -18,6 +18,7 @@ import (
 	"github.com/yudopr11/subforge/internal/tui/views/audiopicker"
 	"github.com/yudopr11/subforge/internal/tui/views/langpicker"
 	"github.com/yudopr11/subforge/internal/tui/views/modelmgr"
+	"github.com/yudopr11/subforge/internal/tui/views/projectpicker"
 	"github.com/yudopr11/subforge/internal/tui/views/repl"
 	"github.com/yudopr11/subforge/internal/tui/views/review"
 	"github.com/yudopr11/subforge/internal/tui/views/wizard"
@@ -29,6 +30,7 @@ const (
 	ScreenREPL Screen = iota
 	ScreenWizard
 	ScreenAudioPicker
+	ScreenProjectPicker
 	ScreenModelMgr
 	ScreenLangPicker
 	ScreenReview
@@ -68,12 +70,13 @@ type AppModel struct {
 	project      *domain.Project
 	modelManager *models.Manager
 
-	replView        repl.Model
-	wizardView      wizard.Model
-	audioPickerView audiopicker.Model
-	modelMgrView    modelmgr.Model
-	langPickerView  langpicker.Model
-	reviewView      review.Model
+	replView          repl.Model
+	wizardView        wizard.Model
+	audioPickerView   audiopicker.Model
+	projectPickerView projectpicker.Model
+	modelMgrView      modelmgr.Model
+	langPickerView    langpicker.Model
+	reviewView        review.Model
 
 	width  int
 	height int
@@ -92,11 +95,12 @@ func NewApp() AppModel {
 		screen:          startScreen,
 		config:          cfg,
 		modelManager:    mgr,
-		replView:        repl.New(80, 24),
-		wizardView:      wizard.New(80, 24),
-		audioPickerView: audiopicker.New(".", 80, 24),
-		modelMgrView:    modelmgr.New(mgr, 80, 24),
-		langPickerView:  langpicker.New(80, 24),
+		replView:          repl.New(80, 24),
+		wizardView:        wizard.New(80, 24),
+		audioPickerView:   audiopicker.New(".", 80, 24),
+		projectPickerView: projectpicker.New(".", 80, 24),
+		modelMgrView:      modelmgr.New(mgr, 80, 24),
+		langPickerView:    langpicker.New(80, 24),
 		width:           80,
 		height:          24,
 	}
@@ -201,27 +205,13 @@ func (a AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					a.replView.AppendLog(fmt.Sprintf("✓ Opened project '%s' (%d captions)", proj.Name, len(proj.Segments)))
 				}
 			} else {
-				if proj, err := project.LoadProject("."); err == nil {
-					a.project = proj
-					a.replView.SetProject(proj)
-					a.replView.AppendLog(fmt.Sprintf("✓ Opened project '%s' (%d captions)", proj.Name, len(proj.Segments)))
-				} else {
-					a.replView.AppendLog("[ERROR] No project.json found in current directory. Use /new or /open <path>.")
-				}
+				a.projectPickerView = projectpicker.New(".", a.width, a.height)
+				a.screen = ScreenProjectPicker
 			}
 
 		case "projects":
-			projects, err := project.ListProjects(".")
-			if err != nil {
-				a.replView.AppendLog(fmt.Sprintf("[ERROR] Failed to list projects: %v", err))
-			} else if len(projects) == 0 {
-				a.replView.AppendLog("No projects found in this directory. Type /new to create one.")
-			} else {
-				a.replView.AppendLog(fmt.Sprintf("Found %d project(s):", len(projects)))
-				for _, p := range projects {
-					a.replView.AppendLog(fmt.Sprintf("  • %-20s (%d captions) [%s]", p.Name, len(p.Segments), p.Stages["transcribe"]))
-				}
-			}
+			a.projectPickerView = projectpicker.New(".", a.width, a.height)
+			a.screen = ScreenProjectPicker
 
 		case "status":
 			if a.project == nil {
@@ -430,6 +420,28 @@ func (a AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.audioPickerView.List, cmd = a.audioPickerView.List.Update(msg)
 		return a, cmd
 
+	case ScreenProjectPicker:
+		if keyMsg, ok := msg.(tea.KeyMsg); ok {
+			if a.projectPickerView.List.FilterState() == list.Unfiltered {
+				if keyMsg.Type == tea.KeyEsc || keyMsg.String() == "q" {
+					a.screen = ScreenREPL
+					return a, nil
+				}
+			}
+			if keyMsg.Type == tea.KeyEnter {
+				if item, ok := a.projectPickerView.List.SelectedItem().(projectpicker.ProjectItem); ok && item.Project != nil {
+					a.project = item.Project
+					a.replView.SetProject(item.Project)
+					a.replView.AppendLog(fmt.Sprintf("✓ Opened project '%s' (%d captions)", item.Project.Name, len(item.Project.Segments)))
+					a.screen = ScreenREPL
+					return a, nil
+				}
+			}
+		}
+		var cmd tea.Cmd
+		a.projectPickerView.List, cmd = a.projectPickerView.List.Update(msg)
+		return a, cmd
+
 	case ScreenLangPicker:
 		if keyMsg, ok := msg.(tea.KeyMsg); ok {
 			if a.langPickerView.List.FilterState() == list.Unfiltered {
@@ -475,6 +487,8 @@ func (a AppModel) View() string {
 		return a.modelMgrView.View()
 	case ScreenAudioPicker:
 		return a.audioPickerView.List.View()
+	case ScreenProjectPicker:
+		return a.projectPickerView.List.View()
 	case ScreenLangPicker:
 		return a.langPickerView.List.View()
 	default:
