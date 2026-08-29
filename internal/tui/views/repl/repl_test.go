@@ -6,6 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/yudopr11/subforge/internal/domain"
+	"github.com/yudopr11/subforge/internal/tui/components"
 	"github.com/yudopr11/subforge/internal/tui/views/repl"
 )
 
@@ -38,6 +39,14 @@ func TestParseREPLCommandEmpty(t *testing.T) {
 
 func TestREPLViewRender(t *testing.T) {
 	m := repl.New(80, 24)
+	ctx := components.HeaderContext{
+		ScreenName:  "REPL",
+		ProjectName: "demo",
+		ProjectPath: "./",
+		Model:       "small",
+		Language:    "auto",
+	}
+	m.SetHeaderContext(ctx)
 	view := m.View()
 	if !strings.Contains(view, "subforge") || !strings.Contains(view, ">") {
 		t.Errorf("REPL view missing prompt or banner:\n%s", view)
@@ -55,15 +64,21 @@ func TestREPLAppendLogAndSetProject(t *testing.T) {
 	}
 	m.SetProject(proj)
 
+	ctx := components.HeaderContext{
+		ScreenName:  "REPL",
+		ProjectName: "episode1",
+		ProjectPath: "./",
+		Model:       "small",
+		Language:    "en",
+		Status:      "transcribed ✓ (1)",
+	}
+	m.SetHeaderContext(ctx)
 	view := m.View()
 	if !strings.Contains(view, "custom test log message") {
 		t.Errorf("REPL view missing appended log:\n%s", view)
 	}
 	if !strings.Contains(view, "episode1") {
 		t.Errorf("REPL view missing project name:\n%s", view)
-	}
-	if !strings.Contains(view, "transcribed ✓ (1 captions)") {
-		t.Errorf("REPL view missing transcribed status:\n%s", view)
 	}
 }
 

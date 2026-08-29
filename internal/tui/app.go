@@ -14,6 +14,7 @@ import (
 	"github.com/yudopr11/subforge/internal/app/pipeline"
 	"github.com/yudopr11/subforge/internal/app/project"
 	"github.com/yudopr11/subforge/internal/domain"
+	"github.com/yudopr11/subforge/internal/tui/components"
 	"github.com/yudopr11/subforge/internal/tui/theme"
 	"github.com/yudopr11/subforge/internal/tui/views/audiopicker"
 	"github.com/yudopr11/subforge/internal/tui/views/langpicker"
@@ -497,21 +498,66 @@ func (a AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 }
 
+func (a AppModel) HeaderContext(screenName string) components.HeaderContext {
+	projName := "(none)"
+	projLoc := "./"
+	modelName := a.config.DefaultModel
+	langCode := a.config.DefaultLanguage
+	status := ""
+
+	if a.project != nil {
+		if a.project.Name != "" {
+			projName = a.project.Name
+		}
+		if a.project.AudioPath != "" {
+			projLoc = filepath.Dir(a.project.AudioPath)
+			if projLoc == "" {
+				projLoc = "./"
+			}
+		}
+		if a.project.Model != "" {
+			modelName = a.project.Model
+		}
+		if a.project.Language != "" {
+			langCode = a.project.Language
+		}
+		if a.project.Stages != nil && a.project.Stages["transcribe"] == domain.StatusCompleted {
+			status = fmt.Sprintf("transcribed ✓ (%d)", len(a.project.Segments))
+		}
+	}
+
+	return components.HeaderContext{
+		ScreenName:  screenName,
+		ProjectName: projName,
+		ProjectPath: projLoc,
+		Model:       modelName,
+		Language:    langCode,
+		Status:      status,
+	}
+}
+
 func (a AppModel) View() string {
 	switch a.screen {
 	case ScreenWizard:
+		a.wizardView.SetHeaderContext(a.HeaderContext("Setup Wizard"))
 		return a.wizardView.View()
 	case ScreenReview:
+		a.reviewView.SetHeaderContext(a.HeaderContext("Caption Review"))
 		return a.reviewView.View()
 	case ScreenModelMgr:
+		a.modelMgrView.SetHeaderContext(a.HeaderContext("Model Manager"))
 		return a.modelMgrView.View()
 	case ScreenAudioPicker:
+		a.audioPickerView.SetHeaderContext(a.HeaderContext("Select Audio File"))
 		return a.audioPickerView.View()
 	case ScreenProjectPicker:
+		a.projectPickerView.SetHeaderContext(a.HeaderContext("Project Manager"))
 		return a.projectPickerView.View()
 	case ScreenLangPicker:
+		a.langPickerView.SetHeaderContext(a.HeaderContext("Language Selector"))
 		return a.langPickerView.View()
 	default:
+		a.replView.SetHeaderContext(a.HeaderContext("REPL"))
 		return a.replView.View()
 	}
 }

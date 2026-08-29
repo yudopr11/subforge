@@ -6,6 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/yudopr11/subforge/internal/app/models"
+	"github.com/yudopr11/subforge/internal/tui/components"
 	"github.com/yudopr11/subforge/internal/tui/views/modelmgr"
 )
 
@@ -19,6 +20,11 @@ func TestModelManagerViewAndNavigation(t *testing.T) {
 	}
 
 	// Test View rendering
+	ctx := components.HeaderContext{
+		ScreenName: "Model Manager",
+		Model:      "small",
+	}
+	m.SetHeaderContext(ctx)
 	view := m.View()
 	if !strings.Contains(view, "Model Manager") {
 		t.Errorf("View missing title: %s", view)

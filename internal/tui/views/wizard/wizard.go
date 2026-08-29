@@ -11,11 +11,12 @@ import (
 )
 
 type Model struct {
-	ramGB    float64
-	cpuCores int
-	recModel string
-	width    int
-	height   int
+	ramGB     float64
+	cpuCores  int
+	recModel  string
+	headerCtx components.HeaderContext
+	width     int
+	height    int
 }
 
 func New(width, height int) Model {
@@ -27,12 +28,17 @@ func New(width, height int) Model {
 		height = 24
 	}
 	return Model{
-		ramGB:    ram,
-		cpuCores: cpu,
-		recModel: rec,
-		width:    width,
-		height:   height,
+		ramGB:     ram,
+		cpuCores:  cpu,
+		recModel:  rec,
+		headerCtx: components.HeaderContext{ScreenName: "Setup Wizard"},
+		width:     width,
+		height:    height,
 	}
+}
+
+func (m *Model) SetHeaderContext(ctx components.HeaderContext) {
+	m.headerCtx = ctx
 }
 
 func (m Model) RamGB() float64 {
@@ -79,9 +85,13 @@ func (m Model) View() string {
 	sb.WriteString(fmt.Sprintf("  • Recommended Model:  ggml-%s.bin\n\n", m.recModel))
 	sb.WriteString("  SubForge will configure this default model for local transcription.\n")
 
+	ctx := m.headerCtx
+	if ctx.ScreenName == "" {
+		ctx.ScreenName = "Setup Wizard"
+	}
+
 	return components.RenderScreen(
-		"subforge v0.3.0",
-		"Setup Wizard",
+		ctx,
 		sb.String(),
 		[]string{"[Enter] Accept Defaults", "[Esc] Skip / Keep Existing"},
 		width,

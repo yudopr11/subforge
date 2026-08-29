@@ -48,9 +48,10 @@ func (d projectItemDelegate) Render(w io.Writer, m list.Model, index int, listIt
 }
 
 type Model struct {
-	List   list.Model
-	width  int
-	height int
+	List      list.Model
+	headerCtx components.HeaderContext
+	width     int
+	height    int
 }
 
 func New(rootDir string, width, height int) Model {
@@ -75,10 +76,15 @@ func New(rootDir string, width, height int) Model {
 	l.SetFilteringEnabled(true)
 	l.KeyMap.Quit.SetEnabled(false)
 	return Model{
-		List:   l,
-		width:  width,
-		height: height,
+		List:      l,
+		headerCtx: components.HeaderContext{ScreenName: "Project Manager"},
+		width:     width,
+		height:    height,
 	}
+}
+
+func (m *Model) SetHeaderContext(ctx components.HeaderContext) {
+	m.headerCtx = ctx
 }
 
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
@@ -108,9 +114,13 @@ func (m Model) View() string {
 		height = 24
 	}
 
+	ctx := m.headerCtx
+	if ctx.ScreenName == "" {
+		ctx.ScreenName = "Project Manager"
+	}
+
 	return components.RenderScreen(
-		"subforge v0.3.0",
-		"Project Manager",
+		ctx,
 		"\n"+m.List.View(),
 		[]string{"[↑/↓] Navigate", "[Enter] Open Project", "[/] Filter", "[Esc] Back to REPL"},
 		width,

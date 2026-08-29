@@ -1,7 +1,6 @@
 package repl
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/textinput"
@@ -17,11 +16,12 @@ type ExecuteCommandMsg struct {
 }
 
 type Model struct {
-	input   textinput.Model
-	logs    []string
-	project *domain.Project
-	width   int
-	height  int
+	input     textinput.Model
+	logs      []string
+	project   *domain.Project
+	headerCtx components.HeaderContext
+	width     int
+	height    int
 }
 
 func ParseCommand(raw string) (string, []string) {
@@ -41,15 +41,20 @@ func New(width, height int) Model {
 	ti.Focus()
 
 	return Model{
-		input:  ti,
-		logs:   []string{"Local-first subtitles. Type /new to start, ? for help."},
-		width:  width,
-		height: height,
+		input:     ti,
+		logs:      []string{"Local-first subtitles. Type /new to start, ? for help."},
+		headerCtx: components.HeaderContext{ScreenName: "REPL"},
+		width:     width,
+		height:    height,
 	}
 }
 
 func (m *Model) SetProject(proj *domain.Project) {
 	m.project = proj
+}
+
+func (m *Model) SetHeaderContext(ctx components.HeaderContext) {
+	m.headerCtx = ctx
 }
 
 func (m *Model) AppendLog(msg string) {
@@ -66,6 +71,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		return m, nil
+
 	case tea.KeyMsg:
 		switch msg.Type {
 		case tea.KeyEnter:
@@ -96,18 +102,8 @@ func (m Model) View() string {
 		height = 24
 	}
 
-	projectName := "no project"
-	statusStr := "idle"
-	if m.project != nil {
-		projectName = m.project.Name
-		if m.project.Stages != nil && m.project.Stages["transcribe"] == domain.StatusCompleted {
-			statusStr = fmt.Sprintf("transcribed ✓ (%d captions)", len(m.project.Segments))
-		}
-	}
-
 	var sb strings.Builder
-	// Keep visible logs fitting the screen height
-	maxLogs := height - 8
+	maxLogs := height - 9
 	if maxLogs < 3 {
 		maxLogs = 3
 	}
@@ -122,9 +118,13 @@ func (m Model) View() string {
 	}
 	sb.WriteString("\n " + m.input.View())
 
+	ctx := m.headerCtx
+	if ctx.ScreenName == "" {
+		ctx.ScreenName = "REPL"
+	}
+
 	return components.RenderScreen(
-		"subforge v0.3.0",
-		fmt.Sprintf("%s · %s", projectName, statusStr),
+		ctx,
 		sb.String(),
 		[]string{"/new", "/open", "/projects", "/models", "/language", "/transcribe", "/review", "/export", "/wizard", "/status", "?", "quit"},
 		width,

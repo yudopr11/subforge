@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/yudopr11/subforge/internal/tui/components"
 	"github.com/yudopr11/subforge/internal/tui/views/wizard"
 )
 
@@ -20,6 +21,10 @@ func TestWizardModelInitAndView(t *testing.T) {
 		t.Errorf("Expected RecModel to be non-empty")
 	}
 
+	ctx := components.HeaderContext{
+		ScreenName: "Setup Wizard",
+	}
+	m.SetHeaderContext(ctx)
 	view := m.View()
 	if !strings.Contains(view, "Setup Wizard") {
 		t.Errorf("View missing 'Setup Wizard', got:\n%s", view)

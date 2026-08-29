@@ -6,6 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/yudopr11/subforge/internal/domain"
+	"github.com/yudopr11/subforge/internal/tui/components"
 	"github.com/yudopr11/subforge/internal/tui/views/review"
 )
 
@@ -185,6 +186,12 @@ func TestReviewModelView(t *testing.T) {
 	proj := createTestProject()
 	m := review.New(proj, 80, 24)
 
+	ctx := components.HeaderContext{
+		ScreenName:  "Caption Review",
+		ProjectName: proj.Name,
+		Model:       "small",
+	}
+	m.SetHeaderContext(ctx)
 	view := m.View()
 	if !strings.Contains(view, "First subtitle line") {
 		t.Errorf("View missing segment text, got:\n%s", view)

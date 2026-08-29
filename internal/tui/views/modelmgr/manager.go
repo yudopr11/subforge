@@ -59,6 +59,7 @@ type Model struct {
 	downloadName    string
 	downloadCurrent int64
 	downloadTotal   int64
+	headerCtx       components.HeaderContext
 	width           int
 	height          int
 }
@@ -68,9 +69,14 @@ func New(mgr *models.Manager, width, height int) Model {
 		mgr:       mgr,
 		available: models.GetAvailableModels(),
 		cursor:    0,
+		headerCtx: components.HeaderContext{ScreenName: "Model Manager"},
 		width:     width,
 		height:    height,
 	}
+}
+
+func (m *Model) SetHeaderContext(ctx components.HeaderContext) {
+	m.headerCtx = ctx
 }
 
 func (m Model) Cursor() int {
@@ -264,9 +270,13 @@ func (m Model) View() string {
 		sb.WriteString("\n  " + m.statusMsg + "\n")
 	}
 
+	ctx := m.headerCtx
+	if ctx.ScreenName == "" {
+		ctx.ScreenName = "Model Manager"
+	}
+
 	return components.RenderScreen(
-		"subforge v0.3.0",
-		"Model Manager",
+		ctx,
 		"\n"+sb.String(),
 		[]string{"[↑/↓] Select", "[Enter] Download / Set Active", "[d] Delete", "[Esc] Back to REPL"},
 		width,

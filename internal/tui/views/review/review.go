@@ -29,6 +29,7 @@ type Model struct {
 	input     textinput.Model
 	history   [][]domain.Segment
 	statusMsg string
+	headerCtx components.HeaderContext
 	width     int
 	height    int
 }
@@ -36,29 +37,27 @@ type Model struct {
 func New(proj *domain.Project, width, height int) Model {
 	ti := textinput.New()
 	ti.Prompt = "▸ "
+	ti.Focus()
 
 	var p *player.SegmentPlayer
 	if proj != nil && proj.AudioPath != "" {
 		p = player.NewSegmentPlayer(proj.AudioPath)
 	}
 
-	if width <= 0 {
-		width = 80
-	}
-	if height <= 0 {
-		height = 24
-	}
-
 	return Model{
-		project: proj,
-		player:  p,
-		cursor:  0,
-		mode:    modeBrowse,
-		input:   ti,
-		history: make([][]domain.Segment, 0),
-		width:   width,
-		height:  height,
+		project:   proj,
+		player:    p,
+		cursor:    0,
+		mode:      modeBrowse,
+		input:     ti,
+		headerCtx: components.HeaderContext{ScreenName: "Caption Review"},
+		width:     width,
+		height:    height,
 	}
+}
+
+func (m *Model) SetHeaderContext(ctx components.HeaderContext) {
+	m.headerCtx = ctx
 }
 
 func (m Model) Cursor() int {
@@ -69,11 +68,6 @@ func (m Model) IsEditing() bool {
 	return m.mode != modeBrowse
 }
 
-func (m *Model) SetSize(width, height int) {
-	m.width = width
-	m.height = height
-}
-
 func (m Model) Init() tea.Cmd {
 	return nil
 }
@@ -82,20 +76,22 @@ func (m *Model) pushHistory() {
 	if m.project == nil {
 		return
 	}
-	snap := make([]domain.Segment, len(m.project.Segments))
-	copy(snap, m.project.Segments)
-	m.history = append(m.history, snap)
+	snapshot := make([]domain.Segment, len(m.project.Segments))
+	copy(snapshot, m.project.Segments)
+	m.history = append(m.history, snapshot)
+	if len(m.history) > 50 {
+		m.history = m.history[1:]
+	}
 }
 
 func (m *Model) popHistory() bool {
 	if len(m.history) == 0 || m.project == nil {
 		return false
 	}
-	lastIdx := len(m.history) - 1
-	prev := m.history[lastIdx]
-	m.history = m.history[:lastIdx]
-	m.project.Segments = make([]domain.Segment, len(prev))
-	copy(m.project.Segments, prev)
+	last := m.history[len(m.history)-1]
+	m.history = m.history[:len(m.history)-1]
+	m.project.Segments = make([]domain.Segment, len(last))
+	copy(m.project.Segments, last)
 	return true
 }
 
@@ -110,28 +106,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.mode == modeEditCaption || m.mode == modeEditSpeaker {
 			switch msg.Type {
 			case tea.KeyEnter:
-				// Commit edit
-				if m.project != nil && m.cursor < len(m.project.Segments) {
+				if m.cursor >= 0 && m.cursor < len(m.project.Segments) {
 					m.pushHistory()
 					if m.mode == modeEditCaption {
 						m.project.Segments[m.cursor].Source = m.input.Value()
-						m.statusMsg = "✓ Caption updated"
 					} else {
-						m.project.Segments[m.cursor].Speaker = strings.TrimSpace(m.input.Value())
-						m.statusMsg = "✓ Speaker updated"
+						m.project.Segments[m.cursor].Speaker = m.input.Value()
 					}
 				}
 				m.mode = modeBrowse
-				m.input.Blur()
+				m.statusMsg = "✓ Saved"
 				return m, nil
-
 			case tea.KeyEsc:
-				// Cancel edit
 				m.mode = modeBrowse
-				m.input.Blur()
 				m.statusMsg = "Edit cancelled"
 				return m, nil
-
 			default:
 				var cmd tea.Cmd
 				m.input, cmd = m.input.Update(msg)
@@ -139,7 +128,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
-		// Browse mode
 		switch msg.String() {
 		case "up", "k":
 			if m.cursor > 0 {
@@ -153,28 +141,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.project != nil && len(m.project.Segments) > 0 && m.cursor < len(m.project.Segments) {
 				m.mode = modeEditCaption
 				m.input.SetValue(m.project.Segments[m.cursor].Source)
-				m.input.CursorEnd()
 				m.input.Focus()
 			}
 		case "s":
 			if m.project != nil && len(m.project.Segments) > 0 && m.cursor < len(m.project.Segments) {
 				m.mode = modeEditSpeaker
 				m.input.SetValue(m.project.Segments[m.cursor].Speaker)
-				m.input.CursorEnd()
 				m.input.Focus()
 			}
 		case "u", "ctrl+z":
 			if m.popHistory() {
-				m.statusMsg = "✓ Undone previous edit"
-			} else {
-				m.statusMsg = "Nothing to undo"
+				m.statusMsg = "↺ Undone"
 			}
 		case " ":
 			if m.player != nil && m.project != nil && len(m.project.Segments) > 0 && m.cursor < len(m.project.Segments) {
 				seg := m.project.Segments[m.cursor]
 				status, err := m.player.PlaySegment(seg.Start, seg.End)
 				if err != nil {
-					m.statusMsg = "[ERROR] " + err.Error()
+					m.statusMsg = fmt.Sprintf("Error: %v", err)
 				} else {
 					m.statusMsg = status
 				}
@@ -194,10 +178,17 @@ func (m Model) View() string {
 		height = 24
 	}
 
+	ctx := m.headerCtx
+	if ctx.ScreenName == "" {
+		ctx.ScreenName = "Caption Review"
+	}
+	if m.statusMsg != "" {
+		ctx.Status = m.statusMsg
+	}
+
 	if m.project == nil || len(m.project.Segments) == 0 {
 		return components.RenderScreen(
-			"subforge v0.3.0",
-			"Caption Review (Empty)",
+			ctx,
 			"\n  No segments to review. Transcribe an audio file first.\n",
 			[]string{"[Esc] Back to REPL"},
 			width,
@@ -205,18 +196,13 @@ func (m Model) View() string {
 		)
 	}
 
-	status := m.statusMsg
-	if status == "" {
-		status = fmt.Sprintf("Review: %s (%d segments)", m.project.Name, len(m.project.Segments))
-	}
-
 	var sb strings.Builder
 	sb.WriteString("\n")
 
 	// Calculate visible window if terminal height is constrained
-	maxRows := height - 8
-	if maxRows < 5 {
-		maxRows = 5
+	maxRows := height - 9
+	if maxRows < 4 {
+		maxRows = 4
 	}
 
 	startIdx := 0
@@ -255,8 +241,7 @@ func (m Model) View() string {
 	}
 
 	return components.RenderScreen(
-		"subforge v0.3.0",
-		status,
+		ctx,
 		sb.String(),
 		[]string{"[↑/↓/j/k] Move", "[Enter/e] Edit Caption", "[s] Speaker", "[Space] Play", "[u] Undo", "[Esc] Back to REPL"},
 		width,
