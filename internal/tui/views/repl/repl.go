@@ -62,6 +62,9 @@ type Model struct {
 	logs             []string
 	project          *domain.Project
 	headerCtx        components.HeaderContext
+	cmdHistory       []string
+	historyIndex     int
+	savedInput       string
 	suggestionCursor int
 	width            int
 	height           int
@@ -87,6 +90,9 @@ func New(width, height int) Model {
 		input:            ti,
 		logs:             []string{"Local-first subtitles. Type / to see commands, ? for help."},
 		headerCtx:        components.HeaderContext{ScreenName: "REPL"},
+		cmdHistory:       make([]string, 0),
+		historyIndex:     -1,
+		savedInput:       "",
 		suggestionCursor: 0,
 		width:            width,
 		height:           height,
@@ -163,6 +169,34 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.suggestionCursor = 0
 				return m, nil
 			}
+		} else {
+			// No suggestions open: Up/Down cycles through command history
+			switch msg.String() {
+			case "up":
+				if len(m.cmdHistory) > 0 {
+					if m.historyIndex == -1 {
+						m.savedInput = m.input.Value()
+						m.historyIndex = len(m.cmdHistory) - 1
+					} else if m.historyIndex > 0 {
+						m.historyIndex--
+					}
+					m.input.SetValue(m.cmdHistory[m.historyIndex])
+					m.input.SetCursor(len(m.input.Value()))
+					return m, nil
+				}
+			case "down":
+				if m.historyIndex != -1 {
+					if m.historyIndex < len(m.cmdHistory)-1 {
+						m.historyIndex++
+						m.input.SetValue(m.cmdHistory[m.historyIndex])
+					} else {
+						m.historyIndex = -1
+						m.input.SetValue(m.savedInput)
+					}
+					m.input.SetCursor(len(m.input.Value()))
+					return m, nil
+				}
+			}
 		}
 
 		switch msg.Type {
@@ -178,6 +212,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					val = "/" + suggestions[m.suggestionCursor].Name
 				}
 			}
+
+			// Save to command history (avoiding immediate duplicates)
+			if len(m.cmdHistory) == 0 || m.cmdHistory[len(m.cmdHistory)-1] != val {
+				m.cmdHistory = append(m.cmdHistory, val)
+			}
+			m.historyIndex = -1
+			m.savedInput = ""
 
 			m.input.SetValue("")
 			m.suggestionCursor = 0

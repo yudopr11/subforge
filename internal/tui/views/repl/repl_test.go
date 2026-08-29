@@ -166,6 +166,50 @@ func TestREPLTabAutoComplete(t *testing.T) {
 	}
 }
 
+func TestREPLCommandHistory(t *testing.T) {
+	m := repl.New(80, 24)
+
+	// Execute '/transcribe'
+	for _, r := range "/transcribe" {
+		updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		m = updated.(repl.Model)
+	}
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(repl.Model)
+
+	// Execute '/review'
+	for _, r := range "/review" {
+		updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		m = updated.(repl.Model)
+	}
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(repl.Model)
+
+	// Press Up arrow -> should restore '/review'
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyUp})
+	m = updated.(repl.Model)
+	view := m.View()
+	if !strings.Contains(view, "/review") {
+		t.Errorf("Expected Up arrow to restore '/review', got view:\n%s", view)
+	}
+
+	// Press Up arrow again -> should restore '/transcribe'
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyUp})
+	m = updated.(repl.Model)
+	view = m.View()
+	if !strings.Contains(view, "/transcribe") {
+		t.Errorf("Expected second Up arrow to restore '/transcribe', got view:\n%s", view)
+	}
+
+	// Press Down arrow -> should go back to '/review'
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m = updated.(repl.Model)
+	view = m.View()
+	if !strings.Contains(view, "/review") {
+		t.Errorf("Expected Down arrow to restore '/review', got view:\n%s", view)
+	}
+}
+
 func TestREPLWindowSizeMsg(t *testing.T) {
 	m := repl.New(80, 24)
 	updated, cmd := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
