@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/yudopr11/subforge/internal/app/binaries"
 	"github.com/yudopr11/subforge/internal/domain"
 )
 
@@ -55,6 +56,9 @@ func RunTranscription(
 	}
 
 	cmd := exec.Command(whisperBin, args...)
+	cmd.Dir = projectDir
+	cmd.Env = binaries.AppendLibraryPath(os.Environ(), filepath.Dir(whisperBin))
+
 	stderrPipe, err := cmd.StderrPipe()
 	if err != nil {
 		proj.Stages["transcribe"] = domain.StatusFailed
@@ -68,9 +72,11 @@ func RunTranscription(
 		return fmt.Errorf("failed to start whisper-cli: %w", err)
 	}
 
+	var stderrLines []string
 	scanner := bufio.NewScanner(stderrPipe)
 	for scanner.Scan() {
 		line := scanner.Text()
+		stderrLines = append(stderrLines, line)
 		if strings.Contains(line, "%") || strings.Contains(line, "progress") {
 			if logFn != nil {
 				logFn(line)
@@ -80,8 +86,12 @@ func RunTranscription(
 
 	if err := cmd.Wait(); err != nil {
 		proj.Stages["transcribe"] = domain.StatusFailed
-		proj.Error = fmt.Sprintf("whisper-cli exited with error: %v", err)
-		return err
+		detail := ""
+		if len(stderrLines) > 0 {
+			detail = ": " + strings.Join(stderrLines[max(0, len(stderrLines)-3):], " | ")
+		}
+		proj.Error = fmt.Sprintf("whisper-cli failed (%v)%s", err, detail)
+		return fmt.Errorf("%s", proj.Error)
 	}
 
 	// 3. Read generated JSON output

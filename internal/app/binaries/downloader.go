@@ -9,9 +9,9 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
-	"strings"
 )
 
 func GetWhisperReleaseURL() (string, string) {
@@ -43,24 +43,21 @@ func ExtractZip(data []byte, destDir string) error {
 		if name == "" || f.FileInfo().IsDir() {
 			continue
 		}
-		// Match whisper-cli, main, or dlls/libs
-		if strings.HasPrefix(name, "whisper") || strings.HasPrefix(name, "main") || strings.HasSuffix(name, ".dll") {
-			targetPath := filepath.Join(destDir, name)
-			rc, err := f.Open()
-			if err != nil {
-				return err
-			}
-			out, err := os.OpenFile(targetPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0755)
-			if err != nil {
-				rc.Close()
-				return err
-			}
-			_, err = io.Copy(out, rc)
+		targetPath := filepath.Join(destDir, name)
+		rc, err := f.Open()
+		if err != nil {
+			return err
+		}
+		out, err := os.OpenFile(targetPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0755)
+		if err != nil {
 			rc.Close()
-			out.Close()
-			if err != nil {
-				return err
-			}
+			return err
+		}
+		_, err = io.Copy(out, rc)
+		rc.Close()
+		out.Close()
+		if err != nil {
+			return err
 		}
 	}
 	return nil
@@ -74,6 +71,12 @@ func ExtractTarGz(data []byte, destDir string) error {
 	defer gzr.Close()
 
 	tr := tar.NewReader(gzr)
+	type symlinkInfo struct {
+		target string
+		link   string
+	}
+	var symlinks []symlinkInfo
+
 	for {
 		header, err := tr.Next()
 		if err == io.EOF {
@@ -88,8 +91,17 @@ func ExtractTarGz(data []byte, destDir string) error {
 			continue
 		}
 
-		if strings.HasPrefix(name, "whisper") || strings.HasPrefix(name, "main") || strings.HasSuffix(name, ".so") || strings.HasSuffix(name, ".dylib") {
-			targetPath := filepath.Join(destDir, name)
+		targetPath := filepath.Join(destDir, name)
+
+		if header.Typeflag == tar.TypeSymlink || header.Typeflag == tar.TypeLink {
+			symlinks = append(symlinks, symlinkInfo{
+				target: targetPath,
+				link:   filepath.Base(header.Linkname),
+			})
+			continue
+		}
+
+		if header.Typeflag == tar.TypeReg || header.Typeflag == tar.TypeRegA || header.Typeflag == 0 {
 			out, err := os.OpenFile(targetPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0755)
 			if err != nil {
 				return err
@@ -101,6 +113,20 @@ func ExtractTarGz(data []byte, destDir string) error {
 			}
 		}
 	}
+
+	// Create symlinks/copies after all regular files are extracted
+	for _, sl := range symlinks {
+		_ = os.Remove(sl.target)
+		_ = os.Symlink(sl.link, sl.target)
+		// Fallback to file copy if symlink failed (e.g. on Windows or restricted filesystems)
+		if _, err := os.Stat(sl.target); err != nil {
+			src := filepath.Join(destDir, sl.link)
+			if data, err := os.ReadFile(src); err == nil {
+				_ = os.WriteFile(sl.target, data, 0755)
+			}
+		}
+	}
+
 	return nil
 }
 
@@ -148,7 +174,7 @@ func DownloadAndExtractWhisper(progressFn func(current, total int64, msg string)
 	}
 
 	if progressFn != nil {
-		progressFn(downloaded, total, "Extracting whisper-cli binary...")
+		progressFn(downloaded, total, "Extracting whisper-cli binary & libraries...")
 	}
 
 	if archiveType == "zip" {
@@ -183,9 +209,43 @@ func DownloadAndExtractWhisper(progressFn func(current, total int64, msg string)
 	return targetBin, nil
 }
 
+func AppendLibraryPath(env []string, binDir string) []string {
+	ldPath := os.Getenv("LD_LIBRARY_PATH")
+	if ldPath != "" {
+		ldPath = binDir + ":" + ldPath
+	} else {
+		ldPath = binDir
+	}
+
+	dyldPath := os.Getenv("DYLD_LIBRARY_PATH")
+	if dyldPath != "" {
+		dyldPath = binDir + ":" + dyldPath
+	} else {
+		dyldPath = binDir
+	}
+
+	pathEnv := os.Getenv("PATH")
+	if pathEnv != "" {
+		pathEnv = binDir + string(os.PathListSeparator) + pathEnv
+	} else {
+		pathEnv = binDir
+	}
+
+	return append(env,
+		"LD_LIBRARY_PATH="+ldPath,
+		"DYLD_LIBRARY_PATH="+dyldPath,
+		"PATH="+pathEnv,
+	)
+}
+
 func EnsureWhisperBinary(progressFn func(current, total int64, msg string)) (string, error) {
 	if bin, err := FindBinary("whisper-cli"); err == nil {
-		return bin, nil
+		binDir := filepath.Dir(bin)
+		testCmd := exec.Command(bin, "--help")
+		testCmd.Env = AppendLibraryPath(os.Environ(), binDir)
+		if err := testCmd.Run(); err == nil {
+			return bin, nil
+		}
 	}
 	return DownloadAndExtractWhisper(progressFn)
 }
