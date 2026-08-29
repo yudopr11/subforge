@@ -65,13 +65,21 @@ func BuildPlayerCommand(playerBin, audioPath string, start, duration float64) (s
 		// Best-effort: just play the segment file directly.
 		return playerBin, []string{audioPath, "/play", "/close"}
 	case strings.Contains(base, "powershell"):
-		// Use Windows built-in WMPlayer COM object for instant playback & seek without C# compilation.
+		ffmpegCmd := "ffmpeg"
+		if path, err := binaries.FindBinary("ffmpeg"); err == nil {
+			ffmpegCmd = fmt.Sprintf("& '%s'", strings.ReplaceAll(path, "'", "''"))
+		}
 		escPath := strings.ReplaceAll(audioPath, "'", "''")
+		msWait := int(duration*1000) + 100
 		psScript := fmt.Sprintf(
-			`$w = New-Object -ComObject WMPlayer.OCX; $w.URL = '%s'; $w.controls.currentPosition = %.3f; $w.controls.play(); Start-Sleep -Milliseconds %d; $w.controls.stop(); $w.close()`,
-			escPath, start, int(duration*1000)+200,
+			`$tmp = Join-Path $env:TEMP "subforge_preview.wav"; `+
+				`%s -y -ss %.3f -t %.3f -i '%s' -vn -acodec pcm_s16le -ar 44100 -ac 2 $tmp -loglevel quiet; `+
+				`if (Test-Path $tmp) { (New-Object System.Media.SoundPlayer $tmp).PlaySync(); Remove-Item -Force $tmp -ErrorAction SilentlyContinue } `+
+				`else { Add-Type -AssemblyName presentationCore; $p = New-Object System.Windows.Media.MediaPlayer; $p.Open([System.Uri]'file:///%s'); Start-Sleep -Milliseconds 200; $p.Position = [System.TimeSpan]::FromSeconds(%.3f); $p.Play(); Start-Sleep -Milliseconds %d; $p.Stop(); $p.Close() }`,
+			ffmpegCmd, start, duration, escPath,
+			filepath.ToSlash(audioPath), start, msWait,
 		)
-		return playerBin, []string{"-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", psScript}
+		return playerBin, []string{"-NoProfile", "-NonInteractive", "-Command", psScript}
 	default:
 		return playerBin, []string{audioPath}
 	}

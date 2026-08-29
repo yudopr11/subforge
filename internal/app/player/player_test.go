@@ -51,7 +51,7 @@ func TestBuildPlayerCommand(t *testing.T) {
 			start:      1.0,
 			duration:   2.0,
 			wantBinary: "powershell",
-			contains:   []string{"-NoProfile", "-NonInteractive", "-Command", "WMPlayer.OCX"},
+			contains:   []string{"-NoProfile", "-NonInteractive", "-Command", "SoundPlayer"},
 		},
 	}
 
