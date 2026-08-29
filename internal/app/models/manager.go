@@ -38,7 +38,7 @@ var standardModels = []ModelInfo{
 		FileName:    "ggml-small.bin",
 		SizeMB:      466,
 		URL:         "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin",
-		Description: "Recommended: Great balance of accuracy & speed (~2GB RAM)",
+		Description: "Great balance of accuracy & speed (~2GB RAM)",
 	},
 	{
 		Name:        "medium",
@@ -46,6 +46,13 @@ var standardModels = []ModelInfo{
 		SizeMB:      1500,
 		URL:         "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium.bin",
 		Description: "High accuracy, requires ~5GB RAM",
+	},
+	{
+		Name:        "large-v3-turbo",
+		FileName:    "ggml-large-v3-turbo.bin",
+		SizeMB:      1620,
+		URL:         "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin",
+		Description: "Recommended: near large-v3 accuracy, 4x faster (~6GB RAM)",
 	},
 	{
 		Name:        "large-v3",
@@ -110,6 +117,7 @@ func (m *Manager) DownloadModel(name string, progressFn func(current, total int6
 
 	targetPath = filepath.Join(m.modelsDir, targetInfo.FileName)
 	tmpPath := targetPath + ".download"
+
 	defer func() {
 		if err != nil {
 			_ = os.Remove(tmpPath)
@@ -123,8 +131,7 @@ func (m *Manager) DownloadModel(name string, progressFn func(current, total int6
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		err = fmt.Errorf("bad HTTP status: %s", resp.Status)
-		return "", err
+		return "", fmt.Errorf("bad HTTP status: %s", resp.Status)
 	}
 
 	total := resp.ContentLength
@@ -132,7 +139,6 @@ func (m *Manager) DownloadModel(name string, progressFn func(current, total int6
 	if err != nil {
 		return "", err
 	}
-	defer out.Close()
 
 	buf := make([]byte, 32*1024)
 	var current int64
@@ -140,8 +146,8 @@ func (m *Manager) DownloadModel(name string, progressFn func(current, total int6
 		n, readErr := resp.Body.Read(buf)
 		if n > 0 {
 			if _, writeErr := out.Write(buf[:n]); writeErr != nil {
-				err = writeErr
-				return "", err
+				out.Close()
+				return "", writeErr
 			}
 			current += int64(n)
 			if progressFn != nil {
@@ -152,12 +158,12 @@ func (m *Manager) DownloadModel(name string, progressFn func(current, total int6
 			if readErr == io.EOF {
 				break
 			}
-			err = readErr
-			return "", err
+			out.Close()
+			return "", readErr
 		}
 	}
 
-	_ = out.Close()
+	out.Close()
 	_ = os.Remove(targetPath)
 	if err = os.Rename(tmpPath, targetPath); err != nil {
 		return "", err

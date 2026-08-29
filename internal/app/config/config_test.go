@@ -15,7 +15,7 @@ func TestRecommendModel(t *testing.T) {
 		{2.0, "tiny"},
 		{3.5, "base"},
 		{6.0, "small"},
-		{12.0, "medium"},
+		{12.0, "large-v3-turbo"},
 		{32.0, "large-v3"},
 	}
 

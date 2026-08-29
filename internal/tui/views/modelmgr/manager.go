@@ -228,7 +228,7 @@ func (m Model) View() string {
 
 	var sb strings.Builder
 	// Table Header
-	tblHeader := fmt.Sprintf("  %-10s  %-10s  %-18s  %s", "Model", "Size", "Status", "Description")
+	tblHeader := fmt.Sprintf("  %-16s  %-10s  %-18s  %s", "Model", "Size", "Status", "Description")
 	sb.WriteString(lipgloss.NewStyle().Foreground(theme.ColorMuted).Bold(true).Render(tblHeader) + "\n")
 	sb.WriteString(lipgloss.NewStyle().Foreground(theme.ColorMuted).Render("  "+strings.Repeat("─", width-4)) + "\n")
 
@@ -239,7 +239,7 @@ func (m Model) View() string {
 			cursor = "▸ "
 		}
 
-		colName := fmt.Sprintf("%-10s", info.Name)
+		colName := fmt.Sprintf("%-16s", info.Name)
 		colSize := fmt.Sprintf("%6d MB  ", info.SizeMB)
 
 		installed := false

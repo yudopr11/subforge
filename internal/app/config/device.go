@@ -17,7 +17,7 @@ func RecommendModelForRAM(ramGB float64) string {
 	} else if ramGB < 10.0 {
 		return "small"
 	} else if ramGB < 20.0 {
-		return "medium"
+		return "large-v3-turbo"
 	}
 	return "large-v3"
 }
