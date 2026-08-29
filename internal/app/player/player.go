@@ -26,6 +26,10 @@ func DetectAudioPlayer() string {
 		}
 	}
 	if runtime.GOOS == "windows" {
+		// Try wmplayer (Windows Media Player), then fall back to PowerShell SoundPlayer
+		if path, err := binaries.FindBinary("wmplayer"); err == nil {
+			return path
+		}
 		return "powershell"
 	}
 	return ""
@@ -56,12 +60,26 @@ func BuildPlayerCommand(playerBin, audioPath string, start, duration float64) (s
 			fmt.Sprintf("--stop-time=%.3f", start+duration),
 			audioPath,
 		}
+	case strings.Contains(base, "wmplayer"):
+		// Windows Media Player: no native seek-to flag, play full file from position 0.
+		// Best-effort: just play the segment file directly.
+		return playerBin, []string{audioPath, "/play", "/close"}
 	case strings.Contains(base, "powershell"):
+		// Use Windows built-in SoundPlayer for WAV, or mciSendString for general audio.
+		// mciSendString supports seek + duration and works on all Windows without WPF.
+		absPath := strings.ReplaceAll(audioPath, `\`, `\\`)
+		startMs := int(start * 1000)
+		endMs := int((start + duration) * 1000)
 		psScript := fmt.Sprintf(
-			`Add-Type -AssemblyName presentationCore; $p = New-Object System.Windows.Media.MediaPlayer; $p.Open([System.Uri]"%s"); Start-Sleep -Milliseconds 150; $p.Position = [System.TimeSpan]::FromSeconds(%.3f); $p.Play(); Start-Sleep -Milliseconds %d; $p.Stop(); $p.Close()`,
-			audioPath, start, int(duration*1000)+100,
+			`$sig = '[DllImport(\"winmm.dll\")]public static extern int mciSendString(string cmd,System.Text.StringBuilder ret,int retLen,System.IntPtr hwnd);';`+
+				`$t = Add-Type -MemberDefinition $sig -Name 'MCI' -Namespace 'Win32' -PassThru;`+
+				`$null = $t::mciSendString('open \"%s\" type mpegvideo alias seg','',0,[System.IntPtr]::Zero);`+
+				`$null = $t::mciSendString('play seg from %d to %d','',0,[System.IntPtr]::Zero);`+
+				`Start-Sleep -Milliseconds %d;`+
+				`$null = $t::mciSendString('close seg','',0,[System.IntPtr]::Zero)`,
+			absPath, startMs, endMs, endMs-startMs+200,
 		)
-		return playerBin, []string{"-NoProfile", "-NonInteractive", "-Command", psScript}
+		return playerBin, []string{"-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", psScript}
 	default:
 		return playerBin, []string{audioPath}
 	}
