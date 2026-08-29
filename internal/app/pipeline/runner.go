@@ -42,24 +42,36 @@ func RunTranscription(
 	}
 	proj.Stages["transcribe"] = domain.StatusRunning
 
+	// Ensure projectDir exists
+	absProjectDir, err := filepath.Abs(projectDir)
+	if err != nil {
+		absProjectDir = projectDir
+	}
+	_ = os.MkdirAll(absProjectDir, 0755)
+
+	// Resolve absolute paths
+	absAudioInput, _ := filepath.Abs(proj.AudioPath)
+	absWavPath := filepath.Join(absProjectDir, "audio.wav")
+	absModelPath, _ := filepath.Abs(modelPath)
+	absJsonOutputBase := filepath.Join(absProjectDir, "whisper_out")
+	absWhisperBin, _ := filepath.Abs(whisperBin)
+
 	// 1. Prepare 16kHz mono WAV
-	wavPath := filepath.Join(projectDir, "audio.wav")
 	if logFn != nil {
 		logFn("Converting audio to 16kHz mono WAV...")
 	}
-	if err := Prepare16kHzAudio(proj.AudioPath, wavPath, nil); err != nil {
+	if err := Prepare16kHzAudio(absAudioInput, absWavPath, nil); err != nil {
 		proj.Stages["transcribe"] = domain.StatusFailed
 		proj.Error = err.Error()
 		return err
 	}
 
 	// 2. Build whisper-cli command
-	jsonOutputBase := filepath.Join(projectDir, "whisper_out")
 	args := []string{
-		"-m", modelPath,
-		"-f", wavPath,
+		"-m", absModelPath,
+		"-f", absWavPath,
 		"--output-json",
-		"--output-file", jsonOutputBase,
+		"--output-file", absJsonOutputBase,
 		"--print-progress",
 	}
 
@@ -70,12 +82,12 @@ func RunTranscription(
 	}
 
 	if logFn != nil {
-		logFn(fmt.Sprintf("Running %s with model %s...", filepath.Base(whisperBin), filepath.Base(modelPath)))
+		logFn(fmt.Sprintf("Running %s with model %s...", filepath.Base(absWhisperBin), filepath.Base(absModelPath)))
 	}
 
-	cmd := exec.Command(whisperBin, args...)
-	cmd.Dir = projectDir
-	cmd.Env = binaries.AppendLibraryPath(os.Environ(), filepath.Dir(whisperBin))
+	cmd := exec.Command(absWhisperBin, args...)
+	cmd.Dir = absProjectDir
+	cmd.Env = binaries.AppendLibraryPath(os.Environ(), filepath.Dir(absWhisperBin))
 
 	stderrPipe, err := cmd.StderrPipe()
 	if err != nil {
@@ -118,7 +130,7 @@ func RunTranscription(
 	}
 
 	// 3. Read generated JSON output
-	jsonFilePath := jsonOutputBase + ".json"
+	jsonFilePath := absJsonOutputBase + ".json"
 	jsonData, err := os.ReadFile(jsonFilePath)
 	if err != nil {
 		proj.Stages["transcribe"] = domain.StatusFailed
