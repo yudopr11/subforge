@@ -368,7 +368,11 @@ func (a AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				a.config.DefaultModel = a.wizardView.RecModel()
 				a.config.WizardCompleted = true
 				_ = config.SaveConfig(a.config)
-				a.replView.AppendLog(fmt.Sprintf("✓ Wizard completed: default model set to %s", a.config.DefaultModel))
+				if a.project != nil {
+					a.project.Model = a.config.DefaultModel
+					_ = project.SaveProject(a.project, ".")
+				}
+				a.replView.AppendLog(fmt.Sprintf("✓ Wizard completed: active model set to '%s'", a.config.DefaultModel))
 				a.screen = ScreenREPL
 				return a, nil
 			case tea.KeyEsc:
