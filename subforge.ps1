@@ -1,36 +1,34 @@
 # SubForge Windows Installer / Uninstaller
-# Usage:
-#   Install:   irm https://raw.githubusercontent.com/yudopr11/subforge/master/install.ps1 | iex
-#   Uninstall: & ([scriptblock]::Create((irm https://raw.githubusercontent.com/yudopr11/subforge/master/install.ps1))) --uninstall
-#   Uninstall (keep data): ... --uninstall --keep-data
-
-param(
-    [switch]$Uninstall,
-    [switch]$KeepData
-)
+# Usage: irm https://raw.githubusercontent.com/yudopr11/subforge/master/subforge.ps1 | iex
 
 $ErrorActionPreference = "Stop"
 
-$AppName   = "subforge"
-$Repo      = "yudopr11/subforge"
+$AppName    = "subforge"
+$Repo       = "yudopr11/subforge"
 $InstallDir = Join-Path $env:LOCALAPPDATA "subforge\bin"
-$ExePath   = Join-Path $InstallDir "$AppName.exe"
-$DataDir   = Join-Path $env:LOCALAPPDATA "subforge"
-$ConfigDir = Join-Path $env:APPDATA "subforge"
+$ExePath    = Join-Path $InstallDir "$AppName.exe"
+$DataDir    = Join-Path $env:LOCALAPPDATA "subforge"
+$ConfigDir  = Join-Path $env:APPDATA "subforge"
 
+# ── Banner ─────────────────────────────────────────────────────────────────────
 Write-Host "================================================================" -ForegroundColor Cyan
-if ($Uninstall) {
-    Write-Host "  SubForge -- Uninstaller" -ForegroundColor White
-} else {
-    Write-Host "  SubForge -- Local-First Subtitle Generator (Go)" -ForegroundColor White
-}
+Write-Host "  SubForge -- Local-First Subtitle Generator (Go)" -ForegroundColor White
 Write-Host "================================================================" -ForegroundColor Cyan
+Write-Host ""
+
+# ── Main menu ──────────────────────────────────────────────────────────────────
+Write-Host "  What would you like to do?" -ForegroundColor White
+Write-Host ""
+Write-Host "    1) Install SubForge" -ForegroundColor Cyan
+Write-Host "    2) Uninstall SubForge" -ForegroundColor Cyan
+Write-Host ""
+$Choice = Read-Host "  Choice [1/2]"
 Write-Host ""
 
 # ══════════════════════════════════════════════════════════════════════════════
 # INSTALL
 # ══════════════════════════════════════════════════════════════════════════════
-if (-not $Uninstall) {
+if ($Choice -ne "2") {
 
     if (-not (Test-Path $InstallDir)) {
         New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
@@ -42,7 +40,9 @@ if (-not $Uninstall) {
     try {
         $Release = Invoke-RestMethod -Uri "https://api.github.com/repos/$Repo/releases/latest" `
             -Headers @{ "User-Agent" = "subforge-installer" } -TimeoutSec 10
-        $Asset = $Release.assets | Where-Object { $_.name -like "*windows*.exe" -or $_.name -eq "$AppName.exe" } | Select-Object -First 1
+        $Asset = $Release.assets |
+            Where-Object { $_.name -like "*windows*.exe" -or $_.name -eq "$AppName.exe" } |
+            Select-Object -First 1
         if ($Asset) { $DownloadUrl = $Asset.browser_download_url }
     } catch {
         $DownloadUrl = "https://github.com/$Repo/releases/latest/download/subforge-windows-x64.exe"
@@ -90,8 +90,20 @@ if (-not $Uninstall) {
 # ══════════════════════════════════════════════════════════════════════════════
 # UNINSTALL
 # ══════════════════════════════════════════════════════════════════════════════
-if ($Uninstall) {
+if ($Choice -eq "2") {
 
+    Write-Host "  Uninstall options:" -ForegroundColor Yellow
+    Write-Host ""
+    $KeepData = Read-Host "  Keep downloaded models and application data? [y/N]"
+    $KeepData = $KeepData -match '^[Yy]'
+    if ($KeepData) {
+        Write-Host "  i  Data and config will be preserved." -ForegroundColor DarkGray
+    } else {
+        Write-Host "  i  Data and config will be removed." -ForegroundColor DarkGray
+    }
+    Write-Host ""
+
+    # Remove binary
     if (Test-Path $ExePath) {
         Write-Host "[*] Removing $ExePath..." -ForegroundColor Yellow
         Remove-Item -Path $ExePath -Force
@@ -101,12 +113,11 @@ if ($Uninstall) {
     }
 
     # Clean temp files
-    Get-ChildItem $env:TEMP -Filter "subforge*" -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+    Get-ChildItem $env:TEMP -Filter "subforge*" -ErrorAction SilentlyContinue |
+        Remove-Item -Force -ErrorAction SilentlyContinue
     Write-Host "[OK] Cleaned temporary files." -ForegroundColor Green
 
-    if ($KeepData) {
-        Write-Host "[i] --keep-data set: skipping removal of data and config directories." -ForegroundColor DarkGray
-    } else {
+    if (-not $KeepData) {
         if (Test-Path $DataDir) {
             Write-Host "[*] Removing application data ($DataDir)..." -ForegroundColor Yellow
             Remove-Item -Path $DataDir -Recurse -Force

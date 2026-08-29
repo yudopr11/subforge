@@ -1,9 +1,6 @@
 #!/usr/bin/env sh
 # SubForge Linux & macOS Installer / Uninstaller
-# Usage:
-#   Install:   curl -fsSL https://raw.githubusercontent.com/yudopr11/subforge/master/install.sh | sh
-#   Uninstall: curl -fsSL https://raw.githubusercontent.com/yudopr11/subforge/master/install.sh | sh -s -- --uninstall
-#   Uninstall (keep data): ... | sh -s -- --uninstall --keep-data
+# Usage: curl -fsSL https://raw.githubusercontent.com/yudopr11/subforge/master/subforge.sh | sh
 
 set -e
 
@@ -14,25 +11,39 @@ TARGET_BIN="${INSTALL_DIR}/${APP_NAME}"
 DATA_DIR="${HOME}/.local/share/subforge"
 CONFIG_DIR="${HOME}/.config/subforge"
 
-# ── Parse flags ───────────────────────────────────────────────────────────────
-MODE="install"
-KEEP_DATA=false
+# ── Helpers ────────────────────────────────────────────────────────────────────
+print_banner() {
+  printf "\033[36m════════════════════════════════════════════════════════════════\033[0m\n"
+  printf "\033[1;37m  SubForge — Local-First Subtitle Generator (Go)\033[0m\n"
+  printf "\033[36m════════════════════════════════════════════════════════════════\033[0m\n\n"
+}
 
-for arg in "$@"; do
-  case "$arg" in
-    --uninstall) MODE="uninstall" ;;
-    --keep-data) KEEP_DATA=true ;;
+ask() {
+  # ask <prompt> → returns 0 (yes) or 1 (no)
+  printf "%s [y/N] " "$1"
+  read -r REPLY
+  case "$REPLY" in
+    [Yy]*) return 0 ;;
+    *)     return 1 ;;
   esac
-done
+}
 
 # ── Banner ─────────────────────────────────────────────────────────────────────
-printf "\033[36m════════════════════════════════════════════════════════════════\033[0m\n"
-if [ "$MODE" = "uninstall" ]; then
-  printf "\033[1;37m  SubForge — Uninstaller\033[0m\n"
-else
-  printf "\033[1;37m  SubForge — Local-First Subtitle Generator (Go)\033[0m\n"
-fi
-printf "\033[36m════════════════════════════════════════════════════════════════\033[0m\n\n"
+print_banner
+
+# ── Main menu ──────────────────────────────────────────────────────────────────
+printf "  What would you like to do?\n\n"
+printf "    \033[1;36m1)\033[0m Install SubForge\n"
+printf "    \033[1;36m2)\033[0m Uninstall SubForge\n\n"
+printf "  Choice [1/2]: "
+read -r CHOICE
+
+case "$CHOICE" in
+  2) MODE="uninstall" ;;
+  *) MODE="install" ;;
+esac
+
+printf "\n"
 
 # ══════════════════════════════════════════════════════════════════════════════
 # INSTALL
@@ -41,13 +52,12 @@ if [ "$MODE" = "install" ]; then
 
   mkdir -p "${INSTALL_DIR}"
 
-  # Detect OS & Architecture
   OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
   ARCH="$(uname -m)"
   case "${ARCH}" in
-    x86_64|amd64) ARCH="x64" ;;
+    x86_64|amd64)  ARCH="x64" ;;
     arm64|aarch64) ARCH="arm64" ;;
-    *) ARCH="x64" ;;
+    *)             ARCH="x64" ;;
   esac
 
   ASSET_NAME="subforge-${OS}-${ARCH}"
@@ -67,7 +77,7 @@ if [ "$MODE" = "install" ]; then
       GOBIN="${INSTALL_DIR}" go install "github.com/${REPO}/cmd/subforge@latest"
       printf "\033[32m✓ SubForge installed via go install.\033[0m\n"
     else
-      printf "\033[31m[ERROR] Could not download binary from %s and 'go' is not installed.\033[0m\n" "${DOWNLOAD_URL}"
+      printf "\033[31m[ERROR] Could not download binary and 'go' is not installed.\033[0m\n"
       rm -f "${TEMP_FILE}"
       exit 1
     fi
@@ -75,7 +85,6 @@ if [ "$MODE" = "install" ]; then
 
   rm -f "${TEMP_FILE}"
 
-  # Ensure ~/.local/bin is in PATH
   case ":${PATH}:" in
     *":${INSTALL_DIR}:"*) ;;
     *)
@@ -103,6 +112,16 @@ fi
 # ══════════════════════════════════════════════════════════════════════════════
 if [ "$MODE" = "uninstall" ]; then
 
+  printf "\033[33m  Uninstall options:\033[0m\n\n"
+  KEEP_DATA=false
+  if ask "  Keep downloaded models and application data?"; then
+    KEEP_DATA=true
+    printf "\033[90m  ℹ Data and config will be preserved.\033[0m\n"
+  else
+    printf "\033[90m  ℹ Data and config will be removed.\033[0m\n"
+  fi
+  printf "\n"
+
   # Remove binary
   if [ -f "${TARGET_BIN}" ]; then
     printf "\033[33m▸ Removing %s...\033[0m\n" "${TARGET_BIN}"
@@ -116,10 +135,7 @@ if [ "$MODE" = "uninstall" ]; then
   rm -f /tmp/subforge* /tmp/subforge_preview_*.wav 2>/dev/null || true
   printf "\033[32m✓ Cleaned temporary files.\033[0m\n"
 
-  # Remove data (models, managed whisper-cli)
-  if [ "$KEEP_DATA" = true ]; then
-    printf "\033[90mℹ --keep-data set: skipping removal of %s and %s.\033[0m\n" "${DATA_DIR}" "${CONFIG_DIR}"
-  else
+  if [ "$KEEP_DATA" = false ]; then
     if [ -d "${DATA_DIR}" ]; then
       printf "\033[33m▸ Removing application data (%s)...\033[0m\n" "${DATA_DIR}"
       rm -rf "${DATA_DIR}"
@@ -132,7 +148,7 @@ if [ "$MODE" = "uninstall" ]; then
     fi
   fi
 
-  # Remind about PATH
+  # Remind about PATH entry
   for PROFILE in "${HOME}/.zshrc" "${HOME}/.bashrc" "${HOME}/.profile"; do
     if [ -f "${PROFILE}" ] && grep -q "export PATH=\"${INSTALL_DIR}:\$PATH\"" "${PROFILE}" 2>/dev/null; then
       printf "\033[33m▸ Note: '%s' entry in %s can be removed manually if no longer needed.\033[0m\n" "${INSTALL_DIR}" "${PROFILE}"
