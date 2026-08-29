@@ -160,42 +160,122 @@ func TestREPLTabAutoComplete(t *testing.T) {
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
 	m = updated.(repl.Model)
 
-	view := m.View()
-	if !strings.Contains(view, "/transcribe") {
-		t.Errorf("Expected input to be auto-completed to /transcribe, got:\n%s", view)
+	if m.InputValue() != "/transcribe " {
+		t.Errorf("Expected input to be auto-completed to '/transcribe ', got %q", m.InputValue())
 	}
 }
 
-func TestREPLSuggestionNavigation(t *testing.T) {
+func TestREPLSuggestionNavigationWithArrows(t *testing.T) {
 	m := repl.New(80, 24)
 
 	// Type '/'
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
 	m = updated.(repl.Model)
 
-	// Press Down arrow to navigate to second suggestion
+	// Press Down arrow to navigate to second suggestion ('open')
 	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
 	m = updated.(repl.Model)
 
-	// Press Tab to auto-complete selected suggestion (which is 'open')
+	// Press Down arrow to navigate to third suggestion ('projects')
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m = updated.(repl.Model)
+
+	// Press Up arrow to navigate back to second suggestion ('open')
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyUp})
+	m = updated.(repl.Model)
+
+	// Press Tab to auto-complete selected suggestion
 	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab})
 	m = updated.(repl.Model)
 
-	view := m.View()
-	if !strings.Contains(view, "/open") {
-		t.Errorf("Expected input to be auto-completed to /open after Down arrow, got:\n%s", view)
+	if m.InputValue() != "/open " {
+		t.Errorf("Expected input to be auto-completed to '/open ', got %q", m.InputValue())
+	}
+}
+
+func TestREPLSuggestionNavigationEnterToExecute(t *testing.T) {
+	m := repl.New(80, 24)
+
+	// Type '/'
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	m = updated.(repl.Model)
+
+	// Press Down arrow to navigate to second suggestion ('open')
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m = updated.(repl.Model)
+
+	// Press Enter to execute selected suggestion directly
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(repl.Model)
+
+	if cmd == nil {
+		t.Fatalf("expected tea.Cmd to be returned on Enter")
+	}
+	msg := cmd()
+	execMsg, ok := msg.(repl.ExecuteCommandMsg)
+	if !ok {
+		t.Fatalf("expected ExecuteCommandMsg, got %T", msg)
+	}
+	if execMsg.Command != "open" {
+		t.Errorf("expected Command 'open', got %q", execMsg.Command)
+	}
+}
+
+func TestREPLSuggestionToHistoryTransition(t *testing.T) {
+	m := repl.New(80, 24)
+
+	// Execute '/status'
+	for _, r := range "/status" {
+		updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		m = updated.(repl.Model)
+	}
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(repl.Model)
+
+	// Type '/' -> suggestions active, cursor at 0
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	m = updated.(repl.Model)
+
+	// Press Down -> moves to cursor 1
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m = updated.(repl.Model)
+
+	// Press Up -> moves back to cursor 0
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyUp})
+	m = updated.(repl.Model)
+
+	// Press Up again -> transitions from suggestion 0 into history recall
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyUp})
+	m = updated.(repl.Model)
+	if m.InputValue() != "/status" {
+		t.Errorf("Expected Up at suggestion 0 to restore history '/status', got %q", m.InputValue())
+	}
+
+	// Press Down -> restores saved draft '/'
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m = updated.(repl.Model)
+	if m.InputValue() != "/" {
+		t.Errorf("Expected Down to restore draft '/', got %q", m.InputValue())
 	}
 }
 
 func TestREPLCommandHistory(t *testing.T) {
 	m := repl.New(80, 24)
 
+	// Execute '/new audio.mp3'
+	for _, r := range "/new audio.mp3" {
+		updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		m = updated.(repl.Model)
+	}
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(repl.Model)
+
 	// Execute '/transcribe'
 	for _, r := range "/transcribe" {
 		updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
 		m = updated.(repl.Model)
 	}
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = updated.(repl.Model)
 
 	// Execute '/review'
@@ -209,25 +289,145 @@ func TestREPLCommandHistory(t *testing.T) {
 	// Press Up arrow -> should restore '/review'
 	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyUp})
 	m = updated.(repl.Model)
-	view := m.View()
-	if !strings.Contains(view, "/review") {
-		t.Errorf("Expected Up arrow to restore '/review', got view:\n%s", view)
+	if m.InputValue() != "/review" {
+		t.Errorf("Expected Up arrow to restore '/review', got %q", m.InputValue())
 	}
 
 	// Press Up arrow again -> should restore '/transcribe'
 	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyUp})
 	m = updated.(repl.Model)
-	view = m.View()
-	if !strings.Contains(view, "/transcribe") {
-		t.Errorf("Expected second Up arrow to restore '/transcribe', got view:\n%s", view)
+	if m.InputValue() != "/transcribe" {
+		t.Errorf("Expected second Up arrow to restore '/transcribe', got %q", m.InputValue())
 	}
 
-	// Press Down arrow -> should go back to '/review'
+	// Press Up arrow 3rd time -> should restore '/new audio.mp3'
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyUp})
+	m = updated.(repl.Model)
+	if m.InputValue() != "/new audio.mp3" {
+		t.Errorf("Expected third Up arrow to restore '/new audio.mp3', got %q", m.InputValue())
+	}
+
+	// Press Up arrow 4th time -> at beginning of history, stays '/new audio.mp3'
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyUp})
+	m = updated.(repl.Model)
+	if m.InputValue() != "/new audio.mp3" {
+		t.Errorf("Expected fourth Up arrow to stay on '/new audio.mp3', got %q", m.InputValue())
+	}
+
+	// Press Down arrow -> should go forward to '/transcribe'
 	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
 	m = updated.(repl.Model)
-	view = m.View()
-	if !strings.Contains(view, "/review") {
-		t.Errorf("Expected Down arrow to restore '/review', got view:\n%s", view)
+	if m.InputValue() != "/transcribe" {
+		t.Errorf("Expected Down arrow to go to '/transcribe', got %q", m.InputValue())
+	}
+
+	// Press Down arrow -> should go forward to '/review'
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m = updated.(repl.Model)
+	if m.InputValue() != "/review" {
+		t.Errorf("Expected Down arrow to go to '/review', got %q", m.InputValue())
+	}
+
+	// Press Down arrow -> should return to empty buffer
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m = updated.(repl.Model)
+	if m.InputValue() != "" {
+		t.Errorf("Expected Down arrow to return to empty buffer, got %q", m.InputValue())
+	}
+}
+
+func TestREPLCommandHistoryWithDraft(t *testing.T) {
+	m := repl.New(80, 24)
+
+	// Execute '/status'
+	for _, r := range "/status" {
+		updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		m = updated.(repl.Model)
+	}
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(repl.Model)
+
+	// Type draft '/wizard'
+	for _, r := range "/wizard" {
+		updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		m = updated.(repl.Model)
+	}
+
+	// Press Up -> loads '/status' from history, saving draft '/wizard'
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyUp})
+	m = updated.(repl.Model)
+	if m.InputValue() != "/status" {
+		t.Errorf("Expected Up arrow to restore '/status', got %q", m.InputValue())
+	}
+
+	// Press Down -> restores saved draft '/wizard'
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m = updated.(repl.Model)
+	if m.InputValue() != "/wizard" {
+		t.Errorf("Expected Down arrow to restore draft '/wizard', got %q", m.InputValue())
+	}
+}
+
+func TestREPLEscKeyDismissal(t *testing.T) {
+	m := repl.New(80, 24)
+
+	// Type '/transcribe'
+	for _, r := range "/transcribe" {
+		updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		m = updated.(repl.Model)
+	}
+	if m.InputValue() != "/transcribe" {
+		t.Fatalf("Expected input '/transcribe', got %q", m.InputValue())
+	}
+
+	// Press Esc -> should clear input
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = updated.(repl.Model)
+	if m.InputValue() != "" {
+		t.Errorf("Expected input to be cleared after Esc, got %q", m.InputValue())
+	}
+}
+
+func TestREPLConsecutiveDuplicateHistory(t *testing.T) {
+	m := repl.New(80, 24)
+
+	// Execute '/status' twice
+	for i := 0; i < 2; i++ {
+		for _, r := range "/status" {
+			updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+			m = updated.(repl.Model)
+		}
+		updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+		m = updated.(repl.Model)
+	}
+
+	// Execute '/export'
+	for _, r := range "/export" {
+		updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		m = updated.(repl.Model)
+	}
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(repl.Model)
+
+	// Press Up -> '/export'
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyUp})
+	m = updated.(repl.Model)
+	if m.InputValue() != "/export" {
+		t.Errorf("Expected Up arrow to restore '/export', got %q", m.InputValue())
+	}
+
+	// Press Up -> should be '/status'
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyUp})
+	m = updated.(repl.Model)
+	if m.InputValue() != "/status" {
+		t.Errorf("Expected Up arrow to restore '/status', got %q", m.InputValue())
+	}
+
+	// Press Up again -> should stay '/status' (no duplicate '/status' entry)
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyUp})
+	m = updated.(repl.Model)
+	if m.InputValue() != "/status" {
+		t.Errorf("Expected Up arrow to stay on '/status', got %q", m.InputValue())
 	}
 }
 

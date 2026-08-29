@@ -18,7 +18,7 @@ SubForge is a pure Go local application with a Bubble Tea TUI that transcribes a
   - `github.com/charmbracelet/bubbletea` (Elm architecture runtime)
   - `github.com/charmbracelet/lipgloss` (Visual styling & layout)
   - `github.com/charmbracelet/bubbles` (Interactive widgets: list, textinput, table, spinner)
-- **Distribution:** Single static binary (~5.5 MB) for Linux (amd64, arm64), macOS (arm64, amd64), and Windows (amd64).
+- **Distribution:** Single static binary (~7.8 MB uncompressed or ~2.6 MB with UPX) for Linux (amd64, arm64), macOS (arm64, amd64), and Windows (amd64, arm64). Built with `-trimpath` and stripped debug info (`-s -w -buildid=`).
 
 ## 3. Repository Layout & Layering
 
@@ -27,6 +27,11 @@ subforge/
 ├── cmd/
 │   └── subforge/
 │       └── main.go                 # Executable entrypoint & Bubble Tea bootstrapper
+├── docs/
+│   ├── assets/
+│   │   └── subforge.png            # Application TUI screenshot
+│   ├── ARCHITECTURE.md             # Technical architecture specification
+│   └── PRD.md                      # Product requirements document
 ├── internal/
 │   ├── app/
 │   │   ├── binaries/               # whisper-cli & ffmpeg discovery & auto-downloader
@@ -45,7 +50,7 @@ subforge/
 │       ├── theme/                  # Lip Gloss color palettes and semantic styles
 │       ├── components/             # Reusable UI widgets (Header banner, Footer key legend)
 │       └── views/
-│           ├── repl/               # Command-driven REPL screen with session log
+│           ├── repl/               # Command-driven REPL screen with session log & dual-mode history/suggestions
 │           ├── wizard/             # First-run hardware check & setup wizard
 │           ├── audiopicker/        # Interactive audio file selector
 │           ├── projectpicker/      # Interactive project selector
@@ -54,7 +59,7 @@ subforge/
 │           └── review/             # Interactive caption & speaker editor
 ├── tests/
 │   └── integration/                # End-to-end user flow integration tests
-├── Makefile                        # Build, test, lint automation
+├── Makefile                        # Build, test, lint, release automation
 ├── go.mod
 └── go.sum
 ```
@@ -64,6 +69,8 @@ subforge/
 ## 4. Unified 3-Tier Screen Layout Architecture
 
 Every interactive screen in SubForge (`REPL`, `Wizard`, `AudioPicker`, `ProjectPicker`, `LanguagePicker`, `ModelManager`, `Review`) strictly conforms to the **3-Tier Screen Architecture**:
+
+![SubForge 3-Tier Screen Architecture](assets/subforge.png)
 
 ```text
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -101,6 +108,7 @@ Every interactive screen in SubForge (`REPL`, `Wizard`, `AudioPicker`, `ProjectP
 ```bash
 make test        # Run all unit and integration tests with race detector (go test -v -race ./...)
 make lint        # Run linter (go vet ./...)
-make build       # Compile standalone static binary to bin/subforge
+make build       # Compile standalone static binary to bin/subforge (with -trimpath and -buildid=)
+make release     # Build all 6 OS/Arch release binaries in dist/ (with automatic UPX packing)
 make clean       # Clean build artifacts
 ```

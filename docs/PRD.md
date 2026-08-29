@@ -64,6 +64,8 @@ integrated review, speaker tagging, or standard subtitle formatting.
 SubForge's home is a **transcript-driven REPL**, modeled on modern terminal tools:
 a scrolling session log, a single `>` prompt, and a bottom key legend.
 
+![SubForge TUI REPL](assets/subforge.png)
+
 ```text
  subforge v0.3.0                          episode · transcribed ✓ (24 captions)
  ────────────────────────────────────────────────────────────────────────────
@@ -77,6 +79,18 @@ a scrolling session log, a single `>` prompt, and a bottom key legend.
  ────────────────────────────────────────────────────────────────────────────
  /new  /open  /projects  /models  /language  /transcribe  /review  /export  /wizard  /status  ?  quit
 ```
+
+### Keyboard Navigation & Input Handling
+- **Command History (Bash-like)**:
+  - `↑` (Up arrow): Recalls previous command history (moves older).
+  - `↓` (Down arrow): Steps forward in history (moves newer), returning to draft buffer at the bottom.
+- **Interactive Slash Autocompletion**:
+  - Typing `/` opens the live suggestion popup (`/new`, `/open`, `/projects`, `/models`, ...).
+  - `↓`/`↑`: Navigates up/down within the suggestion list.
+  - `Tab`: Auto-completes the highlighted suggestion into the input buffer.
+  - `Enter`: Directly executes the highlighted suggestion (or submitted input).
+  - `Esc`: Clears input or dismisses the suggestions popup.
+  - `↑` at the top of the suggestion list seamlessly transitions to previous command history recall.
 
 ### Commands
 

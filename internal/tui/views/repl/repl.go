@@ -99,6 +99,10 @@ func New(width, height int) Model {
 	}
 }
 
+func (m Model) InputValue() string {
+	return m.input.Value()
+}
+
 func (m *Model) SetProject(proj *domain.Project) {
 	m.project = proj
 }
@@ -143,22 +147,58 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
+		// When actively browsing history, Up/Down strictly navigates history.
+		if m.historyIndex != -1 {
+			switch msg.String() {
+			case "up":
+				if m.historyIndex > 0 {
+					m.historyIndex--
+					m.input.SetValue(m.cmdHistory[m.historyIndex])
+					m.input.SetCursor(len(m.input.Value()))
+				}
+				return m, nil
+			case "down":
+				if m.historyIndex < len(m.cmdHistory)-1 {
+					m.historyIndex++
+					m.input.SetValue(m.cmdHistory[m.historyIndex])
+				} else {
+					m.historyIndex = -1
+					m.input.SetValue(m.savedInput)
+				}
+				m.input.SetCursor(len(m.input.Value()))
+				return m, nil
+			case "esc":
+				m.historyIndex = -1
+				m.input.SetValue(m.savedInput)
+				m.input.SetCursor(len(m.input.Value()))
+				return m, nil
+			}
+		}
+
 		suggestions := MatchingCommands(m.input.Value())
 
+		// When not in history mode and suggestions are visible, Up/Down/Tab/Esc navigate suggestions.
 		if len(suggestions) > 0 {
 			maxDisplay := min(6, len(suggestions))
 			switch msg.String() {
-			case "up":
-				if m.suggestionCursor > 0 {
-					m.suggestionCursor--
-				} else {
-					m.suggestionCursor = maxDisplay - 1
-				}
-				return m, nil
 			case "down":
 				if m.suggestionCursor < maxDisplay-1 {
 					m.suggestionCursor++
 				} else {
+					m.suggestionCursor = 0
+				}
+				return m, nil
+			case "up":
+				if m.suggestionCursor > 0 {
+					m.suggestionCursor--
+					return m, nil
+				}
+				// At top of suggestion list (cursor == 0), Up recalls history
+				if len(m.cmdHistory) > 0 {
+					m.savedInput = m.input.Value()
+					m.historyIndex = len(m.cmdHistory) - 1
+					m.input.SetValue(m.cmdHistory[m.historyIndex])
+					m.input.SetCursor(len(m.input.Value()))
 					m.suggestionCursor = 0
 				}
 				return m, nil
@@ -176,30 +216,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 		} else {
+			// No suggestions: Up arrow initiates history recall from current input
 			switch msg.String() {
 			case "up":
 				if len(m.cmdHistory) > 0 {
-					if m.historyIndex == -1 {
-						m.savedInput = m.input.Value()
-						m.historyIndex = len(m.cmdHistory) - 1
-					} else if m.historyIndex > 0 {
-						m.historyIndex--
-					}
+					m.savedInput = m.input.Value()
+					m.historyIndex = len(m.cmdHistory) - 1
 					m.input.SetValue(m.cmdHistory[m.historyIndex])
 					m.input.SetCursor(len(m.input.Value()))
+					m.suggestionCursor = 0
 				}
 				return m, nil
 			case "down":
-				if m.historyIndex != -1 {
-					if m.historyIndex < len(m.cmdHistory)-1 {
-						m.historyIndex++
-						m.input.SetValue(m.cmdHistory[m.historyIndex])
-					} else {
-						m.historyIndex = -1
-						m.input.SetValue(m.savedInput)
-					}
-					m.input.SetCursor(len(m.input.Value()))
-				}
 				return m, nil
 			}
 		}
@@ -211,8 +239,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 
-			// If user typed a partial prefix (e.g. "/t") and didn't finish, auto-complete to top suggestion
-			if len(suggestions) > 0 && !strings.Contains(val, " ") {
+			// If user typed a partial prefix (e.g. "/t") and didn't finish, auto-complete to selected suggestion
+			if m.historyIndex == -1 && len(suggestions) > 0 && !strings.Contains(val, " ") {
 				if m.suggestionCursor >= 0 && m.suggestionCursor < len(suggestions) {
 					val = "/" + suggestions[m.suggestionCursor].Name
 				}
@@ -240,6 +268,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m.input, cmd = m.input.Update(msg)
 	if m.input.Value() != oldVal {
 		m.suggestionCursor = 0
+		m.historyIndex = -1
 	}
 	return m, cmd
 }
@@ -254,7 +283,10 @@ func (m Model) View() string {
 		height = 24
 	}
 
-	suggestions := MatchingCommands(m.input.Value())
+	var suggestions []SlashCommand
+	if m.historyIndex == -1 {
+		suggestions = MatchingCommands(m.input.Value())
+	}
 
 	var sb strings.Builder
 	// Reserve space for suggestions popup if active

@@ -6,7 +6,7 @@ SubForge is a fast, ultra-lightweight, local-first subtitle generation and editi
 
 Built accessibility-first: captions that let Deaf and hard-of-hearing viewers follow your content.
 
-![SubForge — subtitle REPL](public/SS.png)
+![SubForge — subtitle REPL](docs/assets/subforge.png)
 
 ## Quick Install (One-Line Installer)
 
@@ -14,31 +14,17 @@ You can install SubForge with a single terminal command — standalone static bi
 
 ### Windows (PowerShell)
 ```powershell
-irm https://raw.githubusercontent.com/yudopr11/subforge/master/install.ps1 | iex
+irm https://raw.githubusercontent.com/yudopr11/subforge/master/subforge.ps1 | iex
 ```
 
 ### Linux & macOS (Terminal)
 ```bash
-curl -fsSL https://raw.githubusercontent.com/yudopr11/subforge/master/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/yudopr11/subforge/master/subforge.sh | sh
 ```
 
 After installation completes, simply open a new terminal window and type:
 ```bash
 subforge
-```
-
-### Uninstallation
-
-To uninstall SubForge:
-
-**Windows (PowerShell):**
-```powershell
-irm https://raw.githubusercontent.com/yudopr11/subforge/master/uninstall.ps1 | iex
-```
-
-**Linux & macOS (Terminal):**
-```bash
-curl -fsSL https://raw.githubusercontent.com/yudopr11/subforge/master/uninstall.sh | sh
 ```
 
 ---
@@ -59,8 +45,9 @@ final_audio.wav
 
 - 🎙️ **Local-First Transcription** — standalone whisper.cpp CLI (GGML models `tiny` … `large-v3`, hardware recommendations based on CPU/RAM, automatic on-demand download in-app with progress bars).
 - ✍️ **Caption & Speaker Review** — interactive table view, edit caption text (`Enter`), edit speaker tags (`s`), segment audio preview (`Space`), and undo (`u`) in an interactive terminal UI.
-- 💾 **Direct Export** — export clean SRT & styled ASS files directly to your current working directory.
-- ⚡ **Ultra Lightweight & Fast** — single static binary (~10 MB), instant startup (<20ms), and low memory footprint (~15MB RAM) powered by Go & Bubble Tea.
+- ⌨️ **Interactive REPL & Shell History** — bash-like `↑`/`↓` command history recall, real-time `/` slash command autocompletion with interactive `↑`/`↓`/`Tab` suggestion navigation.
+- 💾 **Direct Export** — export clean SRT & styled ASS files directly to your `./subforge/` project directory.
+- ⚡ **Ultra Lightweight & Fast** — single static binary (~7.8 MB uncompressed or ~2.6 MB with UPX), instant startup (<10ms), and low memory footprint (~15MB RAM) powered by Go & Bubble Tea.
 - 🖥️ **Hardware Aware** — automatic CPU & RAM detection with tailored Whisper model recommendations.
 
 ---

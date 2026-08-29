@@ -18,7 +18,7 @@ SubForge is a **local-first subtitle generation, review, and export tool** for c
 
 These rules come from `docs/ARCHITECTURE.md §5`. Violating any of them is a bug even if tests pass:
 
-1. **Pure Go, Zero CGO.** Always build with `CGO_ENABLED=0` to ensure static standalone binaries (~5.5 MB) and instant cross-compilation without C toolchains.
+1. **Pure Go, Zero CGO.** Always build with `CGO_ENABLED=0` to ensure static standalone binaries (~7.8 MB uncompressed or ~2.6 MB with UPX) and instant cross-compilation without C toolchains.
 2. **Local first, zero-bloat.** Transcription uses standalone `whisper-cli` executables with GGML models. Zero heavy PyTorch, TorchAudio, or CUDA dependencies.
 3. **Application owns metadata.** Segment IDs, start/end timestamps, project state, and file paths are application-owned.
 4. **Human review.** All transcription output is editable; caption review with speaker tagging and audio preview is a first-class citizen.
@@ -38,7 +38,8 @@ These rules come from `docs/ARCHITECTURE.md §5`. Violating any of them is a bug
 ```bash
 make test        # Run all unit and integration tests with race detector (go test -v -race ./...)
 make lint        # Run linter (go vet ./...)
-make build       # Compile standalone static binary to bin/subforge
+make build       # Compile standalone static binary to bin/subforge (with -trimpath and -buildid=)
+make release     # Build all 6 platform binaries to dist/ (with automatic UPX packing)
 ```
 
 All tests must pass without network access, GPU, downloaded models, or running servers. Use in-memory mocks, temporary directories (`t.TempDir()`), and mock binaries.
