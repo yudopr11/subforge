@@ -207,6 +207,14 @@ func TestReviewModelUndo(t *testing.T) {
 	if proj.Segments[0].Source != originalText {
 		t.Errorf("After undo, source = %q; want %q", proj.Segments[0].Source, originalText)
 	}
+
+	// Redo with 'r'
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+	m = updated.(review.Model)
+
+	if proj.Segments[0].Source != originalText+"?" {
+		t.Errorf("After redo, source = %q; want %q", proj.Segments[0].Source, originalText+"?")
+	}
 }
 
 func TestReviewModelIsEditingAndCancel(t *testing.T) {

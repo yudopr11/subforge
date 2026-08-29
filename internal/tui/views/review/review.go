@@ -30,6 +30,7 @@ type Model struct {
 	input     textinput.Model
 	selected  map[int]bool
 	history   [][]domain.Segment
+	redoStack [][]domain.Segment
 	statusMsg string
 	headerCtx components.HeaderContext
 	width     int
@@ -103,17 +104,41 @@ func (m *Model) pushHistory() {
 	snapshot := make([]domain.Segment, len(m.project.Segments))
 	copy(snapshot, m.project.Segments)
 	m.history = append(m.history, snapshot)
+	m.redoStack = nil // Clear redo history on new edit
 	if len(m.history) > 50 {
 		m.history = m.history[1:]
 	}
 }
 
-func (m *Model) popHistory() bool {
+func (m *Model) Undo() bool {
 	if len(m.history) == 0 || m.project == nil {
 		return false
 	}
+	// Push current state to redo stack
+	current := make([]domain.Segment, len(m.project.Segments))
+	copy(current, m.project.Segments)
+	m.redoStack = append(m.redoStack, current)
+
+	// Pop from history
 	last := m.history[len(m.history)-1]
 	m.history = m.history[:len(m.history)-1]
+	m.project.Segments = make([]domain.Segment, len(last))
+	copy(m.project.Segments, last)
+	return true
+}
+
+func (m *Model) Redo() bool {
+	if len(m.redoStack) == 0 || m.project == nil {
+		return false
+	}
+	// Push current state to history
+	current := make([]domain.Segment, len(m.project.Segments))
+	copy(current, m.project.Segments)
+	m.history = append(m.history, current)
+
+	// Pop from redo stack
+	last := m.redoStack[len(m.redoStack)-1]
+	m.redoStack = m.redoStack[:len(m.redoStack)-1]
 	m.project.Segments = make([]domain.Segment, len(last))
 	copy(m.project.Segments, last)
 	return true
@@ -248,8 +273,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 		case "u", "ctrl+z":
-			if m.popHistory() {
+			if m.Undo() {
 				m.statusMsg = "↺ Undone"
+			} else {
+				m.statusMsg = "Nothing to undo"
+			}
+		case "r", "R", "ctrl+r", "ctrl+y", "U":
+			if m.Redo() {
+				m.statusMsg = "↻ Redone"
+			} else {
+				m.statusMsg = "Nothing to redo"
 			}
 		case " ":
 			if m.player != nil && m.project != nil && len(m.project.Segments) > 0 && m.cursor < len(m.project.Segments) {
@@ -362,6 +395,7 @@ func (m Model) View() string {
 		"[v] Select Line",
 		"[Space] Play",
 		"[u] Undo",
+		"[r] Redo",
 		"[Esc] Back to REPL",
 	}
 	if hasSelections {
