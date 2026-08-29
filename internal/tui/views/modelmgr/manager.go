@@ -214,25 +214,34 @@ func (m Model) View() string {
 	sb.WriteString(theme.TitleStyle.Render("Whisper GGML Model Manager\n\n"))
 
 	for i, info := range m.available {
-		status := theme.StatusPendingStyle.Render("[Not Downloaded]")
-		if m.mgr != nil {
-			if _, installed := m.mgr.GetModelPath(info.Name); installed {
-				status = theme.StatusSuccessStyle.Render("[Installed ✓]")
-			}
-		}
-
 		cursor := "  "
 		if i == m.cursor {
 			cursor = theme.PromptStyle.Render("▸ ")
 		}
 
-		nameStr := info.Name
+		nameStyle := lipgloss.NewStyle().Width(10)
 		if i == m.cursor {
-			nameStr = lipgloss.NewStyle().Bold(true).Foreground(theme.ColorPrimary).Render(info.Name)
+			nameStyle = nameStyle.Bold(true).Foreground(theme.ColorPrimary)
+		}
+		colName := nameStyle.Render(info.Name)
+
+		colSize := fmt.Sprintf("(%4d MB)", info.SizeMB)
+
+		installed := false
+		if m.mgr != nil {
+			_, installed = m.mgr.GetModelPath(info.Name)
 		}
 
-		sb.WriteString(fmt.Sprintf("%s%-10s (%4d MB) %-26s - %s\n",
-			cursor, nameStr, info.SizeMB, status, info.Description))
+		statusStyle := lipgloss.NewStyle().Width(18)
+		var colStatus string
+		if installed {
+			colStatus = statusStyle.Foreground(theme.ColorSuccess).Render("[Installed ✓]")
+		} else {
+			colStatus = statusStyle.Foreground(theme.ColorMuted).Render("[Not Downloaded]")
+		}
+
+		sb.WriteString(fmt.Sprintf("%s%s %s %s - %s\n",
+			cursor, colName, colSize, colStatus, info.Description))
 	}
 
 	if m.downloading {
