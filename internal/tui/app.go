@@ -145,6 +145,26 @@ func (a AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m, cmd = a.modelMgrView.Update(msg)
 		a.modelMgrView = m.(modelmgr.Model)
 		cmds = append(cmds, cmd)
+
+		m, cmd = a.wizardView.Update(msg)
+		a.wizardView = m.(wizard.Model)
+		cmds = append(cmds, cmd)
+
+		var apModel audiopicker.Model
+		apModel, cmd = a.audioPickerView.Update(msg)
+		a.audioPickerView = apModel
+		cmds = append(cmds, cmd)
+
+		var ppModel projectpicker.Model
+		ppModel, cmd = a.projectPickerView.Update(msg)
+		a.projectPickerView = ppModel
+		cmds = append(cmds, cmd)
+
+		var lpModel langpicker.Model
+		lpModel, cmd = a.langPickerView.Update(msg)
+		a.langPickerView = lpModel
+		cmds = append(cmds, cmd)
+
 		return a, tea.Batch(cmds...)
 
 	case modelmgr.ModelSelectedMsg:
@@ -417,7 +437,7 @@ func (a AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		var cmd tea.Cmd
-		a.audioPickerView.List, cmd = a.audioPickerView.List.Update(msg)
+		a.audioPickerView, cmd = a.audioPickerView.Update(msg)
 		return a, cmd
 
 	case ScreenProjectPicker:
@@ -439,7 +459,7 @@ func (a AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		var cmd tea.Cmd
-		a.projectPickerView.List, cmd = a.projectPickerView.List.Update(msg)
+		a.projectPickerView, cmd = a.projectPickerView.Update(msg)
 		return a, cmd
 
 	case ScreenLangPicker:
@@ -465,7 +485,7 @@ func (a AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		var cmd tea.Cmd
-		a.langPickerView.List, cmd = a.langPickerView.List.Update(msg)
+		a.langPickerView, cmd = a.langPickerView.Update(msg)
 		return a, cmd
 
 	default:
@@ -486,11 +506,11 @@ func (a AppModel) View() string {
 	case ScreenModelMgr:
 		return a.modelMgrView.View()
 	case ScreenAudioPicker:
-		return a.audioPickerView.List.View()
+		return a.audioPickerView.View()
 	case ScreenProjectPicker:
-		return a.projectPickerView.List.View()
+		return a.projectPickerView.View()
 	case ScreenLangPicker:
-		return a.langPickerView.List.View()
+		return a.langPickerView.View()
 	default:
 		return a.replView.View()
 	}

@@ -62,11 +62,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) View() string {
-	header := components.RenderHeader("First-Run Setup Wizard", "Hardware Detection", m.width)
+	width := m.width
+	if width <= 0 {
+		width = 80
+	}
+	header := components.RenderHeader("subforge v0.2.0", "Setup Wizard", width)
 
 	var sb strings.Builder
 	sb.WriteString(header + "\n\n")
-	sb.WriteString(theme.TitleStyle.Render("  SubForge Setup Wizard") + "\n\n")
+	sb.WriteString(theme.TitleStyle.Render("  SubForge First-Run Setup Wizard") + "\n\n")
 	sb.WriteString("  Analyzing system hardware capabilities:\n\n")
 	sb.WriteString(fmt.Sprintf("  • Detected RAM:       %.1f GB\n", m.ramGB))
 	sb.WriteString(fmt.Sprintf("  • CPU Threads:        %d cores\n", m.cpuCores))
@@ -75,7 +79,7 @@ func (m Model) View() string {
 
 	footer := components.RenderFooter(
 		[]string{"[Enter] Accept Defaults", "[Esc] Skip / Keep Existing"},
-		m.width,
+		width,
 	)
 	return sb.String() + "\n" + footer
 }

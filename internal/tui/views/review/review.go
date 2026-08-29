@@ -186,15 +186,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m Model) View() string {
 	if m.project == nil || len(m.project.Segments) == 0 {
-		header := components.RenderHeader("Caption Review", "No segments", m.width)
+		header := components.RenderHeader("subforge v0.2.0", "Caption Review (Empty)", m.width)
 		body := "\n  No segments to review. Transcribe an audio file first.\n"
 		footer := components.RenderFooter([]string{"[Esc] Back"}, m.width)
 		return header + body + "\n" + footer
 	}
 
+	status := m.statusMsg
+	if status == "" {
+		status = fmt.Sprintf("Review: %s (%d segments)", m.project.Name, len(m.project.Segments))
+	}
+
 	header := components.RenderHeader(
-		fmt.Sprintf("Review: %s (%d segments)", m.project.Name, len(m.project.Segments)),
-		m.statusMsg,
+		"subforge v0.2.0",
+		status,
 		m.width,
 	)
 

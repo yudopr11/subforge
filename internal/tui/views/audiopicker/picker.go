@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/yudopr11/subforge/internal/tui/components"
 	"github.com/yudopr11/subforge/internal/tui/theme"
 )
 
@@ -51,7 +52,9 @@ func (d audioItemDelegate) Render(w io.Writer, m list.Model, index int, listItem
 }
 
 type Model struct {
-	List list.Model
+	List   list.Model
+	width  int
+	height int
 }
 
 func ScanAudioFiles(dir string) []list.Item {
@@ -90,14 +93,49 @@ func ScanAudioFiles(dir string) []list.Item {
 
 func New(rootDir string, width, height int) Model {
 	items := ScanAudioFiles(rootDir)
-	h := height - 4
+	h := height - 6
 	if h < 0 {
 		h = 0
 	}
 	l := list.New(items, audioItemDelegate{}, width, h)
-	l.Title = "Select Audio/Video File"
+	l.SetShowTitle(false)
+	l.SetShowHelp(false)
 	l.SetShowStatusBar(true)
 	l.SetFilteringEnabled(true)
-	l.KeyMap.Quit.SetEnabled(false) // Handle quit/esc in app router
-	return Model{List: l}
+	l.KeyMap.Quit.SetEnabled(false)
+	return Model{
+		List:   l,
+		width:  width,
+		height: height,
+	}
+}
+
+func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
+		h := msg.Height - 6
+		if h < 0 {
+			h = 0
+		}
+		m.List.SetSize(msg.Width, h)
+		return m, nil
+	}
+	var cmd tea.Cmd
+	m.List, cmd = m.List.Update(msg)
+	return m, cmd
+}
+
+func (m Model) View() string {
+	width := m.width
+	if width <= 0 {
+		width = 80
+	}
+	header := components.RenderHeader("subforge v0.2.0", "Select Audio File", width)
+	footer := components.RenderFooter(
+		[]string{"[↑/↓] Navigate", "[Enter] Select Audio", "[/] Filter", "[Esc] Back to REPL"},
+		width,
+	)
+	return header + "\n\n" + m.List.View() + "\n" + footer
 }
