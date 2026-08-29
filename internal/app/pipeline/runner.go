@@ -60,7 +60,6 @@ func RunTranscription(
 		"-f", wavPath,
 		"--output-json",
 		"--output-file", jsonOutputBase,
-		"--print-colors", "0",
 		"--print-progress",
 	}
 
