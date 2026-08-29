@@ -27,16 +27,21 @@ func RenderHeader(ctx HeaderContext, width int) string {
 		appTitle = fmt.Sprintf("subforge v0.3.0  •  %s", ctx.ScreenName)
 	}
 
-	left1 := theme.TitleStyle.Render(" " + appTitle)
-	logoTop := lipgloss.NewStyle().Foreground(theme.ColorPrimary).Bold(true).Render("█▀▀ █▀▀ ")
+	// 3-Line SF ASCII / Block Logo
+	logoStyle := lipgloss.NewStyle().Foreground(theme.ColorPrimary).Bold(true)
+	logoL1 := logoStyle.Render("█▀▀ █▀▀ ")
+	logoL2 := logoStyle.Render("▀▀█ █▀▀ ")
+	logoL3 := logoStyle.Render("▀▀▀ ▀   ")
 
-	gap1 := width - lipgloss.Width(left1) - lipgloss.Width(logoTop)
+	// Line 1: Title
+	left1 := theme.TitleStyle.Render(" " + appTitle)
+	gap1 := width - lipgloss.Width(left1) - lipgloss.Width(logoL1)
 	if gap1 < 0 {
 		gap1 = 0
 	}
-	topBar := left1 + strings.Repeat(" ", gap1) + logoTop
+	line1 := left1 + strings.Repeat(" ", gap1) + logoL1
 
-	// Line 2: Context Bar (Project Name, Location, Model, Language, Status)
+	// Line 2: Project & Status
 	projName := ctx.ProjectName
 	if projName == "" {
 		projName = "(none)"
@@ -46,45 +51,47 @@ func RenderHeader(ctx HeaderContext, width int) string {
 		projLoc = "./"
 	}
 
+	projBadge := lipgloss.NewStyle().Foreground(theme.ColorWhite).Render(fmt.Sprintf("Project: %s (%s)", projName, projLoc))
+	var line2Badges []string
+	line2Badges = append(line2Badges, projBadge)
+	if ctx.Status != "" {
+		line2Badges = append(line2Badges, lipgloss.NewStyle().Foreground(theme.ColorPrimary).Bold(true).Render(ctx.Status))
+	}
+	left2 := " " + strings.Join(line2Badges, "  •  ")
+	gap2 := width - lipgloss.Width(left2) - lipgloss.Width(logoL2)
+	if gap2 < 0 {
+		left2 = " " + projBadge
+		gap2 = width - lipgloss.Width(left2) - lipgloss.Width(logoL2)
+		if gap2 < 0 {
+			gap2 = 0
+		}
+	}
+	line2 := left2 + strings.Repeat(" ", gap2) + logoL2
+
+	// Line 3: Model & Language
 	modelName := ctx.Model
 	if modelName == "" {
 		modelName = "small"
 	}
-
 	langCode := ctx.Language
 	if langCode == "" {
 		langCode = "auto"
 	}
 
-	projBadge := fmt.Sprintf("Project: %s (%s)", projName, projLoc)
-	modelBadge := fmt.Sprintf("Model: %s", modelName)
-	langBadge := fmt.Sprintf("Lang: %s", langCode)
+	modelBadge := lipgloss.NewStyle().Foreground(theme.ColorSecondary).Render(fmt.Sprintf("Model: %s", modelName))
+	langBadge := lipgloss.NewStyle().Foreground(theme.ColorSuccess).Render(fmt.Sprintf("Language: %s", langCode))
 
-	var badges []string
-	badges = append(badges, lipgloss.NewStyle().Foreground(theme.ColorWhite).Render(projBadge))
-	badges = append(badges, lipgloss.NewStyle().Foreground(theme.ColorSecondary).Render(modelBadge))
-	badges = append(badges, lipgloss.NewStyle().Foreground(theme.ColorSuccess).Render(langBadge))
-
-	if ctx.Status != "" {
-		badges = append(badges, lipgloss.NewStyle().Foreground(theme.ColorPrimary).Bold(true).Render(ctx.Status))
+	left3 := " " + strings.Join([]string{modelBadge, langBadge}, "  •  ")
+	gap3 := width - lipgloss.Width(left3) - lipgloss.Width(logoL3)
+	if gap3 < 0 {
+		gap3 = 0
 	}
+	line3 := left3 + strings.Repeat(" ", gap3) + logoL3
 
-	left2 := " " + strings.Join(badges, "  •  ")
-	logoBottom := lipgloss.NewStyle().Foreground(theme.ColorPrimary).Bold(true).Render("▀▀█ █▀  ")
-
-	gap2 := width - lipgloss.Width(left2) - lipgloss.Width(logoBottom)
-	if gap2 < 0 {
-		// Truncate to first 3 badges if too wide
-		left2 = " " + strings.Join(badges[:3], "  •  ")
-		gap2 = width - lipgloss.Width(left2) - lipgloss.Width(logoBottom)
-		if gap2 < 0 {
-			gap2 = 0
-		}
-	}
-	contextLine := left2 + strings.Repeat(" ", gap2) + logoBottom
-
+	// Line 4: Divider
 	divider := lipgloss.NewStyle().Foreground(theme.ColorMuted).Render(strings.Repeat("─", width))
-	return topBar + "\n" + contextLine + "\n" + divider
+
+	return line1 + "\n" + line2 + "\n" + line3 + "\n" + divider
 }
 
 func RenderScreen(ctx HeaderContext, content string, footerKeys []string, width, height int) string {
