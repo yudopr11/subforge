@@ -145,6 +145,35 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		suggestions := MatchingCommands(m.input.Value())
 
+		// Up/Down always handle command history (bash-like), ignoring suggestion popup.
+		switch msg.String() {
+		case "up":
+			if len(m.cmdHistory) > 0 {
+				if m.historyIndex == -1 {
+					m.savedInput = m.input.Value()
+					m.historyIndex = len(m.cmdHistory) - 1
+				} else if m.historyIndex > 0 {
+					m.historyIndex--
+				}
+				m.input.SetValue(m.cmdHistory[m.historyIndex])
+				m.input.SetCursor(len(m.input.Value()))
+			}
+			return m, nil
+		case "down":
+			if m.historyIndex != -1 {
+				if m.historyIndex < len(m.cmdHistory)-1 {
+					m.historyIndex++
+					m.input.SetValue(m.cmdHistory[m.historyIndex])
+				} else {
+					m.historyIndex = -1
+					m.input.SetValue(m.savedInput)
+				}
+				m.input.SetCursor(len(m.input.Value()))
+			}
+			return m, nil
+		}
+
+		// Suggestion popup: Tab to select, Esc to dismiss.
 		if len(suggestions) > 0 {
 			switch msg.String() {
 			case "tab":
@@ -152,50 +181,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					selected := suggestions[m.suggestionCursor]
 					m.input.SetValue("/" + selected.Name + " ")
 					m.input.SetCursor(len(m.input.Value()))
-					return m, nil
-				}
-			case "up":
-				if m.suggestionCursor > 0 {
-					m.suggestionCursor--
-					return m, nil
-				}
-			case "down":
-				if m.suggestionCursor < len(suggestions)-1 {
-					m.suggestionCursor++
+					m.suggestionCursor = 0
 					return m, nil
 				}
 			case "esc":
 				m.input.SetValue("")
 				m.suggestionCursor = 0
 				return m, nil
-			}
-		} else {
-			// No suggestions open: Up/Down cycles through command history
-			switch msg.String() {
-			case "up":
-				if len(m.cmdHistory) > 0 {
-					if m.historyIndex == -1 {
-						m.savedInput = m.input.Value()
-						m.historyIndex = len(m.cmdHistory) - 1
-					} else if m.historyIndex > 0 {
-						m.historyIndex--
-					}
-					m.input.SetValue(m.cmdHistory[m.historyIndex])
-					m.input.SetCursor(len(m.input.Value()))
-					return m, nil
-				}
-			case "down":
-				if m.historyIndex != -1 {
-					if m.historyIndex < len(m.cmdHistory)-1 {
-						m.historyIndex++
-						m.input.SetValue(m.cmdHistory[m.historyIndex])
-					} else {
-						m.historyIndex = -1
-						m.input.SetValue(m.savedInput)
-					}
-					m.input.SetCursor(len(m.input.Value()))
-					return m, nil
-				}
 			}
 		}
 
