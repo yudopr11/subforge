@@ -21,7 +21,12 @@ print_banner() {
 ask() {
   # ask <prompt> → returns 0 (yes) or 1 (no)
   printf "%s [y/N] " "$1"
-  read -r REPLY
+  REPLY=""
+  if [ -t 0 ]; then
+    read -r REPLY
+  elif [ -e /dev/tty ]; then
+    read -r REPLY < /dev/tty 2>/dev/null || REPLY=""
+  fi
   case "$REPLY" in
     [Yy]*) return 0 ;;
     *)     return 1 ;;
@@ -36,7 +41,12 @@ printf "  What would you like to do?\n\n"
 printf "    \033[1;36m1)\033[0m Install SubForge\n"
 printf "    \033[1;36m2)\033[0m Uninstall SubForge\n\n"
 printf "  Choice [1/2]: "
-read -r CHOICE
+CHOICE=""
+if [ -t 0 ]; then
+  read -r CHOICE
+elif [ -e /dev/tty ]; then
+  read -r CHOICE < /dev/tty 2>/dev/null || CHOICE=""
+fi
 
 case "$CHOICE" in
   2) MODE="uninstall" ;;
@@ -53,6 +63,12 @@ if [ "$MODE" = "install" ]; then
   mkdir -p "${INSTALL_DIR}"
 
   OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
+  case "${OS}" in
+    darwin*) OS="darwin" ;;
+    linux*)  OS="linux" ;;
+    *)       OS="linux" ;;
+  esac
+
   ARCH="$(uname -m)"
   case "${ARCH}" in
     x86_64|amd64)  ARCH="x64" ;;
@@ -60,16 +76,37 @@ if [ "$MODE" = "install" ]; then
     *)             ARCH="x64" ;;
   esac
 
+  # macOS Rosetta check: if running under Rosetta translation, use native arm64
+  if [ "${OS}" = "darwin" ] && [ "${ARCH}" = "x64" ]; then
+    if [ "$(sysctl -in sysctl.proc_translated 2>/dev/null)" = "1" ]; then
+      ARCH="arm64"
+    fi
+  fi
+
   ASSET_NAME="subforge-${OS}-${ARCH}"
   DOWNLOAD_URL="https://github.com/${REPO}/releases/latest/download/${ASSET_NAME}"
 
   printf "\033[33m▸ Fetching latest release for %s (%s)...\033[0m\n" "${OS}" "${ARCH}"
 
-  TEMP_FILE="$(mktemp)"
+  TEMP_FILE="$(mktemp 2>/dev/null || mktemp -t subforge.XXXXXX 2>/dev/null || echo "/tmp/subforge-download.$$")"
 
-  if curl -fsSL "${DOWNLOAD_URL}" -o "${TEMP_FILE}" 2>/dev/null; then
+  DOWNLOAD_SUCCESS=false
+  if command -v curl >/dev/null 2>&1; then
+    if curl -fsSL "${DOWNLOAD_URL}" -o "${TEMP_FILE}" 2>/dev/null; then
+      DOWNLOAD_SUCCESS=true
+    fi
+  elif command -v wget >/dev/null 2>&1; then
+    if wget -qO "${TEMP_FILE}" "${DOWNLOAD_URL}" 2>/dev/null; then
+      DOWNLOAD_SUCCESS=true
+    fi
+  fi
+
+  if [ "$DOWNLOAD_SUCCESS" = true ]; then
     mv "${TEMP_FILE}" "${TARGET_BIN}"
     chmod +x "${TARGET_BIN}"
+    if [ "${OS}" = "darwin" ]; then
+      xattr -dr com.apple.quarantine "${TARGET_BIN}" 2>/dev/null || true
+    fi
     printf "\033[32m✓ Downloaded binary from GitHub Releases.\033[0m\n"
   else
     printf "\033[90mℹ Binary release not found. Falling back to go install...\033[0m\n"
@@ -93,11 +130,23 @@ if [ "$MODE" = "install" ]; then
       if [ "${SHELL_NAME}" = "zsh" ]; then
         PROFILE="${HOME}/.zshrc"
       elif [ "${SHELL_NAME}" = "bash" ]; then
-        PROFILE="${HOME}/.bashrc"
+        if [ -f "${HOME}/.bash_profile" ]; then
+          PROFILE="${HOME}/.bash_profile"
+        else
+          PROFILE="${HOME}/.bashrc"
+        fi
+      elif [ "${SHELL_NAME}" = "fish" ]; then
+        mkdir -p "${HOME}/.config/fish"
+        PROFILE="${HOME}/.config/fish/config.fish"
       else
         PROFILE="${HOME}/.profile"
       fi
-      printf '\nexport PATH="%s:$PATH"\n' "${INSTALL_DIR}" >> "${PROFILE}"
+
+      if [ "${SHELL_NAME}" = "fish" ]; then
+        printf '\nset -gx PATH "%s" $PATH\n' "${INSTALL_DIR}" >> "${PROFILE}"
+      else
+        printf '\nexport PATH="%s:$PATH"\n' "${INSTALL_DIR}" >> "${PROFILE}"
+      fi
       printf "\033[90m  Added to %s\033[0m\n" "${PROFILE}"
       ;;
   esac
