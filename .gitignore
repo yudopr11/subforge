@@ -34,6 +34,11 @@ whisper*/
 /models/
 /cache/
 
+# --- Go & Build Artifacts ---
+/bin/
+/dist/
+.superpowers/
+
 # --- Python ---
 __pycache__/
 *.py[cod]
@@ -83,4 +88,7 @@ Thumbs.db
 # --- Project runtime data ---
 # Local projects created by SubForge during development
 /projects/
-*.subforge/
+subforge/
+.subforge/
+project.json
+whisper_out*

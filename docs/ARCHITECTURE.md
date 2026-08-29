@@ -1,303 +1,114 @@
 # SubForge — Technical Architecture
 
-**Version:** 0.2.0 · **Status:** Active · **Last revised:** 2026-08-25
+**Version:** 0.3.0 · **Status:** Active · **Last revised:** 2026-08-29
 
 Companion document: [`docs/PRD.md`](PRD.md). Section numbers are referenced throughout
 the codebase and plans (`ARCH §N`) — change them only with a repo-wide search.
 
 ---
 
-## 1. System context
+## 1. System Context
 
-SubForge is a local Python application (Textual TUI) that turns exported final audio
-into timestamped captions and translations, exporting SRT/ASS. External systems are
-pluggable providers: always-local whisper.cpp for transcription, and local (LM Studio / Ollama)
-or cloud (OpenAI / OpenCode Zen / OpenCode Go) for translation.
+SubForge is a pure Go local application with a Bubble Tea TUI that transcribes audio into timestamped captions, provides interactive keyboard-driven review with audio preview, and exports SRT/ASS subtitle files. It operates 100% offline via standalone `whisper-cli` executables and local GGML models.
 
-## 2. Tech stack
+## 2. Tech Stack
 
-Python ≥ 3.11 · pydantic v2 (+pydantic-settings semantics) · httpx · Textual ·
-pytest + pytest-asyncio · ruff (`line-length = 100`) · mypy `--strict`. Zero heavy ML or
-PyTorch dependencies — local transcription executes via native `whisper.cpp`.
+- **Language:** Go ≥ 1.24 (Pure Go, Zero CGO: `CGO_ENABLED=0`)
+- **TUI Stack:** Charmbracelet ecosystem:
+  - `github.com/charmbracelet/bubbletea` (Elm architecture runtime)
+  - `github.com/charmbracelet/lipgloss` (Visual styling & layout)
+  - `github.com/charmbracelet/bubbles` (Interactive widgets: list, textinput, table, spinner)
+- **Distribution:** Single static binary (~7.8 MB uncompressed or ~2.6 MB with UPX) for Linux (amd64, arm64), macOS (arm64, amd64), and Windows (amd64, arm64). Built with `-trimpath` and stripped debug info (`-s -w -buildid=`).
 
-## 3. Repository layout & layering
-
-```
-src/subforge/
-  models/        canonical data models (no I/O, no providers)
-  subtitles/     SRT/ASS writers + timeutils (pure functions)
-  app/           services: project_store, pipeline, translation_service,
-                 export, model_manager, provider_factory
-  providers/     base protocols, registry, concrete providers per family
-  config/        settings (env), app_config (TUI-authored)
-  tui/           Textual app + screens (presentation only)
-  cli/           entrypoint
-tests/unit/  tests/integration/  tests/fixtures/
-```
-
-### 3.1 The TUI contains no business logic
-
-Screens construct and call `app/pipeline.py`, `app/export.py`, etc. Widgets render
-state and forward user intent; sequencing, validation, persistence live in `app/`.
-
-### 3.2 Keyboard-only interaction
-
-Screens are keyboard-first by contract (PRD §7):
-
-- Every user-reachable action is exposed as a Textual `BINDINGS` entry; pointer events
-  are treated as incidental duplicates.
-- Each screen renders an always-visible key legend so shortcuts are discoverable.
-- Focus order follows visual order (`AUTO_FOCUS` targets the primary control);
-  `Tab`/arrows walk every control, `Enter` activates.
-- Widgets that consume typing (e.g. `Input`) naturally shadow single-letter bindings
-  while focused, preventing collisions.
-
-- The home screen is a **REPL shell**: a scrolling transcript log, one bottom prompt,
-  and a footer status line (project · stage glyphs · active models). Commands are parsed
-  by a registry in `repl.py` (`SLASH_COMMANDS`, exposed through a `/`-triggered
-  autocomplete picker with `↑`/`↓`/`Tab`/`Enter`) that routes to `app/*` services — the
-  screen adds presentation only (rule 7). Review/edit screens are overlays pushed above
-  the REPL; `/wizard` is a modal overlay that keeps the live transcript
-  visible underneath (the wizard mirrors each step into the transcript).
-- The transcript widget is `widgets.SelectableRichLog`: plain `RichLog` renders no
-  `offset` style metadata, so the compositor can't compute content offsets and
-  drag-selection comes back empty. The selectable variant attaches per-segment offsets
-  at `render_line` time and extracts selections from its stored lines, making
-  **drag-select + Ctrl+C copy** work (OSC 52 clipboard; Ctrl+C quits only when no
-  selection is active).
-- Configuration is divided into dedicated screens:
-  - `/models` opens **Model Manager** (`model_manager.py::ModelManagerScreen`): manage,
-    download, delete, and select local Whisper GGML models with hardware recommendations.
-  - `/language` opens a **searchable ISO 639-1 picker** (`language_picker.py`, catalog in `languages.py`):
-    select source language or auto-detect with `↑`/`↓`/`Enter`.
-  - `/wizard` opens the guided first-run setup wizard (`setup_wizard.py::FirstRunSetupScreen`).
-
-## 4. Core runtime components
-
-`Project`/`Segment` (models) → `Pipeline` orchestrates stages over them → providers do
-inference → `translation_service` validates LLM output → writers render →
-`project_store` persists atomically.
-
-## 5. Provider architecture
-
-The application core depends only on the protocols in `src/subforge/providers/base.py`.
-Concrete providers are resolved via `providers/registry.py`; new providers register in
-their own module. Core pipeline code stays untouched when a provider is added.
-
-## 6. Provider protocols & normalization
-
-- `TranscriptionProvider.transcribe(audio_path, language=None) -> Transcript`
-- `TranslationProvider.translate(segments, source_language, target_language) -> list[TranslationOutput]`
-
-Every provider normalizes to identical internal types inside its own module:
-`Transcript` is byte-for-byte the same shape regardless of where inference ran.
-
-## 7. Zero heavy ML dependencies & whisper.cpp execution
-
-SubForge executes transcription natively using `whisper.cpp` (`whisper-cli` or `main`
-binary). Input audio is converted if needed to 16kHz mono WAV using `ffmpeg` and passed
-to `whisper-cli` with `--output-json-full`. Segment timestamps are parsed directly from
-the resulting JSON offsets.
-
-## 8. Model lifecycle (local GGML models)
-
-`LocalModelManager` manages GGML Whisper model files (`ggml-*.bin`) stored in the app's
-local data directory (`~/.local/share/subforge/models/` or `%LOCALAPPDATA%\subforge\models\`),
-downloads models on demand from HuggingFace repositories, and attaches hardware-aware
-`[RECOMMENDED]` metadata (PRD §8).
-
-## 9. Capability discovery
-
-Per-model reasoning vocabularies come from the models.dev catalog at request time;
-values are passed through verbatim or omitted (PRD §15). Catalog fetch failure degrades
-to "unsupported", hiding the control — never a crash.
-
-## 10. Native STT contract
-
-`WhisperCppProvider` invokes `whisper-cli -m <model_path> -f <wav_path> --output-json-full -of <prefix>`
-and normalizes the output JSON into canonical `Transcript` and `TranscriptSegment` objects with
-millisecond-accurate start/end floating-point seconds.
-
-## 11. Translation request shape
-
-`POST {base_url}/chat/completions` with `response_format={"type":"json_object"}`,
-`max_tokens: 2048`, a language-agnostic JSON-only system prompt, and user content
-carrying `{source_language, target_language, segments:[{id,text}]}`.
-`reasoning_effort` is included ONLY when non-None (§9).
-
-## 12. Response parsing
-
-Robust parsing: markdown code fences stripped; invalid JSON raises `ValueError`;
-reasoning-only responses (`content: null`, seen from MiMo/Nemotron on OpenCode) raise a
-clear error instead of crashing batch processing.
-
-## 13. Pipeline stage inventory
-
-Stages recorded in `project.json` (v0.2.0): `transcription` (WhisperX aligns
-inside it — no separate alignment stage), one `translation_<lang>` per target
-language, `caption_review`, `export`.
-Every stage carries one of the five states of §22.
-
-## 14. OpenAI-compatible translation provider
-
-One provider class serves LM Studio, Ollama, OpenAI, OpenCode Zen/Go — differing only
-in base URL/key/model (PRD §14 table). Auth: `Authorization: Bearer <key>`.
-`list_models()` fetches `GET {base_url}/models` sorted for stable UI ordering.
-HTTP failures (translate and model discovery) surface the server's own reason —
-status code plus the response body's `error.message` (or raw text) — so a 400 such as
-unknown model / unsupported `response_format` / bad `reasoning_effort` is actionable
-(PRD §21). Newer OpenAI reasoning models reject `max_tokens` and demand
-`max_completion_tokens`; the provider auto-detects this from the server's 400
-message, retries that request once with the other parameter, and remembers the
-preference for the rest of the provider session (no rejected probe on later batches).
-
-## 15–16. Batch flow & output validation
-
-Batches of five consecutive segments (default). **Validation rules enforced in
-`app/translation_service.py::_validate_batch`** (extend there, not in providers):
-
-1. Output parses as the agreed JSON shape (provider-level).
-2. Exactly one output per input ID — missing IDs fail the batch.
-3. No unknown IDs.
-4. No duplicate IDs.
-5. Non-empty text.
-
-Invalid output fails that batch only: its segments stay untouched, successful batches
-still merge, errors aggregate, stage records FAILED, nothing corrupts the project.
-
-## 17. Canonical data shapes
-
-```json
-{ "id": 0, "start": 1.2, "end": 3.4, "source": "…",
-  "translations": { "en": "…" } }
-```
-
-SRT and ASS are *output formats only*; seconds-as-floats is the internal truth.
-Never store formatted timestamps as data.
-
-## 18. Export service
-
-`export_subtitles(project_dir, formats, languages)` renders from the canonical model.
-It never calls an LLM. Source always exports; a translation language exports only when
-complete across all segments. Unknown formats raise `ValueError`.
-
-## 19. SRT format
-
-`HH:MM:SS,mmm` stamps, comma milliseconds, integer rounding at ms precision, blocks of
-`id / stamp --> stamp / text`.
-
-## 20. ASS format
-
-`H:MM:SS.cc` centisecond stamps; header carries `PlayResX/Y` and one configurable
-`Style: Default` line (font, size, primary colour); one `Dialogue:` event per segment.
-
-## 21. Project storage
+## 3. Repository Layout & Layering
 
 ```
-<project>/
-  project.json      # single source of truth (pydantic-validated)
-  audio/            # user-supplied final audio
-  transcripts/      # normalized source.json after transcription
-  translations/     # per-language snapshots: <lang>.json after each completed run
-  exports/
+subforge/
+├── cmd/
+│   └── subforge/
+│       └── main.go                 # Executable entrypoint & Bubble Tea bootstrapper
+├── docs/
+│   ├── assets/
+│   │   └── subforge.png            # Application TUI screenshot
+│   ├── ARCHITECTURE.md             # Technical architecture specification
+│   └── PRD.md                      # Product requirements document
+├── internal/
+│   ├── app/
+│   │   ├── binaries/               # whisper-cli & ffmpeg discovery & auto-downloader
+│   │   ├── config/                 # AppConfig (~/.config/subforge/config.json) & Hardware Detector
+│   │   ├── export/                 # Subtitle generators (SRT, ASS)
+│   │   ├── models/                 # Whisper GGML Model Manager (HuggingFace downloader)
+│   │   ├── pipeline/               # Audio conversion (16kHz mono) + whisper-cli runner
+│   │   ├── player/                 # Segment audio previewer (ffplay, mpv, cvlc, powershell)
+│   │   └── project/                # Atomic project storage (project.json in working dir)
+│   ├── domain/
+│   │   ├── project.go              # Canonical Project, Segment, StageStatus data models
+│   │   ├── transcript.go           # Whisper JSON transcript parser
+│   │   └── timeutils.go            # Millisecond / centisecond timestamp formatters
+│   └── tui/
+│       ├── app.go                  # Root Bubble Tea router and screen state machine
+│       ├── theme/                  # Lip Gloss color palettes and semantic styles
+│       ├── components/             # Reusable UI widgets (Header banner, Footer key legend)
+│       └── views/
+│           ├── repl/               # Command-driven REPL screen with session log & dual-mode history/suggestions
+│           ├── wizard/             # First-run hardware check & setup wizard
+│           ├── audiopicker/        # Interactive audio file selector
+│           ├── projectpicker/      # Interactive project selector
+│           ├── modelmgr/           # Interactive Whisper GGML model manager
+│           ├── langpicker/         # ISO language code selector
+│           └── review/             # Interactive caption & speaker editor
+├── tests/
+│   └── integration/                # End-to-end user flow integration tests
+├── Makefile                        # Build, test, lint, release automation
+├── go.mod
+└── go.sum
 ```
 
-Saves are atomic: write `.json.tmp`, then `os.replace`. Floats stay floats in JSON.
+---
 
-## 22. Stage state machine
+## 4. Unified 3-Tier Screen Layout Architecture
 
-Exactly five states recorded in `project.json`: `PENDING`, `RUNNING`, `COMPLETED`,
-`FAILED`, `SKIPPED`. Every expensive stage records explicit state before/after work.
+Every interactive screen in SubForge (`REPL`, `Wizard`, `AudioPicker`, `ProjectPicker`, `LanguagePicker`, `ModelManager`, `Review`) strictly conforms to the **3-Tier Screen Architecture**:
 
-## 23. Resumability rules
+![SubForge 3-Tier Screen Architecture](assets/subforge.png)
 
-Persist state around every transition. Retrying must never rerun completed upstream
-stages implicitly; `retry(stage)` re-runs only non-completed stages. Explicit reruns
-(e.g., `run_transcription(audio, force=True)`) overwrite existing captions upon user confirmation.
-Failed stages rerun cleanly because inputs (canonical segments) are immutable downstream of their owning stage.
+```text
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  subforge v0.3.0                                            <Screen Title>  │  <-- 1. Top Header Banner
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│                            [ Content / Table / List ]                       │  <-- 2. Central Content Area
+│                                                                             │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  [Key1] Action1   [Key2] Action2   [/] Filter   [Esc/q] Back to REPL        │  <-- 3. Bottom Key Legend
+└─────────────────────────────────────────────────────────────────────────────┘
+```
 
-## 24. Layered configuration
+1. **Top Header Banner**: Rendered via `components.RenderHeader("subforge v0.3.0", subtitle, width)`. Left side displays the bold cyan title; right side displays screen-specific status.
+2. **Central Content Area**: Column-aligned Lip Gloss tables or Bubbles lists (`l.SetShowTitle(false)`, `l.SetShowHelp(false)`) with cyan cursor (`▸ `).
+3. **Bottom Key Legend**: Rendered via `components.RenderFooter(keys, width)` displaying all accessible keybindings for keyboard discoverability.
 
-Defaults < `.env` file < environment variables. Env names follow explicit
-`<GROUP>_<FIELD>` mapping (e.g. `TRANSCRIPTION_MODEL`, `TRANSLATION_BASE_URL`) applied
-in `config/settings.py`; nested-delimiter magic is avoided because field names contain
-underscores.
+---
 
-## 25. `.env.example`
+## 5. Non-Negotiable Architectural Rules (ARCH §37)
 
-Documents headless-only knobs (transcription/translation groups) with
-placeholder values and empty `TRANSLATION_API_KEY`/`TRANSLATION_MODEL`. Never commit
-a real `.env`.
+1. **Pure Go, Zero CGO**: Always build with `CGO_ENABLED=0` to ensure static binaries and instant cross-compilation without C toolchains.
+2. **Local First, Zero Bloat**: Transcription executes standalone `whisper-cli` binaries with GGML models. No Python, Torch, or CUDA dependencies.
+3. **AI text only, Application owns metadata**: Segment IDs, start/end timestamps, project status, and file paths are application-owned.
+4. **Human Review Always**: All AI output is reviewable and editable in `/review` with undo support and audio preview.
+5. **Resumable Pipeline**: Stages track explicit state (`pending`, `running`, `completed`, `failed`) in `project.json`. Completed stages are never re-run unnecessarily.
+6. **Canonical Representation**: SRT and ASS are output formats only. The canonical data model is `domain.Segment {ID, Start (float64 seconds), End (float64 seconds), Source, Speaker}`.
+7. **TUI Contains No Business Logic**: Bubble Tea views render state and forward user intent (`tea.Msg`); pipeline execution, model downloads, and persistence live in `internal/app/`.
+8. **Atomic File Persistence**: All `project.json` and `config.json` writes use atomic staging (`.tmp` write followed by `os.Rename`).
 
-## 26. Provider registry
+---
 
-`REGISTRY` singleton; factories registered at module bottom via
-`register_transcription/register_translation(name, factory)`.
-Resolution failures raise `ProviderNotFound`. Built-ins: transcription
-`local-whisper-cpp`, `local`.
+## 6. Commands & Verification
 
-## 27. Native subprocess execution
-
-Audio transcription runs out-of-process via `whisper-cli`, ensuring core Python
-imports remain instant and memory is immediately reclaimed upon stage completion.
-
-## 28. Security & privacy
-
-Never commit: `.env` or any API key; user audio (`*.wav *.mp3 *.flac`); generated
-subtitles (`*.srt *.ass`); model weights/caches; user project data. `.gitignore`
-covers these. AppConfig is written atomically (`os.replace`) with mode `0600` on POSIX
-to `~/.config/subforge/config.json` (or OS app storage, env override `SUBFORGE_CONFIG`).
-
-## 30. Hardware profiles (model recommendation)
-
-`app/device.py` (`DeviceDetector`) automatically inspects host RAM and CPU cores to
-dynamically compute and recommend the best-fitting GGML Whisper model
-(e.g., `large-v3-turbo` for >= 16 GB RAM).
-
-## 31. Concurrency model
-
-MVP runs stages synchronously; TUI workers wrap long calls. Providers own their HTTP
-clients and timeouts (120 s chat completions, 600 s STT).
-
-## 32. Audio ingestion
-
-Projects own exactly one audio file, copied read-only into `<project>/audio/` at
-creation (`wav flac mp3 m4a aac ogg opus`; extension-validated, loud error on
-anything else). FFmpeg-based conversion/validation is not implemented.
-
-## 33. Versioning
-
-App version single-sourced in `src/subforge/__init__.py`; `subforge --version` prints
-it. Project files tolerate additive schema changes via pydantic defaults.
-
-## 34. Testing strategy
-
-All tests run without network access, GPU, downloaded models, or running LLM servers:
-`httpx.MockTransport` for HTTP providers, scripted fakes for ASR/LLM
-(`tests/integration/test_full_flow.py` is the pattern). Binary audio fixtures are never
-committed — generated deterministically at test time (`tests/fixtures/make_sine_wav.py`).
-Integration covers audio → transcript → translation → export plus retry-after-failure
-resumability.
-
-## 35. CI
-
-Lint (ruff), types (mypy --strict), tests (pytest) on push — deferred until repository
-hosting exists; commands already gate locally.
-
-## 36. Observability
-
-Failures surface as prefixed, human-readable stage errors (PRD §21); no telemetry.
-Providers raise typed exceptions; the pipeline converts them to `StageError` with
-context.
-
-## 37. Architectural principles
-
-1. **P1 — Provider independence.** Core imports only `providers/base.py` protocols.
-   Violating this is a bug even if tests pass.
-2. **P2 — Local first, not local only.** Heavy ML deps optional, lazily imported (§7, §27).
-3. **P3 — AI does not own metadata.** LLMs generate text only; IDs/timestamps are
-   application-owned and validated on merge (PRD §10, §16).
-4. **P4 — Human review.** All AI output is editable; review screens are core workflow.
-5. **P5 — Resumable pipeline.** Explicit states; completed stages never rerun (§22–23).
-6. **P6 — Canonical representation.** One segment shape; SRT/ASS are projections (§17).
-7. **P7 — The TUI contains no business logic** (§3.1).
+```bash
+make test        # Run all unit and integration tests with race detector (go test -v -race ./...)
+make lint        # Run linter (go vet ./...)
+make build       # Compile standalone static binary to bin/subforge (with -trimpath and -buildid=)
+make release     # Build all 6 OS/Arch release binaries in dist/ (with automatic UPX packing)
+make clean       # Clean build artifacts
+```
