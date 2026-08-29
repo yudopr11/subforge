@@ -166,6 +166,27 @@ func TestREPLTabAutoComplete(t *testing.T) {
 	}
 }
 
+func TestREPLSuggestionNavigation(t *testing.T) {
+	m := repl.New(80, 24)
+
+	// Type '/'
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	m = updated.(repl.Model)
+
+	// Press Down arrow to navigate to second suggestion
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m = updated.(repl.Model)
+
+	// Press Tab to auto-complete selected suggestion (which is 'open')
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	m = updated.(repl.Model)
+
+	view := m.View()
+	if !strings.Contains(view, "/open") {
+		t.Errorf("Expected input to be auto-completed to /open after Down arrow, got:\n%s", view)
+	}
+}
+
 func TestREPLCommandHistory(t *testing.T) {
 	m := repl.New(80, 24)
 
