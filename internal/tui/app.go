@@ -38,8 +38,9 @@ const (
 )
 
 type TranscribeProgressMsg struct {
-	Line    string
-	NextCmd tea.Cmd
+	Line         string
+	HeaderStatus string
+	NextCmd      tea.Cmd
 }
 
 type TranscribeCompleteMsg struct {
@@ -47,9 +48,10 @@ type TranscribeCompleteMsg struct {
 }
 
 type pipelineProgressEvent struct {
-	Line string
-	Done bool
-	Err  error
+	Line         string
+	HeaderStatus string
+	Done         bool
+	Err          error
 }
 
 func WaitForPipelineProgress(ch <-chan pipelineProgressEvent) tea.Cmd {
@@ -59,17 +61,19 @@ func WaitForPipelineProgress(ch <-chan pipelineProgressEvent) tea.Cmd {
 			return TranscribeCompleteMsg{Err: event.Err}
 		}
 		return TranscribeProgressMsg{
-			Line:    event.Line,
-			NextCmd: WaitForPipelineProgress(ch),
+			Line:         event.Line,
+			HeaderStatus: event.HeaderStatus,
+			NextCmd:      WaitForPipelineProgress(ch),
 		}
 	}
 }
 
 type AppModel struct {
-	screen       Screen
-	config       *config.AppConfig
-	project      *domain.Project
-	modelManager *models.Manager
+	screen           Screen
+	config           *config.AppConfig
+	project          *domain.Project
+	modelManager     *models.Manager
+	liveHeaderStatus string
 
 	replView          repl.Model
 	wizardView        wizard.Model
@@ -180,12 +184,16 @@ func (a AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, nil
 
 	case TranscribeProgressMsg:
+		if msg.HeaderStatus != "" {
+			a.liveHeaderStatus = msg.HeaderStatus
+		}
 		if strings.TrimSpace(msg.Line) != "" {
 			a.replView.AppendLog(msg.Line)
 		}
 		return a, msg.NextCmd
 
 	case TranscribeCompleteMsg:
+		a.liveHeaderStatus = ""
 		if msg.Err != nil {
 			a.replView.AppendLog(theme.ErrorStyle.Render("[ERROR] " + msg.Err.Error()))
 		} else {
@@ -312,6 +320,7 @@ func (a AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 			a.replView.AppendLog("▸ Starting transcription pipeline...")
+			a.liveHeaderStatus = "starting pipeline"
 			proj := a.project
 			modelMgr := a.modelManager
 			modelName := proj.Model
@@ -327,14 +336,21 @@ func (a AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// 1. Ensure Model is downloaded
 				modelPath, exists := modelMgr.GetModelPath(modelName)
 				if !exists {
-					ch <- pipelineProgressEvent{Line: fmt.Sprintf("▸ Model '%s' not found locally. Downloading from HuggingFace...", modelName)}
+					ch <- pipelineProgressEvent{
+						Line:         fmt.Sprintf("▸ Model '%s' not found locally. Downloading from HuggingFace...", modelName),
+						HeaderStatus: fmt.Sprintf("downloading %s", modelName),
+					}
 					var lastReportPct int = -1
 					downloadedPath, err := modelMgr.DownloadModel(modelName, func(curr, tot int64) {
 						if tot > 0 {
 							pct := int(float64(curr) / float64(tot) * 100)
 							if pct != lastReportPct {
 								lastReportPct = pct
-								ch <- pipelineProgressEvent{Line: fmt.Sprintf("▸ Downloading %s: %d%% (%.1f/%.1f MB)", modelName, pct, float64(curr)/1e6, float64(tot)/1e6)}
+								bar := components.FormatProgressBar(fmt.Sprintf("▸ Downloading %s", modelName), curr, tot, 25)
+								ch <- pipelineProgressEvent{
+									Line:         bar,
+									HeaderStatus: fmt.Sprintf("downloading %s %d%%", modelName, pct),
+								}
 							}
 						}
 					})
@@ -344,12 +360,20 @@ func (a AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						return
 					}
 					modelPath = downloadedPath
-					ch <- pipelineProgressEvent{Line: fmt.Sprintf("✓ Model '%s' downloaded successfully!", modelName)}
+					ch <- pipelineProgressEvent{
+						Line:         fmt.Sprintf("✓ Model '%s' downloaded successfully!", modelName),
+						HeaderStatus: "model ready",
+					}
 				}
 
 				// 2. Ensure whisper-cli binary
-				whisperBin, err := binaries.EnsureWhisperBinary(func(curr, tot int64, status string) {
-					ch <- pipelineProgressEvent{Line: status}
+				whisperBin, err := binaries.EnsureWhisperBinary(func(curr, tot int64, label string) {
+					pct := int(float64(curr) / float64(tot) * 100)
+					bar := components.FormatProgressBar(fmt.Sprintf("▸ Downloading %s", label), curr, tot, 25)
+					ch <- pipelineProgressEvent{
+						Line:         bar,
+						HeaderStatus: fmt.Sprintf("downloading %s %d%%", label, pct),
+					}
 				})
 				if err != nil {
 					ch <- pipelineProgressEvent{Done: true, Err: fmt.Errorf("whisper-cli setup failed: %w", err)}
@@ -358,9 +382,26 @@ func (a AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 
 				// 3. Convert Audio & Run Transcription
-				ch <- pipelineProgressEvent{Line: "▸ Converting audio & running Whisper engine..."}
+				ch <- pipelineProgressEvent{
+					Line:         "▸ Converting audio & running Whisper engine...",
+					HeaderStatus: "preparing audio",
+				}
 				err = pipeline.RunTranscription(proj, ".", modelPath, whisperBin, func(line string) {
-					ch <- pipelineProgressEvent{Line: line}
+					hStatus := "transcribing..."
+					if strings.Contains(line, "%") {
+						if idx := strings.Index(line, "%"); idx != -1 {
+							start := idx - 1
+							for start >= 0 && (line[start] >= '0' && line[start] <= '9' || line[start] == '.') {
+								start--
+							}
+							pctStr := strings.TrimSpace(line[start+1 : idx])
+							hStatus = fmt.Sprintf("transcribing %s%%", pctStr)
+						}
+					}
+					ch <- pipelineProgressEvent{
+						Line:         line,
+						HeaderStatus: hStatus,
+					}
 				})
 				if err == nil {
 					_ = project.SaveProject(proj, ".")
@@ -558,6 +599,10 @@ func (a AppModel) HeaderContext(screenName string) components.HeaderContext {
 		if a.project.Stages != nil && a.project.Stages["transcribe"] == domain.StatusCompleted {
 			status = fmt.Sprintf("transcribed ✓ (%d)", len(a.project.Segments))
 		}
+	}
+
+	if a.liveHeaderStatus != "" {
+		status = a.liveHeaderStatus
 	}
 
 	return components.HeaderContext{

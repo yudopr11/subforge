@@ -8,12 +8,12 @@ import (
 	"github.com/yudopr11/subforge/internal/app/binaries"
 )
 
-func Prepare16kHzAudio(inputPath, outputWav string) error {
+func Prepare16kHzAudio(inputPath, outputWav string, progressFn func(curr, tot int64, label string)) error {
 	if fi, err := os.Stat(outputWav); err == nil && fi.Size() > 44 {
 		return nil // Already prepared
 	}
 
-	ffmpegBin, err := binaries.FindBinary("ffmpeg")
+	ffmpegBin, err := binaries.EnsureFFmpegBinary(progressFn)
 	if err != nil {
 		return fmt.Errorf("ffmpeg not found (required for audio conversion): %w", err)
 	}

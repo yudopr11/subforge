@@ -15,7 +15,6 @@ import (
 )
 
 func GetWhisperReleaseURL() (string, string) {
-	// Returns (URL, archiveType "zip" or "tar.gz")
 	switch runtime.GOOS {
 	case "windows":
 		return "https://github.com/ggml-org/whisper.cpp/releases/latest/download/whisper-bin-x64.zip", "zip"
@@ -29,6 +28,23 @@ func GetWhisperReleaseURL() (string, string) {
 			return "https://github.com/ggml-org/whisper.cpp/releases/latest/download/whisper-bin-ubuntu-arm64.tar.gz", "tar.gz"
 		}
 		return "https://github.com/ggml-org/whisper.cpp/releases/latest/download/whisper-bin-ubuntu-x64.tar.gz", "tar.gz"
+	}
+}
+
+func GetFFmpegReleaseURL() string {
+	switch runtime.GOOS {
+	case "windows":
+		return "https://github.com/eugeneware/ffmpeg-static/releases/latest/download/ffmpeg-win32-x64"
+	case "darwin":
+		if runtime.GOARCH == "arm64" {
+			return "https://github.com/eugeneware/ffmpeg-static/releases/latest/download/ffmpeg-darwin-arm64"
+		}
+		return "https://github.com/eugeneware/ffmpeg-static/releases/latest/download/ffmpeg-darwin-x64"
+	default: // linux
+		if runtime.GOARCH == "arm64" {
+			return "https://github.com/eugeneware/ffmpeg-static/releases/latest/download/ffmpeg-linux-arm64"
+		}
+		return "https://github.com/eugeneware/ffmpeg-static/releases/latest/download/ffmpeg-linux-x64"
 	}
 }
 
@@ -118,7 +134,7 @@ func ExtractTarGz(data []byte, destDir string) error {
 	for _, sl := range symlinks {
 		_ = os.Remove(sl.target)
 		_ = os.Symlink(sl.link, sl.target)
-		// Fallback to file copy if symlink failed (e.g. on Windows or restricted filesystems)
+		// Fallback to file copy if symlink failed
 		if _, err := os.Stat(sl.target); err != nil {
 			src := filepath.Join(destDir, sl.link)
 			if data, err := os.ReadFile(src); err == nil {
@@ -162,7 +178,7 @@ func DownloadAndExtractWhisper(progressFn func(current, total int64, msg string)
 			buf.Write(chunk[:n])
 			downloaded += int64(n)
 			if progressFn != nil {
-				progressFn(downloaded, total, fmt.Sprintf("Downloading whisper-cli (%.1f/%.1f MB)", float64(downloaded)/1e6, float64(total)/1e6))
+				progressFn(downloaded, total, "whisper-cli")
 			}
 		}
 		if readErr != nil {
@@ -171,10 +187,6 @@ func DownloadAndExtractWhisper(progressFn func(current, total int64, msg string)
 			}
 			return "", readErr
 		}
-	}
-
-	if progressFn != nil {
-		progressFn(downloaded, total, "Extracting whisper-cli binary & libraries...")
 	}
 
 	if archiveType == "zip" {
@@ -187,7 +199,6 @@ func DownloadAndExtractWhisper(progressFn func(current, total int64, msg string)
 		}
 	}
 
-	// Create alias/symlink for whisper-cli if executable is named 'main'
 	targetBin := filepath.Join(binDir, "whisper-cli")
 	if runtime.GOOS == "windows" {
 		targetBin += ".exe"
@@ -206,6 +217,78 @@ func DownloadAndExtractWhisper(progressFn func(current, total int64, msg string)
 		}
 	}
 
+	return targetBin, nil
+}
+
+func EnsureFFmpegBinary(progressFn func(current, total int64, msg string)) (string, error) {
+	if bin, err := FindBinary("ffmpeg"); err == nil {
+		testCmd := exec.Command(bin, "-version")
+		if err := testCmd.Run(); err == nil {
+			return bin, nil
+		}
+	}
+
+	appDir, err := GetAppDataDir()
+	if err != nil {
+		return "", err
+	}
+	binDir := filepath.Join(appDir, "bin")
+	_ = os.MkdirAll(binDir, 0755)
+
+	targetBin := filepath.Join(binDir, "ffmpeg")
+	if runtime.GOOS == "windows" {
+		targetBin += ".exe"
+	}
+
+	url := GetFFmpegReleaseURL()
+	resp, err := http.Get(url)
+	if err != nil {
+		return "", fmt.Errorf("failed to download ffmpeg binary: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("download ffmpeg failed with HTTP %s", resp.Status)
+	}
+
+	total := resp.ContentLength
+	tmpPath := targetBin + ".download"
+	out, err := os.OpenFile(tmpPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0755)
+	if err != nil {
+		return "", err
+	}
+
+	buf := make([]byte, 32*1024)
+	var downloaded int64
+	for {
+		n, readErr := resp.Body.Read(buf)
+		if n > 0 {
+			if _, writeErr := out.Write(buf[:n]); writeErr != nil {
+				out.Close()
+				_ = os.Remove(tmpPath)
+				return "", writeErr
+			}
+			downloaded += int64(n)
+			if progressFn != nil {
+				progressFn(downloaded, total, "ffmpeg")
+			}
+		}
+		if readErr != nil {
+			if readErr == io.EOF {
+				break
+			}
+			out.Close()
+			_ = os.Remove(tmpPath)
+			return "", readErr
+		}
+	}
+	out.Close()
+
+	_ = os.Remove(targetBin)
+	if err := os.Rename(tmpPath, targetBin); err != nil {
+		return "", err
+	}
+	_ = os.Chmod(targetBin, 0755)
 	return targetBin, nil
 }
 

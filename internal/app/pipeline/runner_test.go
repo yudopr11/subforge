@@ -45,7 +45,7 @@ func TestPrepare16kHzAudio_ExistingFile(t *testing.T) {
 	}
 
 	// Calling Prepare16kHzAudio on existing file should skip ffmpeg call and succeed
-	err := pipeline.Prepare16kHzAudio("nonexistent.mp3", outWav)
+	err := pipeline.Prepare16kHzAudio("nonexistent.mp3", outWav, nil)
 	if err != nil {
 		t.Errorf("Prepare16kHzAudio should skip when outWav exists and is >44 bytes, got: %v", err)
 	}

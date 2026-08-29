@@ -6,11 +6,29 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/yudopr11/subforge/internal/app/binaries"
 	"github.com/yudopr11/subforge/internal/domain"
+	"github.com/yudopr11/subforge/internal/tui/components"
 )
+
+func parseProgressPct(line string) (float64, bool) {
+	idx := strings.Index(line, "%")
+	if idx == -1 {
+		return 0, false
+	}
+	start := idx - 1
+	for start >= 0 && (line[start] >= '0' && line[start] <= '9' || line[start] == '.' || line[start] == ' ') {
+		start--
+	}
+	numStr := strings.TrimSpace(line[start+1 : idx])
+	if val, err := strconv.ParseFloat(numStr, 64); err == nil && val >= 0 && val <= 100 {
+		return val, true
+	}
+	return 0, false
+}
 
 func RunTranscription(
 	proj *domain.Project,
@@ -29,7 +47,7 @@ func RunTranscription(
 	if logFn != nil {
 		logFn("Converting audio to 16kHz mono WAV...")
 	}
-	if err := Prepare16kHzAudio(proj.AudioPath, wavPath); err != nil {
+	if err := Prepare16kHzAudio(proj.AudioPath, wavPath, nil); err != nil {
 		proj.Stages["transcribe"] = domain.StatusFailed
 		proj.Error = err.Error()
 		return err
@@ -43,6 +61,7 @@ func RunTranscription(
 		"--output-json",
 		"--output-file", jsonOutputBase,
 		"--print-colors", "0",
+		"--print-progress",
 	}
 
 	if proj.Language != "" && proj.Language != "auto" {
@@ -77,7 +96,12 @@ func RunTranscription(
 	for scanner.Scan() {
 		line := scanner.Text()
 		stderrLines = append(stderrLines, line)
-		if strings.Contains(line, "%") || strings.Contains(line, "progress") {
+		if pct, ok := parseProgressPct(line); ok {
+			if logFn != nil {
+				bar := components.FormatPercentBar("▸ Transcribing", pct, 25)
+				logFn(bar)
+			}
+		} else if strings.Contains(line, "%") || strings.Contains(line, "progress") {
 			if logFn != nil {
 				logFn(line)
 			}
