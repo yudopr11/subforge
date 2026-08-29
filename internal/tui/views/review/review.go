@@ -81,6 +81,11 @@ func (m Model) SelectedCount() int {
 	return count
 }
 
+func (m *Model) ClearSelection() {
+	m.selected = make(map[int]bool)
+	m.statusMsg = "Selection cleared"
+}
+
 func (m *Model) StopAudio() {
 	if m.player != nil {
 		m.player.Stop()
@@ -189,29 +194,50 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if !m.selected[m.cursor] {
 					delete(m.selected, m.cursor)
 				}
-				m.statusMsg = fmt.Sprintf("%d segment(s) selected", m.SelectedCount())
+				count := m.SelectedCount()
+				if count > 0 {
+					m.statusMsg = fmt.Sprintf("%d segment(s) selected (press Enter/s to set speaker)", count)
+				} else {
+					m.statusMsg = "Selection cleared"
+				}
 			}
 		case "a", "ctrl+a":
 			if m.project != nil && len(m.project.Segments) > 0 {
 				if m.SelectedCount() == len(m.project.Segments) {
 					m.selected = make(map[int]bool)
-					m.statusMsg = "Cleared selection"
+					m.statusMsg = "Selection cleared"
 				} else {
 					for i := range m.project.Segments {
 						m.selected[i] = true
 					}
-					m.statusMsg = fmt.Sprintf("Selected all %d segments", len(m.project.Segments))
+					m.statusMsg = fmt.Sprintf("Selected all %d segments (press Enter/s to set speaker)", len(m.project.Segments))
 				}
 			}
-		case "enter", "e":
-			if m.project != nil && len(m.project.Segments) > 0 && m.cursor < len(m.project.Segments) {
+		case "enter":
+			if m.project != nil && len(m.project.Segments) > 0 {
+				if m.SelectedCount() > 0 {
+					// When lines are selected, Enter triggers Bulk Speaker tagging
+					m.mode = modeBulkSpeaker
+					m.input.SetValue("")
+					m.input.Focus()
+				} else if m.cursor < len(m.project.Segments) {
+					// Normal mode: Enter edits caption text
+					m.mode = modeEditCaption
+					m.input.SetValue(m.project.Segments[m.cursor].Source)
+					m.input.Focus()
+				}
+			}
+		case "e":
+			if m.SelectedCount() > 0 {
+				m.statusMsg = "Deselect lines (Esc) before editing single caption text"
+			} else if m.project != nil && len(m.project.Segments) > 0 && m.cursor < len(m.project.Segments) {
 				m.mode = modeEditCaption
 				m.input.SetValue(m.project.Segments[m.cursor].Source)
 				m.input.Focus()
 			}
-		case "s":
+		case "s", "S", "b":
 			if m.project != nil && len(m.project.Segments) > 0 {
-				if m.SelectedCount() > 1 {
+				if m.SelectedCount() > 0 {
 					m.mode = modeBulkSpeaker
 					m.input.SetValue("")
 					m.input.Focus()
@@ -220,12 +246,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.input.SetValue(m.project.Segments[m.cursor].Speaker)
 					m.input.Focus()
 				}
-			}
-		case "S", "b":
-			if m.project != nil && len(m.project.Segments) > 0 {
-				m.mode = modeBulkSpeaker
-				m.input.SetValue("")
-				m.input.Focus()
 			}
 		case "u", "ctrl+z":
 			if m.popHistory() {
@@ -332,12 +352,27 @@ func (m Model) View() string {
 		if count == 0 {
 			count = 1
 		}
-		sb.WriteString(fmt.Sprintf("\n  Bulk Speaker Tag for %d segment(s): %s\n", count, m.input.View()))
+		sb.WriteString(fmt.Sprintf("\n  Set Speaker for %d selected segment(s): %s\n", count, m.input.View()))
 	}
 
-	footerKeys := []string{"[↑/↓] Move", "[Enter] Edit Text", "[s] Speaker", "[v] Select", "[S] Bulk Speaker", "[Space] Play", "[u] Undo", "[Esc] Back"}
+	footerKeys := []string{
+		"[↑/↓] Move",
+		"[Enter] Edit Caption",
+		"[s] Set Speaker",
+		"[v] Select Line",
+		"[Space] Play",
+		"[u] Undo",
+		"[Esc] Back to REPL",
+	}
 	if hasSelections {
-		footerKeys = []string{"[v] Toggle", "[a] Select All", "[S] Apply Speaker", "[u] Undo", "[Esc] Back"}
+		footerKeys = []string{
+			"[↑/↓] Move",
+			"[v] Toggle Select",
+			"[a] Select All",
+			fmt.Sprintf("[Enter/s] Set Speaker (%d selected)", m.SelectedCount()),
+			"[Space] Play",
+			"[Esc] Clear Selection",
+		}
 	}
 
 	return components.RenderScreen(

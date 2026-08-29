@@ -159,6 +159,29 @@ func TestReviewModelBulkSpeakerTagging(t *testing.T) {
 	}
 }
 
+func TestReviewModelBulkSpeakerWithEnter(t *testing.T) {
+	proj := createTestProject()
+	m := review.New(proj, 80, 24)
+
+	// Select row 0 with 'v'
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'v'}})
+	m = updated.(review.Model)
+
+	// Press 'e' -> should NOT enter caption edit mode
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'e'}})
+	m = updated.(review.Model)
+	if m.IsEditing() {
+		t.Fatalf("Expected 'e' to NOT trigger caption edit while lines are selected")
+	}
+
+	// Press 'Enter' -> should enter bulk speaker mode
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(review.Model)
+	if !m.IsEditing() {
+		t.Fatalf("Expected Enter to trigger bulk speaker mode when lines are selected")
+	}
+}
+
 func TestReviewModelUndo(t *testing.T) {
 	proj := createTestProject()
 	m := review.New(proj, 80, 24)

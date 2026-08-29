@@ -463,16 +463,25 @@ func (a AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case ScreenReview:
 		if keyMsg, ok := msg.(tea.KeyMsg); ok && (keyMsg.Type == tea.KeyEsc || keyMsg.String() == "q") {
-			if !a.reviewView.IsEditing() {
-				a.reviewView.StopAudio()
-				if a.project != nil {
-					_ = project.SaveProject(a.project, ".")
-				}
-				a.replView.SetProject(a.project)
-				a.replView.AppendLog("✓ Returned from caption review. Project saved.")
-				a.screen = ScreenREPL
+			if a.reviewView.IsEditing() {
+				var cmd tea.Cmd
+				var updatedModel tea.Model
+				updatedModel, cmd = a.reviewView.Update(msg)
+				a.reviewView = updatedModel.(review.Model)
+				return a, cmd
+			}
+			if a.reviewView.SelectedCount() > 0 {
+				a.reviewView.ClearSelection()
 				return a, nil
 			}
+			a.reviewView.StopAudio()
+			if a.project != nil {
+				_ = project.SaveProject(a.project, ".")
+			}
+			a.replView.SetProject(a.project)
+			a.replView.AppendLog("✓ Returned from caption review. Project saved.")
+			a.screen = ScreenREPL
+			return a, nil
 		}
 		var cmd tea.Cmd
 		var updatedModel tea.Model
