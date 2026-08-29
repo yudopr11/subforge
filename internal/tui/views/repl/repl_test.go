@@ -130,6 +130,42 @@ func TestREPLEnterKeyCommandExecution(t *testing.T) {
 	}
 }
 
+func TestMatchingCommands(t *testing.T) {
+	all := repl.MatchingCommands("/")
+	if len(all) < 8 {
+		t.Errorf("Expected at least 8 commands on '/', got %d", len(all))
+	}
+
+	tMatches := repl.MatchingCommands("/t")
+	if len(tMatches) != 1 || tMatches[0].Name != "transcribe" {
+		t.Errorf("Expected only 'transcribe' on '/t', got %+v", tMatches)
+	}
+
+	mMatches := repl.MatchingCommands("/m")
+	if len(mMatches) != 1 || mMatches[0].Name != "models" {
+		t.Errorf("Expected only 'models' on '/m', got %+v", mMatches)
+	}
+}
+
+func TestREPLTabAutoComplete(t *testing.T) {
+	m := repl.New(80, 24)
+
+	// Type '/t'
+	for _, r := range "/t" {
+		updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		m = updated.(repl.Model)
+	}
+
+	// Press Tab
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	m = updated.(repl.Model)
+
+	view := m.View()
+	if !strings.Contains(view, "/transcribe") {
+		t.Errorf("Expected input to be auto-completed to /transcribe, got:\n%s", view)
+	}
+}
+
 func TestREPLWindowSizeMsg(t *testing.T) {
 	m := repl.New(80, 24)
 	updated, cmd := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
