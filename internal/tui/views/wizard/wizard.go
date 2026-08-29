@@ -82,8 +82,9 @@ func (m Model) View() string {
 	sb.WriteString("  Analyzing system hardware capabilities:\n\n")
 	sb.WriteString(fmt.Sprintf("  • Detected RAM:       %.1f GB\n", m.ramGB))
 	sb.WriteString(fmt.Sprintf("  • CPU Threads:        %d cores\n", m.cpuCores))
-	sb.WriteString(fmt.Sprintf("  • Recommended Model:  ggml-%s.bin\n\n", m.recModel))
-	sb.WriteString("  SubForge will configure this default model for local transcription.\n")
+	sb.WriteString(fmt.Sprintf("  • Recommended Model:  ggml-%s.bin\n", m.recModel))
+	sb.WriteString("  • Default Language:   auto (Auto Detect)\n\n")
+	sb.WriteString("  SubForge will configure these defaults for local transcription.\n")
 
 	ctx := m.headerCtx
 	if ctx.ScreenName == "" {

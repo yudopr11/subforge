@@ -439,16 +439,21 @@ func (a AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch keyMsg.Type {
 			case tea.KeyEnter:
 				a.config.DefaultModel = a.wizardView.RecModel()
+				a.config.DefaultLanguage = "auto"
 				a.config.WizardCompleted = true
 				_ = config.SaveConfig(a.config)
 				if a.project != nil {
 					a.project.Model = a.config.DefaultModel
+					a.project.Language = "auto"
 					_ = project.SaveProject(a.project, ".")
 				}
-				a.replView.AppendLog(fmt.Sprintf("✓ Wizard completed: active model set to '%s'", a.config.DefaultModel))
+				a.replView.AppendLog(fmt.Sprintf("✓ Wizard completed: active model set to '%s', language set to 'auto'", a.config.DefaultModel))
 				a.screen = ScreenREPL
 				return a, nil
 			case tea.KeyEsc:
+				if a.config.DefaultLanguage == "" {
+					a.config.DefaultLanguage = "auto"
+				}
 				a.config.WizardCompleted = true
 				_ = config.SaveConfig(a.config)
 				a.replView.AppendLog("ℹ Setup wizard skipped.")
