@@ -215,12 +215,12 @@ func (m Model) View() string {
 	if width <= 0 {
 		width = 80
 	}
-
-	header := components.RenderHeader("subforge v0.2.0", "Model Manager", width)
+	height := m.height
+	if height <= 0 {
+		height = 24
+	}
 
 	var sb strings.Builder
-	sb.WriteString(header + "\n\n")
-
 	// Table Header
 	tblHeader := fmt.Sprintf("  %-10s  %-10s  %-18s  %s", "Model", "Size", "Status", "Description")
 	sb.WriteString(lipgloss.NewStyle().Foreground(theme.ColorMuted).Bold(true).Render(tblHeader) + "\n")
@@ -264,9 +264,12 @@ func (m Model) View() string {
 		sb.WriteString("\n  " + m.statusMsg + "\n")
 	}
 
-	footer := components.RenderFooter(
+	return components.RenderScreen(
+		"subforge v0.3.0",
+		"Model Manager",
+		"\n"+sb.String(),
 		[]string{"[↑/↓] Select", "[Enter] Download / Set Active", "[d] Delete", "[Esc] Back to REPL"},
 		width,
+		height,
 	)
-	return sb.String() + "\n" + footer
 }

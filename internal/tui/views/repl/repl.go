@@ -87,6 +87,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) View() string {
+	width := m.width
+	if width <= 0 {
+		width = 80
+	}
+	height := m.height
+	if height <= 0 {
+		height = 24
+	}
+
 	projectName := "no project"
 	statusStr := "idle"
 	if m.project != nil {
@@ -96,24 +105,29 @@ func (m Model) View() string {
 		}
 	}
 
-	header := components.RenderHeader(
-		"subforge v0.2.0",
-		fmt.Sprintf("%s · %s", projectName, statusStr),
-		m.width,
-	)
-
 	var sb strings.Builder
-	sb.WriteString(header + "\n\n")
-
-	for _, log := range m.logs {
-		sb.WriteString("  " + log + "\n")
+	// Keep visible logs fitting the screen height
+	maxLogs := height - 8
+	if maxLogs < 3 {
+		maxLogs = 3
+	}
+	startIdx := 0
+	if len(m.logs) > maxLogs {
+		startIdx = len(m.logs) - maxLogs
 	}
 
-	sb.WriteString("\n " + m.input.View() + "\n")
+	sb.WriteString("\n")
+	for i := startIdx; i < len(m.logs); i++ {
+		sb.WriteString("  " + m.logs[i] + "\n")
+	}
+	sb.WriteString("\n " + m.input.View())
 
-	footer := components.RenderFooter(
+	return components.RenderScreen(
+		"subforge v0.3.0",
+		fmt.Sprintf("%s · %s", projectName, statusStr),
+		sb.String(),
 		[]string{"/new", "/open", "/projects", "/models", "/language", "/transcribe", "/review", "/export", "/wizard", "/status", "?", "quit"},
-		m.width,
+		width,
+		height,
 	)
-	return sb.String() + "\n" + footer
 }

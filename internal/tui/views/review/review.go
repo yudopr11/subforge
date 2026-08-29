@@ -185,11 +185,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) View() string {
+	width := m.width
+	if width <= 0 {
+		width = 80
+	}
+	height := m.height
+	if height <= 0 {
+		height = 24
+	}
+
 	if m.project == nil || len(m.project.Segments) == 0 {
-		header := components.RenderHeader("subforge v0.2.0", "Caption Review (Empty)", m.width)
-		body := "\n  No segments to review. Transcribe an audio file first.\n"
-		footer := components.RenderFooter([]string{"[Esc] Back"}, m.width)
-		return header + body + "\n" + footer
+		return components.RenderScreen(
+			"subforge v0.3.0",
+			"Caption Review (Empty)",
+			"\n  No segments to review. Transcribe an audio file first.\n",
+			[]string{"[Esc] Back to REPL"},
+			width,
+			height,
+		)
 	}
 
 	status := m.statusMsg
@@ -197,19 +210,13 @@ func (m Model) View() string {
 		status = fmt.Sprintf("Review: %s (%d segments)", m.project.Name, len(m.project.Segments))
 	}
 
-	header := components.RenderHeader(
-		"subforge v0.2.0",
-		status,
-		m.width,
-	)
-
 	var sb strings.Builder
-	sb.WriteString(header + "\n\n")
+	sb.WriteString("\n")
 
 	// Calculate visible window if terminal height is constrained
-	maxRows := m.height - 8
+	maxRows := height - 8
 	if maxRows < 5 {
-		maxRows = 10
+		maxRows = 5
 	}
 
 	startIdx := 0
@@ -247,9 +254,12 @@ func (m Model) View() string {
 		sb.WriteString("\n  Editing Speaker: " + m.input.View() + "\n")
 	}
 
-	footer := components.RenderFooter(
-		[]string{"[↑/↓/j/k] Move", "[Enter/e] Edit Caption", "[s] Speaker", "[Space] Play", "[u] Undo", "[Esc] Back"},
-		m.width,
+	return components.RenderScreen(
+		"subforge v0.3.0",
+		status,
+		sb.String(),
+		[]string{"[↑/↓/j/k] Move", "[Enter/e] Edit Caption", "[s] Speaker", "[Space] Play", "[u] Undo", "[Esc] Back to REPL"},
+		width,
+		height,
 	)
-	return sb.String() + "\n" + footer
 }

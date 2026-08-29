@@ -66,20 +66,25 @@ func (m Model) View() string {
 	if width <= 0 {
 		width = 80
 	}
-	header := components.RenderHeader("subforge v0.2.0", "Setup Wizard", width)
+	height := m.height
+	if height <= 0 {
+		height = 24
+	}
 
 	var sb strings.Builder
-	sb.WriteString(header + "\n\n")
-	sb.WriteString(theme.TitleStyle.Render("  SubForge First-Run Setup Wizard") + "\n\n")
+	sb.WriteString("\n" + theme.TitleStyle.Render("  SubForge First-Run Setup Wizard") + "\n\n")
 	sb.WriteString("  Analyzing system hardware capabilities:\n\n")
 	sb.WriteString(fmt.Sprintf("  • Detected RAM:       %.1f GB\n", m.ramGB))
 	sb.WriteString(fmt.Sprintf("  • CPU Threads:        %d cores\n", m.cpuCores))
 	sb.WriteString(fmt.Sprintf("  • Recommended Model:  ggml-%s.bin\n\n", m.recModel))
 	sb.WriteString("  SubForge will configure this default model for local transcription.\n")
 
-	footer := components.RenderFooter(
+	return components.RenderScreen(
+		"subforge v0.3.0",
+		"Setup Wizard",
+		sb.String(),
 		[]string{"[Enter] Accept Defaults", "[Esc] Skip / Keep Existing"},
 		width,
+		height,
 	)
-	return sb.String() + "\n" + footer
 }

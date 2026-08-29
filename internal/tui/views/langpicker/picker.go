@@ -101,10 +101,17 @@ func (m Model) View() string {
 	if width <= 0 {
 		width = 80
 	}
-	header := components.RenderHeader("subforge v0.2.0", "Language Selector", width)
-	footer := components.RenderFooter(
+	height := m.height
+	if height <= 0 {
+		height = 24
+	}
+
+	return components.RenderScreen(
+		"subforge v0.3.0",
+		"Language Selector",
+		"\n"+m.List.View(),
 		[]string{"[↑/↓] Navigate", "[Enter] Select Language", "[/] Filter", "[Esc] Back to REPL"},
 		width,
+		height,
 	)
-	return header + "\n\n" + m.List.View() + "\n" + footer
 }

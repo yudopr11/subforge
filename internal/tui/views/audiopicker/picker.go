@@ -132,10 +132,17 @@ func (m Model) View() string {
 	if width <= 0 {
 		width = 80
 	}
-	header := components.RenderHeader("subforge v0.2.0", "Select Audio File", width)
-	footer := components.RenderFooter(
+	height := m.height
+	if height <= 0 {
+		height = 24
+	}
+
+	return components.RenderScreen(
+		"subforge v0.3.0",
+		"Select Audio File",
+		"\n"+m.List.View(),
 		[]string{"[↑/↓] Navigate", "[Enter] Select Audio", "[/] Filter", "[Esc] Back to REPL"},
 		width,
+		height,
 	)
-	return header + "\n\n" + m.List.View() + "\n" + footer
 }
