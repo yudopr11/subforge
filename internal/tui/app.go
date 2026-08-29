@@ -298,7 +298,8 @@ func (a AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if len(msg.Args) > 0 {
 					formats = msg.Args
 				}
-				files, err := export.ExportFiles(a.project, ".", formats)
+				outputDir := project.GetProjectDir(".")
+				files, err := export.ExportFiles(a.project, outputDir, formats)
 				if err != nil {
 					a.replView.AppendLog("[ERROR] Export failed: " + err.Error())
 				} else {
