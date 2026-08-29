@@ -88,4 +88,7 @@ Thumbs.db
 # --- Project runtime data ---
 # Local projects created by SubForge during development
 /projects/
-*.subforge/
+subforge/
+.subforge/
+project.json
+whisper_out*

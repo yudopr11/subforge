@@ -13,6 +13,7 @@ import (
 
 func TestAppModelRoutingAndCommands(t *testing.T) {
 	t.Cleanup(func() {
+		_ = os.RemoveAll("subforge")
 		_ = os.Remove("project.json")
 		_ = os.Remove("sample.srt")
 		_ = os.Remove("sample.ass")

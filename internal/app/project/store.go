@@ -12,15 +12,25 @@ import (
 
 const ProjectFileName = "project.json"
 
+func GetProjectDir(baseDir string) string {
+	base := filepath.Base(baseDir)
+	if base == "subforge" || base == ".subforge" {
+		return baseDir
+	}
+	return filepath.Join(baseDir, "subforge")
+}
+
 func SaveProject(proj *domain.Project, dir string) error {
-	_ = os.MkdirAll(dir, 0755)
+	targetDir := GetProjectDir(dir)
+	_ = os.MkdirAll(targetDir, 0755)
+
 	proj.UpdatedAt = time.Now().UTC()
 	data, err := json.MarshalIndent(proj, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal project: %w", err)
 	}
 
-	targetPath := filepath.Join(dir, ProjectFileName)
+	targetPath := filepath.Join(targetDir, ProjectFileName)
 	tmpPath := targetPath + ".tmp"
 
 	if err := os.WriteFile(tmpPath, data, 0644); err != nil {
@@ -34,39 +44,50 @@ func SaveProject(proj *domain.Project, dir string) error {
 }
 
 func LoadProject(dir string) (*domain.Project, error) {
-	targetPath := filepath.Join(dir, ProjectFileName)
-	data, err := os.ReadFile(targetPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read project file: %w", err)
+	candidates := []string{
+		filepath.Join(dir, "subforge", ProjectFileName),
+		filepath.Join(dir, ".subforge", ProjectFileName),
+		filepath.Join(dir, ProjectFileName),
 	}
 
-	var proj domain.Project
-	if err := json.Unmarshal(data, &proj); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal project file: %w", err)
-	}
-	return &proj, nil
-}
-
-func ListProjects(rootDir string) ([]*domain.Project, error) {
-	entries, err := os.ReadDir(rootDir)
-	if err != nil {
-		return nil, err
-	}
-
-	var projects []*domain.Project
-	// Check current directory
-	if proj, err := LoadProject(rootDir); err == nil {
-		projects = append(projects, proj)
-	}
-
-	// Check subdirectories
-	for _, entry := range entries {
-		if entry.IsDir() {
-			subDir := filepath.Join(rootDir, entry.Name())
-			if proj, err := LoadProject(subDir); err == nil {
-				projects = append(projects, proj)
+	for _, targetPath := range candidates {
+		data, err := os.ReadFile(targetPath)
+		if err == nil {
+			var proj domain.Project
+			if jsonErr := json.Unmarshal(data, &proj); jsonErr == nil {
+				return &proj, nil
 			}
 		}
 	}
+
+	return nil, fmt.Errorf("no valid project.json found in %s or %s/subforge", dir, dir)
+}
+
+func ListProjects(rootDir string) ([]*domain.Project, error) {
+	var projects []*domain.Project
+	seen := make(map[string]bool)
+
+	// 1. Check root directory / root subforge directory
+	if proj, err := LoadProject(rootDir); err == nil {
+		projects = append(projects, proj)
+		seen[proj.Name] = true
+	}
+
+	// 2. Check child subdirectories
+	entries, err := os.ReadDir(rootDir)
+	if err == nil {
+		for _, entry := range entries {
+			if entry.IsDir() && entry.Name() != "subforge" && entry.Name() != ".subforge" && entry.Name() != ".git" && entry.Name() != "bin" {
+				subDir := filepath.Join(rootDir, entry.Name())
+				if proj, err := LoadProject(subDir); err == nil {
+					if !seen[proj.Name] {
+						projects = append(projects, proj)
+						seen[proj.Name] = true
+					}
+				}
+			}
+		}
+	}
+
 	return projects, nil
 }

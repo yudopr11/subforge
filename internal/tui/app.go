@@ -387,7 +387,8 @@ func (a AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					Line:         "▸ Converting audio & running Whisper engine...",
 					HeaderStatus: "preparing audio",
 				}
-				err = pipeline.RunTranscription(proj, ".", modelPath, whisperBin, func(line string) {
+				projDir := project.GetProjectDir(".")
+				err = pipeline.RunTranscription(proj, projDir, modelPath, whisperBin, func(line string) {
 					hStatus := "transcribing..."
 					if strings.Contains(line, "%") {
 						if idx := strings.Index(line, "%"); idx != -1 {
