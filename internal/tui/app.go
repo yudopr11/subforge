@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -602,7 +603,18 @@ func (a AppModel) HeaderContext(screenName string) components.HeaderContext {
 			projName = a.project.Name
 		}
 		if a.project.AudioPath != "" {
-			projLoc = filepath.Dir(a.project.AudioPath)
+			abs, err := filepath.Abs(filepath.Dir(a.project.AudioPath))
+			if err == nil {
+				projLoc = abs
+			} else {
+				projLoc = filepath.Dir(a.project.AudioPath)
+			}
+			// Shorten home dir to ~
+			if home, err := os.UserHomeDir(); err == nil {
+				if rel, err := filepath.Rel(home, projLoc); err == nil && !filepath.IsAbs(rel) {
+					projLoc = "~/" + rel
+				}
+			}
 			if projLoc == "" {
 				projLoc = "./"
 			}
