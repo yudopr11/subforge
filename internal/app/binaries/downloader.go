@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 )
 
 func GetWhisperReleaseURL() (string, string) {
@@ -293,32 +294,64 @@ func EnsureFFmpegBinary(progressFn func(current, total int64, msg string)) (stri
 }
 
 func AppendLibraryPath(env []string, binDir string) []string {
-	ldPath := os.Getenv("LD_LIBRARY_PATH")
-	if ldPath != "" {
-		ldPath = binDir + ":" + ldPath
-	} else {
-		ldPath = binDir
+	sep := string(os.PathListSeparator)
+	var newEnv []string
+	var existingPath string
+	var existingLD string
+	var existingDYLD string
+
+	for _, kv := range env {
+		parts := strings.SplitN(kv, "=", 2)
+		if len(parts) != 2 {
+			newEnv = append(newEnv, kv)
+			continue
+		}
+		key := parts[0]
+		val := parts[1]
+
+		if strings.EqualFold(key, "PATH") {
+			if existingPath == "" {
+				existingPath = val
+			}
+			continue
+		}
+		if strings.EqualFold(key, "LD_LIBRARY_PATH") {
+			if existingLD == "" {
+				existingLD = val
+			}
+			continue
+		}
+		if strings.EqualFold(key, "DYLD_LIBRARY_PATH") {
+			if existingDYLD == "" {
+				existingDYLD = val
+			}
+			continue
+		}
+		newEnv = append(newEnv, kv)
 	}
 
-	dyldPath := os.Getenv("DYLD_LIBRARY_PATH")
-	if dyldPath != "" {
-		dyldPath = binDir + ":" + dyldPath
-	} else {
-		dyldPath = binDir
+	newPath := binDir
+	if existingPath != "" {
+		newPath = binDir + sep + existingPath
 	}
 
-	pathEnv := os.Getenv("PATH")
-	if pathEnv != "" {
-		pathEnv = binDir + string(os.PathListSeparator) + pathEnv
-	} else {
-		pathEnv = binDir
+	newLd := binDir
+	if existingLD != "" {
+		newLd = binDir + ":" + existingLD
 	}
 
-	return append(env,
-		"LD_LIBRARY_PATH="+ldPath,
-		"DYLD_LIBRARY_PATH="+dyldPath,
-		"PATH="+pathEnv,
+	newDyld := binDir
+	if existingDYLD != "" {
+		newDyld = binDir + ":" + existingDYLD
+	}
+
+	newEnv = append(newEnv,
+		"PATH="+newPath,
+		"LD_LIBRARY_PATH="+newLd,
+		"DYLD_LIBRARY_PATH="+newDyld,
 	)
+
+	return newEnv
 }
 
 func EnsureWhisperBinary(progressFn func(current, total int64, msg string)) (string, error) {

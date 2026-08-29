@@ -65,3 +65,25 @@ func TestExtractTarGz(t *testing.T) {
 		t.Errorf("Expected whisper-cli to be extracted to %s", target)
 	}
 }
+
+func TestAppendLibraryPath(t *testing.T) {
+	inputEnv := []string{
+		"Path=C:\\Windows\\system32",
+		"LD_LIBRARY_PATH=/usr/lib",
+		"OTHER_VAR=val",
+	}
+	binDir := "/custom/bin"
+
+	res := binaries.AppendLibraryPath(inputEnv, binDir)
+
+	pathCount := 0
+	for _, kv := range res {
+		if len(kv) >= 4 && (kv[:4] == "PATH" || kv[:4] == "Path" || kv[:4] == "path") {
+			pathCount++
+		}
+	}
+
+	if pathCount != 1 {
+		t.Errorf("Expected exactly 1 PATH variable in output, got %d. Result: %v", pathCount, res)
+	}
+}

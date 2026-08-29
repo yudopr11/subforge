@@ -65,19 +65,11 @@ func BuildPlayerCommand(playerBin, audioPath string, start, duration float64) (s
 		// Best-effort: just play the segment file directly.
 		return playerBin, []string{audioPath, "/play", "/close"}
 	case strings.Contains(base, "powershell"):
-		// Use Windows built-in SoundPlayer for WAV, or mciSendString for general audio.
-		// mciSendString supports seek + duration and works on all Windows without WPF.
-		absPath := strings.ReplaceAll(audioPath, `\`, `\\`)
-		startMs := int(start * 1000)
-		endMs := int((start + duration) * 1000)
+		// Use Windows built-in WMPlayer COM object for instant playback & seek without C# compilation.
+		escPath := strings.ReplaceAll(audioPath, "'", "''")
 		psScript := fmt.Sprintf(
-			`$sig = '[DllImport(\"winmm.dll\")]public static extern int mciSendString(string cmd,System.Text.StringBuilder ret,int retLen,System.IntPtr hwnd);';`+
-				`$t = Add-Type -MemberDefinition $sig -Name 'MCI' -Namespace 'Win32' -PassThru;`+
-				`$null = $t::mciSendString('open \"%s\" type mpegvideo alias seg','',0,[System.IntPtr]::Zero);`+
-				`$null = $t::mciSendString('play seg from %d to %d','',0,[System.IntPtr]::Zero);`+
-				`Start-Sleep -Milliseconds %d;`+
-				`$null = $t::mciSendString('close seg','',0,[System.IntPtr]::Zero)`,
-			absPath, startMs, endMs, endMs-startMs+200,
+			`$w = New-Object -ComObject WMPlayer.OCX; $w.URL = '%s'; $w.controls.currentPosition = %.3f; $w.controls.play(); Start-Sleep -Milliseconds %d; $w.controls.stop(); $w.close()`,
+			escPath, start, int(duration*1000)+200,
 		)
 		return playerBin, []string{"-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", psScript}
 	default:
