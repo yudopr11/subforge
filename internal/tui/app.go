@@ -306,39 +306,69 @@ func (a AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case "transcribe":
-			if a.project != nil {
-				a.replView.AppendLog("▸ Starting transcription pipeline...")
-				modelPath, exists := a.modelManager.GetModelPath(a.project.Model)
-				if !exists {
-					a.replView.AppendLog(fmt.Sprintf("[ERROR] Model '%s' not downloaded. Run /models to download it first.", a.project.Model))
-				} else {
-					proj := a.project
-					ch := make(chan pipelineProgressEvent, 50)
-					go func() {
-						whisperBin, err := binaries.EnsureWhisperBinary(func(curr, tot int64, status string) {
-							ch <- pipelineProgressEvent{Line: status}
-						})
-						if err != nil {
-							ch <- pipelineProgressEvent{Done: true, Err: fmt.Errorf("whisper-cli setup failed: %w", err)}
-							close(ch)
-							return
-						}
-
-						ch <- pipelineProgressEvent{Line: "▸ Converting audio & running Whisper..."}
-						err = pipeline.RunTranscription(proj, ".", modelPath, whisperBin, func(line string) {
-							ch <- pipelineProgressEvent{Line: line}
-						})
-						if err == nil {
-							_ = project.SaveProject(proj, ".")
-						}
-						ch <- pipelineProgressEvent{Done: true, Err: err}
-						close(ch)
-					}()
-					return a, WaitForPipelineProgress(ch)
-				}
-			} else {
+			if a.project == nil {
 				a.replView.AppendLog("[ERROR] No project loaded. Use /new to create one.")
+				return a, nil
 			}
+
+			a.replView.AppendLog("▸ Starting transcription pipeline...")
+			proj := a.project
+			modelMgr := a.modelManager
+			modelName := proj.Model
+			if modelName == "" {
+				modelName = a.config.DefaultModel
+			}
+			if modelName == "" {
+				modelName = "small"
+			}
+
+			ch := make(chan pipelineProgressEvent, 50)
+			go func() {
+				// 1. Ensure Model is downloaded
+				modelPath, exists := modelMgr.GetModelPath(modelName)
+				if !exists {
+					ch <- pipelineProgressEvent{Line: fmt.Sprintf("▸ Model '%s' not found locally. Downloading from HuggingFace...", modelName)}
+					var lastReportPct int = -1
+					downloadedPath, err := modelMgr.DownloadModel(modelName, func(curr, tot int64) {
+						if tot > 0 {
+							pct := int(float64(curr) / float64(tot) * 100)
+							if pct%10 == 0 && pct != lastReportPct {
+								lastReportPct = pct
+								ch <- pipelineProgressEvent{Line: fmt.Sprintf("▸ Downloading %s: %d%% (%.1f/%.1f MB)", modelName, pct, float64(curr)/1e6, float64(tot)/1e6)}
+							}
+						}
+					})
+					if err != nil {
+						ch <- pipelineProgressEvent{Done: true, Err: fmt.Errorf("failed to download model '%s': %w", modelName, err)}
+						close(ch)
+						return
+					}
+					modelPath = downloadedPath
+					ch <- pipelineProgressEvent{Line: fmt.Sprintf("✓ Model '%s' downloaded successfully!", modelName)}
+				}
+
+				// 2. Ensure whisper-cli binary
+				whisperBin, err := binaries.EnsureWhisperBinary(func(curr, tot int64, status string) {
+					ch <- pipelineProgressEvent{Line: status}
+				})
+				if err != nil {
+					ch <- pipelineProgressEvent{Done: true, Err: fmt.Errorf("whisper-cli setup failed: %w", err)}
+					close(ch)
+					return
+				}
+
+				// 3. Convert Audio & Run Transcription
+				ch <- pipelineProgressEvent{Line: "▸ Converting audio & running Whisper engine..."}
+				err = pipeline.RunTranscription(proj, ".", modelPath, whisperBin, func(line string) {
+					ch <- pipelineProgressEvent{Line: line}
+				})
+				if err == nil {
+					_ = project.SaveProject(proj, ".")
+				}
+				ch <- pipelineProgressEvent{Done: true, Err: err}
+				close(ch)
+			}()
+			return a, WaitForPipelineProgress(ch)
 
 		case "help", "?":
 			a.replView.AppendLog("SubForge Commands:")
