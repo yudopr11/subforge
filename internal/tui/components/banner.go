@@ -23,21 +23,18 @@ func RenderHeader(ctx HeaderContext, width int) string {
 	}
 
 	appTitle := "subforge v0.3.0"
-	screenTitle := ctx.ScreenName
-	if screenTitle == "" {
-		screenTitle = "REPL"
+	if ctx.ScreenName != "" && ctx.ScreenName != "REPL" {
+		appTitle = fmt.Sprintf("subforge v0.3.0  •  %s", ctx.ScreenName)
 	}
 
-	left := theme.TitleStyle.Render(" " + appTitle)
-	logoBadge := lipgloss.NewStyle().Background(theme.ColorPrimary).Foreground(theme.ColorBgDark).Bold(true).Render(" SF ")
-	screenBadge := lipgloss.NewStyle().Foreground(theme.ColorPrimary).Bold(true).Render(" " + screenTitle + " ")
-	right := logoBadge + screenBadge
+	left1 := theme.TitleStyle.Render(" " + appTitle)
+	logoTop := lipgloss.NewStyle().Foreground(theme.ColorPrimary).Bold(true).Render("█▀▀ █▀▀ ")
 
-	gap1 := width - lipgloss.Width(left) - lipgloss.Width(right)
+	gap1 := width - lipgloss.Width(left1) - lipgloss.Width(logoTop)
 	if gap1 < 0 {
 		gap1 = 0
 	}
-	topBar := left + strings.Repeat(" ", gap1) + right
+	topBar := left1 + strings.Repeat(" ", gap1) + logoTop
 
 	// Line 2: Context Bar (Project Name, Location, Model, Language, Status)
 	projName := ctx.ProjectName
@@ -69,14 +66,22 @@ func RenderHeader(ctx HeaderContext, width int) string {
 	badges = append(badges, lipgloss.NewStyle().Foreground(theme.ColorSuccess).Render(langBadge))
 
 	if ctx.Status != "" {
-		badges = append(badges, lipgloss.NewStyle().Foreground(theme.ColorMuted).Render(ctx.Status))
+		badges = append(badges, lipgloss.NewStyle().Foreground(theme.ColorPrimary).Bold(true).Render(ctx.Status))
 	}
 
-	contextLine := " " + strings.Join(badges, "  •  ")
-	if lipgloss.Width(contextLine) > width {
-		// Truncate cleanly if too wide
-		contextLine = " " + strings.Join(badges[:3], "  •  ")
+	left2 := " " + strings.Join(badges, "  •  ")
+	logoBottom := lipgloss.NewStyle().Foreground(theme.ColorPrimary).Bold(true).Render("▀▀█ █▀  ")
+
+	gap2 := width - lipgloss.Width(left2) - lipgloss.Width(logoBottom)
+	if gap2 < 0 {
+		// Truncate to first 3 badges if too wide
+		left2 = " " + strings.Join(badges[:3], "  •  ")
+		gap2 = width - lipgloss.Width(left2) - lipgloss.Width(logoBottom)
+		if gap2 < 0 {
+			gap2 = 0
+		}
 	}
+	contextLine := left2 + strings.Repeat(" ", gap2) + logoBottom
 
 	divider := lipgloss.NewStyle().Foreground(theme.ColorMuted).Render(strings.Repeat("─", width))
 	return topBar + "\n" + contextLine + "\n" + divider
